@@ -76,7 +76,7 @@ const POPULAR_CITIES = [
   'Parkville, Missouri', "Lee's Summit, Missouri", 'Independence, Missouri',
 ]
 
-const ADMIN_EMAIL = 'michael33rueckert@gmail.com'
+const ADMIN_EMAIL = 'michael@locateshoot.com'
 
 export default function DashboardPage() {
   const [profile,        setProfile]        = useState<Profile | null>(null)

@@ -26,7 +26,8 @@ export function middleware(request: NextRequest) {
   }
 
   // ── Check for preview cookie ───────────────────────────────────────────────
-  const hasPreview = request.cookies.get('locateshoot_preview')?.value === 'true'
+  const isLocalhost = request.nextUrl.hostname === 'localhost'
+const hasPreview  = isLocalhost || request.cookies.get('locateshoot_preview')?.value === 'true'
 
   if (!hasPreview) {
     return NextResponse.redirect(new URL('/coming-soon', request.url))
