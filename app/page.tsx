@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AuthModal from '@/components/AuthModal'
-import type { User } from '@supabase/auth-helpers-nextjs'
+import type { User } from '@supabase/supabase-js'
 
 const HomeMap = dynamic(() => import('@/components/HomeMap'), { ssr: false })
 
