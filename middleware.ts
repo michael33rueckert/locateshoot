@@ -12,10 +12,10 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // ── Geo block — US only ────────────────────────────────────────────────────
-  const country = request.geo?.country
-  if (country && country !== 'US') {
-    return NextResponse.redirect(new URL('/not-available', request.url))
-  }
+  const country = (request as any).geo?.country
+if (country && country !== 'US') {
+  return NextResponse.redirect(new URL('/not-available', request.url))
+}
 
   // ── Always allow public paths and static files ─────────────────────────────
   const isPublicPath = PUBLIC_PATHS.some(p => pathname.startsWith(p))

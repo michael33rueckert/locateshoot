@@ -11,7 +11,7 @@ export interface ClientLocation {
   access: string
   rating: string
   bg: string
-  type: 'favorite' | 'recommended'
+  type: 'favorite' | 'recommended' | 'secret'
 }
 
 interface ClientMapProps {
@@ -74,7 +74,7 @@ export default function ClientMap({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Redraw markers when active/chosen state changes ────────────────────────
+  // ── Redraw markers ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapRef.current) return
 
@@ -90,9 +90,9 @@ export default function ClientMap({
         const isChosen = chosenId === loc.id
         const isRec    = loc.type === 'recommended'
 
-        let bg    = isRec ? 'rgba(61,110,140,0.9)' : 'rgba(245,240,232,0.92)'
-        let color = isRec ? 'white' : '#1a1612'
-        let size  = 28
+        let bg     = isRec ? 'rgba(61,110,140,0.9)' : 'rgba(245,240,232,0.92)'
+        let color  = isRec ? 'white' : '#1a1612'
+        let size   = 28
         let border = '2.5px solid white'
 
         if (isChosen) {

@@ -478,4 +478,5 @@ export default function HomePage() {
       {toast && <div className="toast">{toast}</div>}
     </>
   )
+
 }

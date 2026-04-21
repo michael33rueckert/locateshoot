@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react'
 
 export interface MapLocation {
-  id: number
+  id: number | string
   name: string
   city: string
   lat: number
@@ -12,12 +12,12 @@ export interface MapLocation {
   access: string
   rating: string
   bg: string
-  type: 'favorite' | 'recommended'
+  type: 'favorite' | 'recommended' | 'secret'
 }
 
 interface ShareMapProps {
   locations: MapLocation[]
-  selectedIds: Set<number>
+  selectedIds: Set<number | string>
   radius: number
   pinLocation: { lat: number; lng: number } | null
   onPinDrop: (lat: number, lng: number) => void
@@ -34,7 +34,7 @@ export default function ShareMap({
   const mapRef          = useRef<any>(null)
   const dropMarkerRef   = useRef<any>(null)
   const radiusCircleRef = useRef<any>(null)
-  const locMarkersRef   = useRef<Record<number, any>>({})
+  const locMarkersRef = useRef<Record<number | string, any>>({})
 
   // ── Init map once ──────────────────────────────────────────────────────────
   useEffect(() => {
