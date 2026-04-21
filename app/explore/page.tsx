@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { usePlacePhotos } from '@/hooks/usePlacePhotos'
 import type { ExploreLocation } from '@/components/ExploreMap'
@@ -29,107 +30,297 @@ const RATING_OPTIONS = [
   { value: 3.0, label: '★ 3.0+'     },
 ]
 
+const PHOTO_PALETTES: Record<string, string[]> = {
+  'bg-1': ['#2d3a2e,#4a6741','#1a2820,#3d6050','#2d3a2e,#5a7a51','#1a2820,#4a6741'],
+  'bg-2': ['#1a2535,#3d6e8c','#162030,#2d5a78','#1a2535,#4d7e9c','#0f1820,#3d6e8c'],
+  'bg-3': ['#3d2010,#8c4a28','#2a1508,#7a3820','#3d2010,#9c5a38','#2a1508,#8c4a28'],
+  'bg-4': ['#1a1830,#4a4580','#12102a,#3a3570','#1a1830,#5a5590','#12102a,#4a4580'],
+  'bg-5': ['#1a2820,#3d6050','#122018,#2d5040','#1a2820,#4d7060','#122018,#3d6050'],
+  'bg-6': ['#2a1a10,#7a4f28','#1a0f08,#6a3f18','#2a1a10,#8a5f38','#1a0f08,#7a4f28'],
+}
+
 type SortValue = 'quality' | 'rating_asc' | 'name' | 'newest' | 'saves'
 
-// ── Detail panel — separate component so it can use the photos hook ───────────
+// ── Add Location Modal ────────────────────────────────────────────────────────
+function AddLocationModal({ onClose, user }: { onClose: () => void, user: any }) {
+  const [name,        setName]        = useState('')
+  const [city,        setCity]        = useState('')
+  const [state,       setState]       = useState('')
+  const [description, setDescription] = useState('')
+  const [accessType,  setAccessType]  = useState('public')
+  const [tags,        setTags]        = useState<string[]>([])
+  const [tagInput,    setTagInput]    = useState('')
+  const [saving,      setSaving]      = useState(false)
+  const [saved,       setSaved]       = useState(false)
+  const [error,       setError]       = useState('')
+
+  const TAG_SUGGESTIONS = ['Golden Hour','Forest','Urban','Waterfront','Historic','Nature','Gardens','Architecture','Romantic','Dramatic','Editorial','Meadow','Creek','Bridge','Mural']
+
+  function addTag(tag: string) {
+    const t = tag.trim()
+    if (!t || tags.includes(t) || tags.length >= 8) return
+    setTags(prev => [...prev, t]); setTagInput('')
+  }
+
+  async function submit() {
+    if (!name.trim() || !city.trim() || !state.trim()) {
+      setError('Name, city, and state are required.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      // Geocode the location using Google
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY
+      const query  = encodeURIComponent(`${name}, ${city}, ${state}`)
+      const res    = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${apiKey}`)
+      const data   = await res.json()
+
+      let lat = null, lng = null
+      if (data.status === 'OK' && data.results?.[0]) {
+        lat = data.results[0].geometry.location.lat
+        lng = data.results[0].geometry.location.lng
+      }
+
+      const { error: insertErr } = await supabase.from('locations').insert({
+        name:        name.trim(),
+        city:        city.trim(),
+        state:       state.trim(),
+        latitude:    lat,
+        longitude:   lng,
+        description: description.trim() || null,
+        access_type: accessType,
+        tags,
+        status:      'pending', // pending review before showing on map
+        source:      'community',
+        added_by:    user?.id ?? null,
+      })
+
+      if (insertErr) throw insertErr
+      setSaved(true)
+    } catch (err: any) {
+      setError('Could not submit — please try again.')
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px',
+    border: '1px solid var(--cream-dark)', borderRadius: 4,
+    fontFamily: 'var(--font-dm-sans), sans-serif',
+    fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: 11, fontWeight: 500,
+    textTransform: 'uppercase', letterSpacing: '.07em',
+    color: 'var(--ink-soft)', marginBottom: 5,
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(4px)', zIndex: 800 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 520, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 900, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+        <div style={{ padding: '1.5rem' }}>
+
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>
+                📍 Add a location
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                Know a great spot that isn&apos;t on the map? Submit it for review.
+              </div>
+            </div>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+          </div>
+
+          {saved ? (
+            <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
+              <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 20, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>
+                Thanks for your submission!
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                Your location has been submitted for review. Once approved it will appear on the map.
+              </div>
+              <button onClick={onClose} style={{ padding: '10px 24px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Done
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'rgba(196,146,42,.06)', border: '1px solid rgba(196,146,42,.2)', borderRadius: 8, marginBottom: '1.25rem' }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>⭐</span>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.55, fontWeight: 300 }}>
+                  Submissions are reviewed before appearing on the map. Be as specific as possible with the location name.
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Location name *</label>
+                <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="e.g. Loose Park Rose Garden" />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 10, marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>City *</label>
+                  <input value={city} onChange={e => setCity(e.target.value)} style={inputStyle} placeholder="Kansas City" />
+                </div>
+                <div>
+                  <label style={labelStyle}>State *</label>
+                  <input value={state} onChange={e => setState(e.target.value)} style={inputStyle} placeholder="MO" maxLength={2} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Description</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What makes this spot great for photography?" style={{ ...inputStyle, resize: 'vertical' }} />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Access type</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['public', 'private'].map(type => (
+                    <button key={type} onClick={() => setAccessType(type)} style={{ flex: 1, padding: '9px', borderRadius: 4, border: `1.5px solid ${accessType === type ? 'var(--gold)' : 'var(--cream-dark)'}`, background: accessType === type ? 'rgba(196,146,42,.08)' : 'white', color: accessType === type ? 'var(--gold)' : 'var(--ink-soft)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'all .15s' }}>
+                      {type === 'public' ? '● Public' : '🔒 Private'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={labelStyle}>Tags (up to 8)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                  {TAG_SUGGESTIONS.map(t => (
+                    <button key={t} onClick={() => addTag(t)} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', border: '1px solid var(--sand)', background: tags.includes(t) ? 'var(--ink)' : 'var(--cream)', color: tags.includes(t) ? 'var(--cream)' : 'var(--ink-soft)', transition: 'all .15s' }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                {tags.length > 0 && (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                    {tags.map(t => (
+                      <span key={t} onClick={() => setTags(prev => prev.filter(x => x !== t))} style={{ padding: '3px 8px', borderRadius: 20, fontSize: 11, background: 'var(--gold)', color: 'var(--ink)', cursor: 'pointer', fontWeight: 500 }}>
+                        {t} ✕
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addTag(tagInput) }} placeholder="Or type a custom tag…" style={{ ...inputStyle, flex: 1 }} />
+                  <button onClick={() => addTag(tagInput)} style={{ padding: '9px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Add</button>
+                </div>
+              </div>
+
+              {error && (
+                <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={submit} disabled={saving || !name.trim() || !city.trim() || !state.trim()} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !name.trim() || !city.trim() || !state.trim() ? 0.5 : 1 }}>
+                  {saving ? 'Submitting…' : 'Submit location →'}
+                </button>
+                <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Cancel
+                </button>
+              </div>
+
+              {!user && (
+                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center' }}>
+                  You&apos;re submitting as a guest. <Link href="/" style={{ color: 'var(--gold)' }}>Sign in</Link> to get credit for your contribution.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
 function DetailPanel({
-  loc,
-  isFav,
-  onClose,
-  onToggleFavorite,
-  onShare,
-  user,
+  loc, isFav, onClose, onToggleFavorite, user,
 }: {
   loc: ExploreLocation & { desc?: string; ratingNum?: number; qualityScore?: number }
   isFav: boolean
   onClose: () => void
   onToggleFavorite: (id: number) => void
-  onShare: () => void
   user: any
 }) {
-  const { photos, loading: photosLoading } = usePlacePhotos(
-    loc.name,
-    loc.city,
-    loc.lat,
-    loc.lng,
-  )
-
+  const router = useRouter()
+  const { photos, loading: photosLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
   const [activePhoto, setActivePhoto] = useState(0)
 
-  // Reset active photo when location changes
   useEffect(() => { setActivePhoto(0) }, [loc.id])
 
   const hasPhotos = photos.length > 0
+
+  function shareWithClient() {
+    // Store the selected location in sessionStorage so share page can pick it up
+    sessionStorage.setItem('sharePreselectedLocation', JSON.stringify({
+      id:     loc.id,
+      name:   loc.name,
+      city:   loc.city,
+      lat:    loc.lat,
+      lng:    loc.lng,
+      access: loc.access,
+      rating: loc.rating,
+      bg:     loc.bg,
+      type:   'favorite',
+    }))
+    router.push('/share?step=3')
+  }
 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.5)', backdropFilter: 'blur(3px)', zIndex: 400 }} />
       <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 580, background: 'white', borderRadius: '16px 16px 0 0', zIndex: 500, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 -8px 48px rgba(26,22,18,.25)', animation: 'slideUp .28s ease' }}>
 
-        {/* Handle */}
         <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--sand)' }} />
         </div>
-
-        {/* Close */}
         <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: '50%', background: 'rgba(26,22,18,.6)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>✕</button>
 
-        {/* ── Main photo ── */}
+        {/* Main photo */}
         <div style={{ position: 'relative', height: 240, background: '#1a1612', overflow: 'hidden' }}>
           {photosLoading ? (
-            // Loading shimmer
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
               <div className={loc.bg} style={{ position: 'absolute', inset: 0, opacity: 0.4 }} />
               <div style={{ width: 28, height: 28, border: '2px solid rgba(255,255,255,.2)', borderTop: '2px solid rgba(255,255,255,.7)', borderRadius: '50%', animation: 'spin .7s linear infinite', zIndex: 1 }} />
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', zIndex: 1 }}>Loading photos…</div>
             </div>
           ) : hasPhotos ? (
-            // Real Google photo
             <>
-              <img
-                src={photos[activePhoto].url}
-                alt={loc.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              />
-              {/* Photo count */}
+              <img src={photos[activePhoto].url} alt={loc.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               <div style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(26,22,18,.7)', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'rgba(255,255,255,.8)', backdropFilter: 'blur(4px)' }}>
                 {activePhoto + 1} / {photos.length}
               </div>
-              {/* Attribution */}
-              {photos[activePhoto].attribution && (
-                <div
-                  style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 9, color: 'rgba(255,255,255,.4)' }}
-                  dangerouslySetInnerHTML={{ __html: photos[activePhoto].attribution }}
-                />
-              )}
             </>
           ) : (
-            // Fallback gradient if no photos found
             <div className={loc.bg} style={{ position: 'absolute', inset: 0 }}>
               <div style={{ position: 'absolute', bottom: 12, left: 12, fontSize: 11, color: 'rgba(255,255,255,.5)' }}>📷 No photos yet</div>
             </div>
           )}
-
-          {/* Access badge */}
           <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: loc.access === 'public' ? '#c8e8c4' : '#ffd0c0', backdropFilter: 'blur(4px)' }}>
             {loc.access === 'public' ? '● Public' : '🔒 Private'}
           </div>
         </div>
 
-        {/* ── Photo strip ── */}
+        {/* Photo strip */}
         {hasPhotos && photos.length > 1 && (
           <div style={{ display: 'flex', gap: 4, padding: '8px 1.25rem 0', overflowX: 'auto' }}>
             {photos.map((photo, i) => (
-              <div
-                key={i}
-                onClick={() => setActivePhoto(i)}
-                style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${activePhoto === i ? 'var(--gold)' : 'transparent'}`, transition: 'border-color .15s' }}
-              >
+              <div key={i} onClick={() => setActivePhoto(i)} style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${activePhoto === i ? 'var(--gold)' : 'transparent'}`, transition: 'border-color .15s' }}>
                 <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               </div>
             ))}
-
-            {/* Upload prompt */}
             <div style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, border: '1.5px dashed var(--sand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, cursor: 'pointer', background: 'var(--cream)' }}>
               <span style={{ fontSize: 16 }}>📷</span>
               <span style={{ fontSize: 8, color: 'var(--ink-soft)', textAlign: 'center', lineHeight: 1.2 }}>Add photo</span>
@@ -137,12 +328,9 @@ function DetailPanel({
           </div>
         )}
 
-        {/* No photos — show placeholder strip with upload prompt */}
         {!photosLoading && !hasPhotos && (
           <div style={{ display: 'flex', gap: 4, padding: '8px 1.25rem 0' }}>
-            {[0,1,2].map(i => (
-              <div key={i} className={loc.bg} style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, opacity: 0.4 + i * 0.15 }} />
-            ))}
+            {[0,1,2].map(i => <div key={i} className={loc.bg} style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, opacity: 0.4 + i * 0.15 }} />)}
             <div style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, border: '1.5px dashed var(--sand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, cursor: 'pointer', background: 'var(--cream)' }}>
               <span style={{ fontSize: 16 }}>📷</span>
               <span style={{ fontSize: 8, color: 'var(--ink-soft)', textAlign: 'center', lineHeight: 1.2 }}>Add photo</span>
@@ -151,14 +339,11 @@ function DetailPanel({
         )}
 
         <div style={{ padding: '1rem 1.25rem 1.5rem' }}>
-
-          {/* Name & city */}
-          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3, marginTop: hasPhotos || !photosLoading ? 8 : 0 }}>
+          <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3, marginTop: 8 }}>
             {loc.name}
           </div>
           <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: '1rem' }}>📍 {loc.city}</div>
 
-          {/* Tags */}
           {(loc.tags ?? []).length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: '1rem' }}>
               {(loc.tags ?? []).map((t: string) => (
@@ -167,20 +352,16 @@ function DetailPanel({
             </div>
           )}
 
-          {/* Description */}
           {loc.desc && (
-            <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, marginBottom: '1.25rem' }}>
-              {loc.desc}
-            </p>
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, marginBottom: '1.25rem' }}>{loc.desc}</p>
           )}
 
-          {/* Quick info */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1.5rem' }}>
             {[
               { icon: '🔒', label: 'Access',  value: loc.access === 'public' ? 'Free public access' : 'Private — booking required' },
               { icon: '⭐', label: 'Rating',  value: loc.rating !== '—' ? `${loc.rating} out of 5` : 'Not yet rated' },
               { icon: '❤',  label: 'Saves',   value: (loc.saves ?? 0) > 0 ? `${loc.saves} photographers` : 'Be the first to save!' },
-              { icon: '📷', label: 'Photos',  value: hasPhotos ? `${photos.length} Google photo${photos.length !== 1 ? 's' : ''}` : 'No photos yet — be the first!' },
+              { icon: '📷', label: 'Photos',  value: hasPhotos ? `${photos.length} photo${photos.length !== 1 ? 's' : ''}` : 'No photos yet' },
             ].map(item => (
               <div key={item.label} style={{ background: 'var(--cream)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--cream-dark)' }}>
                 <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--ink-soft)', marginBottom: 4 }}>{item.icon} {item.label}</div>
@@ -189,7 +370,6 @@ function DetailPanel({
             ))}
           </div>
 
-          {/* Google attribution */}
           {hasPhotos && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem', fontSize: 11, color: 'var(--ink-soft)' }}>
               <img src="https://developers.google.com/static/maps/documentation/images/google_on_white.png" alt="Google" style={{ height: 12, opacity: 0.4 }} />
@@ -197,18 +377,14 @@ function DetailPanel({
             </div>
           )}
 
-          {/* Actions */}
           <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              onClick={() => onToggleFavorite(loc.id as number)}
-              style={{ flex: 1, padding: '12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, transition: 'all .18s', background: isFav ? 'rgba(196,146,42,.1)' : 'var(--cream)', color: isFav ? 'var(--gold)' : 'var(--ink-soft)', border: `1px solid ${isFav ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}` }}
-            >
+            <button onClick={() => onToggleFavorite(loc.id as number)} style={{ flex: 1, padding: '12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, transition: 'all .18s', background: isFav ? 'rgba(196,146,42,.1)' : 'var(--cream)', color: isFav ? 'var(--gold)' : 'var(--ink-soft)', border: `1px solid ${isFav ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}` }}>
               {isFav ? '♥ Saved' : '♡ Save to favorites'}
             </button>
             {user ? (
-              <Link href="/share" style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={shareWithClient} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                 🔗 Share with client
-              </Link>
+              </button>
             ) : (
               <Link href="/" style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 Join free to save →
@@ -221,25 +397,24 @@ function DetailPanel({
   )
 }
 
-// ── Main explore page ─────────────────────────────────────────────────────────
-
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function ExplorePage() {
-  const [locations,   setLocations]   = useState<ExploreLocation[]>([])
-  const [dbLoading,   setDbLoading]   = useState(true)
-  const [userLocation,setUserLocation]= useState<{ lat: number; lng: number } | null>(null)
-  const [locGranted,  setLocGranted]  = useState(false)
-  const [locLoading,  setLocLoading]  = useState(false)
-  const [activeId,    setActiveId]    = useState<number | null>(null)
-  const [detailLoc,   setDetailLoc]   = useState<ExploreLocation | null>(null)
-  const [favorites,   setFavorites]   = useState<Set<number>>(new Set())
-  const [user,        setUser]        = useState<any>(null)
-  const [toast,       setToast]       = useState<string | null>(null)
-
+  const [locations,    setLocations]    = useState<ExploreLocation[]>([])
+  const [dbLoading,    setDbLoading]    = useState(true)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locGranted,   setLocGranted]   = useState(false)
+  const [locLoading,   setLocLoading]   = useState(false)
+  const [activeId,     setActiveId]     = useState<number | null>(null)
+  const [detailLoc,    setDetailLoc]    = useState<ExploreLocation | null>(null)
+  const [favorites,    setFavorites]    = useState<Set<number>>(new Set())
+  const [user,         setUser]         = useState<any>(null)
+  const [toast,        setToast]        = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState('All')
   const [searchQuery,  setSearchQuery]  = useState('')
   const [minRating,    setMinRating]    = useState(0)
   const [sortBy,       setSortBy]       = useState<SortValue>('quality')
   const [showFilters,  setShowFilters]  = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
@@ -296,7 +471,7 @@ export default function ExplorePage() {
   }, [toast])
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setDetailLoc(null) }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { setDetailLoc(null); setShowAddModal(false) } }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -368,8 +543,15 @@ export default function ExplorePage() {
           <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search locations, tags, cities…" style={{ width: '100%', padding: '7px 14px 7px 34px', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 6, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'rgba(245,240,232,.4)' }}>🔍</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {locGranted && <div style={{ fontSize: 12, color: 'rgba(245,240,232,.45)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--sky)', display: 'inline-block' }} />Near you</div>}
+          {/* Add Location button */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 4, background: 'rgba(196,146,42,.15)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+          >
+            + Add location
+          </button>
           {user
             ? <Link href="/dashboard" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Dashboard</Link>
             : <Link href="/" style={{ padding: '5px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>Join Free</Link>
@@ -440,7 +622,8 @@ export default function ExplorePage() {
         <div style={{ borderRight: '1px solid var(--cream-dark)', overflowY: 'auto', background: '#f9f6f1' }}>
           <div style={{ padding: '1rem 1.25rem .5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
-              {dbLoading ? <span style={{ color: 'var(--ink-soft)', fontWeight: 300 }}>Loading…</span> : <>{filtered.length} location{filtered.length !== 1 ? 's' : ''}{locations.length > 0 && <span style={{ fontWeight: 300, color: 'var(--ink-soft)', fontSize: 11 }}> · {locations.length} total</span>}</>}
+              {dbLoading ? <span style={{ color: 'var(--ink-soft)', fontWeight: 300 }}>Loading…</span>
+                : <>{filtered.length} location{filtered.length !== 1 ? 's' : ''}{locations.length > 0 && <span style={{ fontWeight: 300, color: 'var(--ink-soft)', fontSize: 11 }}> · {locations.length} total</span>}</>}
             </div>
             {!dbLoading && <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{SORT_OPTIONS.find(s => s.value === sortBy)?.label}</div>}
           </div>
@@ -463,9 +646,7 @@ export default function ExplorePage() {
             return (
               <div key={loc.id} onClick={() => { setDetailLoc(loc); setActiveId(loc.id as number) }} style={{ display: 'flex', gap: 10, padding: '10px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', transition: 'background .15s', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isActive ? 'var(--gold)' : 'transparent'}` }}>
                 <div className={loc.bg} style={{ width: 56, height: 56, borderRadius: 8, flexShrink: 0, position: 'relative' }}>
-                  {loc.rating !== '—' && (
-                    <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(26,22,18,.75)', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600, color: 'var(--gold)', backdropFilter: 'blur(2px)' }}>★{loc.rating}</div>
-                  )}
+                  {loc.rating !== '—' && <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(26,22,18,.75)', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600, color: 'var(--gold)', backdropFilter: 'blur(2px)' }}>★{loc.rating}</div>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
@@ -512,9 +693,13 @@ export default function ExplorePage() {
           isFav={favorites.has(detailLoc.id as number)}
           onClose={() => setDetailLoc(null)}
           onToggleFavorite={toggleFavorite}
-          onShare={() => {}}
           user={user}
         />
+      )}
+
+      {/* Add location modal */}
+      {showAddModal && (
+        <AddLocationModal onClose={() => setShowAddModal(false)} user={user} />
       )}
 
       {toast && (

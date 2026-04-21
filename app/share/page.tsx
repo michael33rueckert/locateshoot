@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import type { MapLocation } from '@/components/ShareMap'
+import { useSearchParams } from 'next/navigation'
 
 const ShareMap = dynamic(() => import('@/components/ShareMap'), { ssr: false })
 
@@ -132,6 +133,24 @@ export default function SharePage() {
       setDataLoading(false)
     }
   }, [])
+
+const searchParams = useSearchParams()
+
+useEffect(() => {
+  // Jump to step 3 if coming from explore page
+  const stepParam = searchParams.get('step')
+  if (stepParam === '3') {
+    const stored = sessionStorage.getItem('sharePreselectedLocation')
+    if (stored) {
+      try {
+        const loc = JSON.parse(stored)
+        setSelected(new Set([loc.id]))
+        sessionStorage.removeItem('sharePreselectedLocation')
+      } catch {}
+    }
+    setStep(3)
+  }
+}, [searchParams])
 
   useEffect(() => { loadData() }, [loadData])
 

@@ -4,7 +4,6 @@ export default function ComingSoonPage() {
       <style>{`
         html, body { margin: 0; padding: 0; background: #1a1612; }
         * { box-sizing: border-box; }
-        input::placeholder { color: rgba(245,240,232,.25); }
       `}</style>
 
       <div style={{
@@ -18,7 +17,6 @@ export default function ComingSoonPage() {
         textAlign: 'center',
         position: 'relative',
         overflow: 'hidden',
-        fontFamily: 'Georgia, "Times New Roman", serif',
       }}>
 
         {/* Background glow */}
@@ -28,7 +26,7 @@ export default function ComingSoonPage() {
         }} />
 
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '3rem', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '2rem', position: 'relative', zIndex: 1 }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#c4922a', display: 'inline-block', flexShrink: 0 }} />
           <span style={{ fontFamily: 'Georgia, "Times New Roman", serif', fontSize: 'clamp(22px, 4vw, 30px)', fontWeight: 900, color: '#f5f0e8', letterSpacing: '-.01em' }}>
             LocateShoot
@@ -38,91 +36,43 @@ export default function ComingSoonPage() {
         {/* Headline */}
         <h1 style={{
           fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: 'clamp(36px, 7vw, 72px)',
+          fontSize: 'clamp(36px, 7vw, 68px)',
           fontWeight: 900,
           lineHeight: 1.05,
           color: '#f5f0e8',
           marginBottom: '1.25rem',
-          maxWidth: 700,
+          maxWidth: 640,
           position: 'relative',
           zIndex: 1,
         }}>
-          The perfect location<br />
-          <em style={{ color: '#c4922a', fontStyle: 'italic' }}>for your next session</em>
+          Something beautiful<br />
+          <em style={{ color: '#c4922a', fontStyle: 'italic' }}>is coming soon</em>
         </h1>
 
         <p style={{
-          fontSize: 'clamp(15px, 2.5vw, 19px)',
-          color: 'rgba(245,240,232,.5)',
+          fontSize: 'clamp(15px, 2.5vw, 18px)',
+          color: 'rgba(245,240,232,.45)',
           fontWeight: 300,
           lineHeight: 1.7,
-          maxWidth: 520,
-          marginBottom: '2.5rem',
+          maxWidth: 420,
+          marginBottom: '3rem',
           position: 'relative',
           zIndex: 1,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
         }}>
-          We&apos;re building a community-powered map of photoshoot locations —
-          curated by photographers, for photographers.
+          We&apos;re putting the finishing touches on something made for photographers.
+          Check back soon.
         </p>
 
-        {/* Feature list */}
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: 12,
-          marginBottom: '3rem', textAlign: 'left',
-          maxWidth: 360, width: '100%',
-          position: 'relative', zIndex: 1,
-        }}>
-          {[
-            { icon: '📍', text: 'Discover public & private shoot locations near you' },
-            { icon: '🔗', text: 'Send clients a link to pick their favorite spot' },
-            { icon: '🤫', text: 'Save your own secret hidden gems' },
-            { icon: '⭐', text: 'Community ratings from real photographers' },
-          ].map(item => (
-            <div key={item.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{item.icon}</span>
-              <span style={{ fontSize: 'clamp(13px, 2vw, 15px)', color: 'rgba(245,240,232,.55)', fontWeight: 300, lineHeight: 1.5, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                {item.text}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Email signup */}
-        <div style={{ width: '100%', maxWidth: 420, marginBottom: '2rem', position: 'relative', zIndex: 1 }}>
-          <div style={{ fontSize: 13, color: 'rgba(245,240,232,.4)', marginBottom: 10, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-            Get notified when we launch
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <input
-              type="email"
-              placeholder="your@email.com"
-              style={{
-                padding: '13px 16px', borderRadius: 6,
-                border: '1px solid rgba(255,255,255,.12)',
-                background: 'rgba(255,255,255,.07)',
-                color: '#f5f0e8',
-                fontFamily: 'system-ui, -apple-system, sans-serif',
-                fontSize: 15, outline: 'none', width: '100%',
-              }}
-            />
-            <button style={{
-              padding: '13px 24px', borderRadius: 6,
-              background: '#c4922a', color: '#1a1612',
-              border: 'none', cursor: 'pointer', width: '100%',
-              fontFamily: 'system-ui, -apple-system, sans-serif',
-              fontSize: 15, fontWeight: 600,
-            }}>
-              Notify me →
-            </button>
-          </div>
-          <div style={{ fontSize: 11, color: 'rgba(245,240,232,.2)', marginTop: 8, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-            No spam. Unsubscribe any time.
-          </div>
-        </div>
-
         {/* Footer */}
-        <div style={{ fontSize: 12, color: 'rgba(245,240,232,.2)', marginTop: '2rem', position: 'relative', zIndex: 1, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-          © {new Date().getFullYear()} LocateShoot · Built for photographers
+        <div style={{
+          fontSize: 12,
+          color: 'rgba(245,240,232,.2)',
+          position: 'relative',
+          zIndex: 1,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+        }}>
+          © {new Date().getFullYear()} LocateShoot
         </div>
       </div>
     </>
