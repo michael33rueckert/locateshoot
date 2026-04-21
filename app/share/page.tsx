@@ -13,9 +13,9 @@ const ShareMap = dynamic(() => import('@/components/ShareMap'), { ssr: false })
 
 interface DBFavorite {
   id: number
-  location_id: number
+  location_id: number | string
   locations: {
-    id: number
+    id: number | string
     name: string
     city: string
     latitude: number
@@ -45,10 +45,10 @@ interface DBTemplate {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
-  const R = 3958.8
+  const R  = 3958.8
   const dLa = (la2 - la1) * Math.PI / 180
   const dLo = (lo2 - lo1) * Math.PI / 180
-  const a =
+  const a  =
     Math.sin(dLa / 2) ** 2 +
     Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) *
     Math.sin(dLo / 2) ** 2
@@ -61,26 +61,23 @@ function generateSlug(sessionName: string, photographerName: string) {
   return `${clean(photographerName)}-${clean(sessionName)}-${Date.now().toString(36)}`
 }
 
-// ── Mock recommended ──────────────────────────────────────────────────────────
-const BASE_RECOMMENDED = [
-  { id:101, name:'Berkley Riverfront Park',   city:'Kansas City, MO', lat:39.1097, lng:-94.5783, access:'public', rating:'4.5', bg:'bg-2', tags:['Waterfront','Skyline','Urban']    },
-  { id:102, name:'Penn Valley Park',          city:'Kansas City, MO', lat:39.0820, lng:-94.5895, access:'public', rating:'4.4', bg:'bg-1', tags:['Park','Lake','Open fields']       },
-  { id:103, name:'Swope Park Trails',         city:'Kansas City, MO', lat:38.9998, lng:-94.5369, access:'public', rating:'4.7', bg:'bg-5', tags:['Forest','Nature','Trails']        },
-  { id:104, name:'Liberty Memorial & Mall',   city:'Kansas City, MO', lat:39.0762, lng:-94.5821, access:'public', rating:'4.6', bg:'bg-3', tags:['Historic','Architecture','Views'] },
-  { id:105, name:'Riverfront Heritage Trail', city:'Kansas City, MO', lat:39.1064, lng:-94.5741, access:'public', rating:'4.3', bg:'bg-4', tags:['Trail','River','Urban']           },
-]
-
+const BG_CYCLE    = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 const STEP_LABELS = ['Drop pin', 'Select', 'Message', 'Share']
 
 export default function SharePage() {
-  // ── Auth & data ────────────────────────────────────────────────────────────
+  // ── Auth & data ─────────────────────────────────────────────────────────
   const [userId,      setUserId]      = useState<string | null>(null)
   const [dbFavorites, setDbFavorites] = useState<DBFavorite[]>([])
   const [dbSecrets,   setDbSecrets]   = useState<DBSecret[]>([])
   const [dbTemplates, setDbTemplates] = useState<DBTemplate[]>([])
   const [dataLoading, setDataLoading] = useState(true)
 
-  // ── Step state ─────────────────────────────────────────────────────────────
+  // All published locations for browsing
+  const [allDbLocs,   setAllDbLocs]   = useState<MapLocation[]>([])
+  const [locSearch,   setLocSearch]   = useState('')
+  const [showAllLocs, setShowAllLocs] = useState(false)
+
+  // ── Step state ──────────────────────────────────────────────────────────
   const [step,             setStep]             = useState(1)
   const [pin,              setPin]              = useState<{ lat: number; lng: number } | null>(null)
   const [radius,           setRadius]           = useState(15)
@@ -95,7 +92,7 @@ export default function SharePage() {
   const [generatedSlug,    setGeneratedSlug]    = useState<string | null>(null)
   const [isSaving,         setIsSaving]         = useState(false)
 
-  // ── Check for ?step=3 from explore page (no useSearchParams needed) ────────
+  // ── Handle ?step=3 from explore page ───────────────────────────────────
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
@@ -112,7 +109,7 @@ export default function SharePage() {
     }
   }, [])
 
-  // ── Load data ──────────────────────────────────────────────────────────────
+  // ── Load user data ──────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setDataLoading(true)
     try {
@@ -143,14 +140,38 @@ export default function SharePage() {
       if (secretsRes.data)   setDbSecrets(secretsRes.data)
       if (templatesRes.data) setDbTemplates(templatesRes.data)
       if (profileRes.data?.full_name) setPhotographerName(profileRes.data.full_name)
-    } catch (err) {
-      console.error('Share page load error:', err)
-    } finally {
-      setDataLoading(false)
-    }
+    } catch (err) { console.error('Share page load error:', err) }
+    finally { setDataLoading(false) }
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // ── Load ALL published locations for browsing ───────────────────────────
+  useEffect(() => {
+    supabase
+      .from('locations')
+      .select('id,name,city,state,latitude,longitude,access_type,rating,save_count')
+      .eq('status', 'published')
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null)
+      .order('save_count', { ascending: false })
+      .limit(500)
+      .then(({ data }) => {
+        if (!data) return
+        setAllDbLocs(data.map((loc, idx) => ({
+          id:     loc.id,
+          name:   loc.name,
+          city:   loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? ''),
+          lat:    loc.latitude,
+          lng:    loc.longitude,
+          access: loc.access_type ?? 'public',
+          rating: loc.rating ? String(parseFloat(loc.rating).toFixed(1)) : '—',
+          bg:     BG_CYCLE[idx % BG_CYCLE.length],
+          type:   'favorite' as const,
+          d:      pin ? calcDist(pin.lat, pin.lng, loc.latitude, loc.longitude) : null,
+        })))
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!toast) return
@@ -158,7 +179,7 @@ export default function SharePage() {
     return () => clearTimeout(id)
   }, [toast])
 
-  // ── Computed map locations ─────────────────────────────────────────────────
+  // ── Map locations ───────────────────────────────────────────────────────
   const favorites: MapLocation[] = useMemo(() =>
     dbFavorites
       .filter(f => f.locations?.latitude && f.locations?.longitude)
@@ -195,36 +216,40 @@ export default function SharePage() {
       .sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
   [dbSecrets, pin])
 
-  const recommended: MapLocation[] = useMemo(() =>
-    BASE_RECOMMENDED.map(r => ({
-      ...r,
-      type: 'recommended' as const,
-      d:    pin ? calcDist(pin.lat, pin.lng, r.lat, r.lng) : null,
-    })).sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
-  [pin])
+  // All locations with distance recalculated when pin changes
+  const allLocsWithDist: MapLocation[] = useMemo(() =>
+    allDbLocs.map(l => ({
+      ...l,
+      d: pin ? calcDist(pin.lat, pin.lng, l.lat, l.lng) : null,
+    })),
+  [allDbLocs, pin])
 
-  const allLocations  = useMemo(() => [...favorites, ...secretLocs, ...recommended], [favorites, secretLocs, recommended])
+  const allLocations  = useMemo(() => [...favorites, ...secretLocs], [favorites, secretLocs])
   const favsInRange   = favorites.filter(f => f.d !== null && f.d <= radius)
   const favsOutRange  = favorites.filter(f => f.d === null || f.d > radius)
   const secretInRange = secretLocs.filter(s => s.d !== null && s.d <= radius)
-  const recInRange    = recommended.filter(r => r.d !== null && r.d <= radius)
-  const selectedLocs  = allLocations.filter(l => selected.has(l.id))
+  const selectedLocs  = [
+    ...favorites,
+    ...secretLocs,
+    ...allDbLocs,
+  ].filter((l, i, arr) => {
+    // deduplicate by id
+    return arr.findIndex(x => String(x.id) === String(l.id)) === i &&
+           selected.has(l.id)
+  })
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // ── Handlers ────────────────────────────────────────────────────────────
   function handleAddressSelect(result: AddressResult) {
     setPin({ lat: result.lat, lng: result.lng })
     setToast('📍 Pin dropped!')
   }
 
-  function handlePinDrop(lat: number, lng: number) {
-    setPin({ lat, lng })
-  }
+  function handlePinDrop(lat: number, lng: number) { setPin({ lat, lng }) }
 
   function applyTemplate(id: string) {
     const t = dbTemplates.find(t => t.id === id)
     if (!t) return
-    setSelectedTemplate(id)
-    setMessage(t.body)
+    setSelectedTemplate(id); setMessage(t.body)
   }
 
   function toggleSelect(id: number | string) {
@@ -261,9 +286,13 @@ export default function SharePage() {
     if (!userId || !sessionName.trim()) { setToast('Please enter a session name'); return }
     setIsSaving(true)
     try {
-      const slug        = generateSlug(sessionName, photographerName || 'photographer')
-      const locationIds = [...selected].filter(id => typeof id === 'number') as number[]
-      const secretIds   = [...selected].filter(id => typeof id === 'string') as string[]
+      const slug = generateSlug(sessionName, photographerName || 'photographer')
+
+      // KEY FIX: use type !== 'secret' instead of typeof id === 'number'
+      // Supabase returns bigint IDs as strings, so typeof check was broken
+      const locationIds = selectedLocs.filter(l => l.type !== 'secret').map(l => l.id)
+      const secretIds   = selectedLocs.filter(l => l.type === 'secret').map(l => String(l.id))
+
       let expiresAt: string | null = null
       if (expiry !== '0') {
         const d = new Date()
@@ -279,15 +308,10 @@ export default function SharePage() {
         expires_at: expiresAt,
       })
       if (error) throw error
-      setGeneratedSlug(slug)
-      setStep(4)
-      setToast('🔗 Share link created!')
+      setGeneratedSlug(slug); setStep(4); setToast('🔗 Share link created!')
     } catch (err) {
-      console.error(err)
-      setToast('⚠ Could not create link — please try again')
-    } finally {
-      setIsSaving(false)
-    }
+      console.error(err); setToast('⚠ Could not create link — please try again')
+    } finally { setIsSaving(false) }
   }
 
   function copyLink() {
@@ -303,7 +327,7 @@ export default function SharePage() {
     setSessionName(''); setMessage(''); setSelectedTemplate('')
   }
 
-  // ── Shared styles ──────────────────────────────────────────────────────────
+  // ── Styles ───────────────────────────────────────────────────────────────
   const rowStyle = (sel: boolean, isSecret = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: 9,
     padding: 9, borderRadius: 4, cursor: 'pointer',
@@ -336,20 +360,16 @@ export default function SharePage() {
   function LocationRow({ loc, showTags = false }: { loc: MapLocation & { tags?: string[] }, showTags?: boolean }) {
     const sel      = selected.has(loc.id)
     const isSecret = loc.type === 'secret'
-    const isRec    = loc.type === 'recommended'
     return (
       <div onClick={() => toggleSelect(loc.id)} style={rowStyle(sel, isSecret)}>
         <div style={checkStyle(sel)}>{sel ? '✓' : ''}</div>
         <div className={loc.bg} style={{ width: 42, height: 42, borderRadius: 6, flexShrink: 0, position: 'relative' }}>
-          {isSecret && (
-            <div style={{ position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: '50%', background: 'rgba(124,92,191,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>🤫</div>
-          )}
+          {isSecret && <div style={{ position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: '50%', background: 'rgba(124,92,191,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>🤫</div>}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>
             {loc.name}
-            {isRec    && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--sky)',   fontWeight: 400 }}>Recommended</span>}
-            {isSecret && <span style={{ marginLeft: 6, fontSize: 10, color: '#7c5cbf',      fontWeight: 500 }}>🤫 Secret spot</span>}
+            {isSecret && <span style={{ marginLeft: 6, fontSize: 10, color: '#7c5cbf', fontWeight: 500 }}>🤫 Secret spot</span>}
           </div>
           <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {loc.city}</div>
           {showTags && (loc as any).tags && (
@@ -361,16 +381,20 @@ export default function SharePage() {
           )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
-            {loc.d?.toFixed(1) ?? '—'}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>mi</div>
+          {loc.d !== null && loc.d !== undefined ? (
+            <>
+              <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{loc.d.toFixed(1)}</div>
+              <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>mi</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>★ {loc.rating}</div>
+          )}
         </div>
       </div>
     )
   }
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (dataLoading) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--cream)' }}>
@@ -379,19 +403,18 @@ export default function SharePage() {
     )
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '440px 1fr', height: '100vh', overflow: 'hidden' }}>
 
-      {/* ── SIDEBAR ── */}
+      {/* SIDEBAR */}
       <div style={{ background: 'white', borderRight: '1px solid var(--cream-dark)', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: '1.25rem 1.5rem 0', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <Link href="/" style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 17, fontWeight: 900, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />
-              LocateShoot
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
             </Link>
             <Link href="/dashboard" style={{ fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none' }}>← Dashboard</Link>
           </div>
@@ -422,7 +445,7 @@ export default function SharePage() {
         {/* Step body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
 
-          {/* STEP 1 */}
+          {/* ── STEP 1 ── */}
           {step === 1 && (
             <>
               <div style={{ marginBottom: '1.25rem' }}>
@@ -443,9 +466,7 @@ export default function SharePage() {
                   <span style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 20, fontWeight: 700, color: 'var(--gold)' }}>{radius} mi</span>
                 </div>
                 <input type="range" min={2} max={50} value={radius} step={1} onChange={e => setRadius(parseInt(e.target.value))} style={{ width: '100%', accentColor: 'var(--gold)' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-soft)', marginTop: 2 }}>
-                  <span>2 mi</span><span>50 mi</span>
-                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-soft)', marginTop: 2 }}><span>2 mi</span><span>50 mi</span></div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', borderRadius: 4, fontSize: 13, marginBottom: '1.25rem', background: pin ? 'rgba(74,103,65,.08)' : 'var(--cream-dark)', color: pin ? 'var(--sage)' : 'var(--ink-soft)', border: pin ? '1px solid rgba(74,103,65,.2)' : 'none' }}>
@@ -469,9 +490,7 @@ export default function SharePage() {
                   {dbFavorites.length > 5 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '4px 0' }}>+{dbFavorites.length - 5} more — all shown in Step 2</div>}
                 </>
               ) : (
-                <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center' }}>
-                  No favorites saved yet — browse the map to save locations!
-                </div>
+                <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center' }}>No favorites saved yet — you can still select from all map locations in Step 2.</div>
               )}
 
               {dbSecrets.length > 0 && (
@@ -485,9 +504,10 @@ export default function SharePage() {
             </>
           )}
 
-          {/* STEP 2 */}
+          {/* ── STEP 2 ── */}
           {step === 2 && (
             <>
+              {/* Favorites in range */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Your favorites</div>
@@ -496,16 +516,16 @@ export default function SharePage() {
                 {favsInRange.length > 0 && <button onClick={selectAllFavs} style={{ fontSize: 12, color: 'var(--gold)', background: 'none', border: 'none', fontFamily: 'inherit', cursor: 'pointer', padding: 0 }}>Select all</button>}
               </div>
 
-              {favsInRange.length === 0 && favorites.length === 0 && <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', padding: '8px 0', marginBottom: 8 }}>No favorites saved yet — <Link href="/explore" style={{ color: 'var(--gold)' }}>browse the map</Link> to add some.</div>}
-              {favsInRange.length === 0 && favorites.length > 0 && <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', padding: '8px 0', marginBottom: 8 }}>No favorites within {radius} mi — try increasing the radius.</div>}
+              {favsInRange.length === 0 && favorites.length === 0 && <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', padding: '8px 0', marginBottom: 8 }}>No favorites saved — use &quot;Browse all&quot; below to select any location.</div>}
+              {favsInRange.length === 0 && favorites.length > 0 && <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', padding: '8px 0', marginBottom: 8 }}>No favorites within {radius} mi — try increasing the radius or browse all below.</div>}
 
-              {favsInRange.map(f => <LocationRow key={f.id} loc={f} />)}
+              {favsInRange.map(f => <LocationRow key={String(f.id)} loc={f} />)}
 
               {favsOutRange.length > 0 && (
                 <>
                   <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.08em', margin: '8px 0 6px' }}>Outside radius</div>
                   {favsOutRange.map(f => (
-                    <div key={f.id} style={{ ...rowStyle(false), opacity: .35, pointerEvents: 'none' }}>
+                    <div key={String(f.id)} style={{ ...rowStyle(false), opacity: .35, pointerEvents: 'none' }}>
                       <div style={checkStyle(false)} />
                       <div className={f.bg} style={{ width: 42, height: 42, borderRadius: 6, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
@@ -530,28 +550,60 @@ export default function SharePage() {
                     </div>
                     <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 10, lineHeight: 1.5 }}>Shown to clients with a special badge — they&apos;ll know it&apos;s one of your hidden gems.</div>
-                  {secretInRange.map(s => <LocationRow key={s.id} loc={s} showTags />)}
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 10, lineHeight: 1.5 }}>Shown to clients with a special badge — shared exclusively with them.</div>
+                  {secretInRange.map(s => <LocationRow key={String(s.id)} loc={s} showTags />)}
                 </>
               )}
 
-              {recInRange.length > 0 && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '1.25rem 0 8px' }}>
-                    <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
-                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--sky)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--sky)', display: 'inline-block' }} />Recommended nearby
-                    </div>
-                    <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
+              {/* ── Browse all published locations ── */}
+              <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--cream-dark)', paddingTop: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showAllLocs ? 10 : 0 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Browse all locations</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>{allDbLocs.length} locations on the map</div>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 10, lineHeight: 1.5 }}>Other well-rated public locations near this area.</div>
-                  {recInRange.slice(0, 5).map(r => <LocationRow key={r.id} loc={r} showTags />)}
-                </>
-              )}
+                  <button
+                    onClick={() => setShowAllLocs(p => !p)}
+                    style={{ fontSize: 12, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 500 }}
+                  >
+                    {showAllLocs ? 'Hide ▲' : 'Browse ▼'}
+                  </button>
+                </div>
+
+                {showAllLocs && (
+                  <>
+                    <input
+                      type="text"
+                      value={locSearch}
+                      onChange={e => setLocSearch(e.target.value)}
+                      placeholder="Search by name or city…"
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13, outline: 'none', marginBottom: 8, color: 'var(--ink)' }}
+                    />
+                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                      {allLocsWithDist
+                        .filter(l => {
+                          if (!locSearch.trim()) return true
+                          const q = locSearch.toLowerCase()
+                          return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q)
+                        })
+                        .slice(0, 80)
+                        .map(loc => <LocationRow key={String(loc.id)} loc={loc} />)
+                      }
+                      {allLocsWithDist.filter(l => {
+                        if (!locSearch.trim()) return true
+                        const q = locSearch.toLowerCase()
+                        return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q)
+                      }).length === 0 && (
+                        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', padding: '1rem', textAlign: 'center' }}>No locations match &quot;{locSearch}&quot;</div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             </>
           )}
 
-          {/* STEP 3 */}
+          {/* ── STEP 3 ── */}
           {step === 3 && (
             <>
               <div style={{ marginBottom: '1rem' }}>
@@ -573,7 +625,6 @@ export default function SharePage() {
                 </div>
                 {dbTemplates.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 8, fontStyle: 'italic' }}>No templates yet — <Link href="/profile#templates" style={{ color: 'var(--gold)' }}>add some in your profile</Link>.</div>}
                 <textarea value={message} onChange={e => { setMessage(e.target.value); setSelectedTemplate('') }} rows={5} placeholder="Write a message to your client…" style={{ ...inputStyle, resize: 'vertical' }} />
-                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Choosing a template fills in the message — you can still edit it freely.</div>
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
@@ -597,7 +648,7 @@ export default function SharePage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>Only show photos I uploaded</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Your client will only see photos you personally added — not photos from other community members.</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Your client will only see photos you personally added — not community photos.</div>
                 </div>
               </div>
 
@@ -607,7 +658,7 @@ export default function SharePage() {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   {selectedLocs.map(l => (
-                    <span key={l.id} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, background: l.type === 'secret' ? 'rgba(124,92,191,.1)' : l.type === 'recommended' ? 'rgba(61,110,140,.1)' : 'white', color: l.type === 'secret' ? '#7c5cbf' : l.type === 'recommended' ? 'var(--sky)' : 'var(--ink-soft)', border: `1px solid ${l.type === 'secret' ? 'rgba(124,92,191,.2)' : l.type === 'recommended' ? 'rgba(61,110,140,.2)' : 'var(--sand)'}` }}>
+                    <span key={String(l.id)} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, background: l.type === 'secret' ? 'rgba(124,92,191,.1)' : 'white', color: l.type === 'secret' ? '#7c5cbf' : 'var(--ink-soft)', border: `1px solid ${l.type === 'secret' ? 'rgba(124,92,191,.2)' : 'var(--sand)'}` }}>
                       {l.type === 'secret' && '🤫 '}{l.name}
                     </span>
                   ))}
@@ -617,7 +668,7 @@ export default function SharePage() {
             </>
           )}
 
-          {/* STEP 4 */}
+          {/* ── STEP 4 ── */}
           {step === 4 && generatedSlug && (
             <>
               <div style={{ textAlign: 'center', padding: '0.5rem 0 1.25rem' }}>
@@ -663,7 +714,7 @@ export default function SharePage() {
               <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1rem 1.1rem', display: 'flex', gap: 10, marginTop: '1rem' }}>
                 <span style={{ fontSize: 18, flexShrink: 0 }}>🔔</span>
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,.65)', lineHeight: 1.55, fontWeight: 300 }}>
-                  <strong style={{ color: 'var(--cream)', fontWeight: 500 }}>You&apos;ll be notified by email</strong> the moment your client picks a location. It also appears in your dashboard.
+                  <strong style={{ color: 'var(--cream)', fontWeight: 500 }}>You&apos;ll be notified by email</strong> the moment your client picks a location.
                 </div>
               </div>
 

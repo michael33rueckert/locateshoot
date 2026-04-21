@@ -885,29 +885,71 @@ export default function DashboardPage() {
 // ── Create Permanent Link Modal ───────────────────────────────────────────────
 
 function CreatePermanentLinkModal({
-  favorites, userId, photographerName, onClose, onCreated,
+  favorites,
+  userId,
+  photographerName,
+  onClose,
+  onCreated,
 }: {
-  favorites: Array<{ id: number; location_id: number; locations: { id: number; name: string; city: string } }>
+  favorites: Array<{ id: number; location_id: number | string; locations: { id: number | string; name: string; city: string } }>
   userId: string
   photographerName: string
   onClose: () => void
   onCreated: (link: any) => void
 }) {
   const [sessionName,    setSessionName]    = useState('')
-  const [selectedLocIds, setSelectedLocIds] = useState<number[]>([])
+  const [selectedLocIds, setSelectedLocIds] = useState<(number | string)[]>([])
   const [message,        setMessage]        = useState('')
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState('')
-
-  function toggleLoc(id: number) {
-    setSelectedLocIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  const [allLocs,        setAllLocs]        = useState<Array<{ id: string | number; name: string; city: string; bg: string }>>([])
+  const [locSearch,      setLocSearch]      = useState('')
+  const [locsLoading,    setLocsLoading]    = useState(true)
+ 
+  // Load all published locations
+  useEffect(() => {
+    supabase
+      .from('locations')
+      .select('id,name,city,state')
+      .eq('status', 'published')
+      .not('latitude', 'is', null)
+      .order('save_count', { ascending: false })
+      .limit(500)
+      .then(({ data }) => {
+        if (data) setAllLocs(data.map((l, i) => ({
+          id:   l.id,
+          name: l.name,
+          city: l.city && l.state ? `${l.city}, ${l.state}` : (l.city ?? ''),
+          bg:   `bg-${(i % 6) + 1}`,
+        })))
+        setLocsLoading(false)
+      })
+  }, [])
+ 
+  // Pre-select favorites
+  useEffect(() => {
+    if (favorites.length > 0) {
+      setSelectedLocIds(favorites.map(f => f.location_id))
+    }
+  }, [favorites])
+ 
+  function toggleLoc(id: number | string) {
+    setSelectedLocIds(prev =>
+      prev.some(x => String(x) === String(id))
+        ? prev.filter(x => String(x) !== String(id))
+        : [...prev, id]
+    )
   }
-
+ 
+  function isSelected(id: number | string) {
+    return selectedLocIds.some(x => String(x) === String(id))
+  }
+ 
   function generateSlug(name: string, photographer: string) {
     const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 25)
     return `${clean(photographer)}-${clean(name)}-${Date.now().toString(36)}`
   }
-
+ 
   async function create() {
     if (!sessionName.trim()) { setError('Please enter a name for this link.'); return }
     if (selectedLocIds.length === 0) { setError('Select at least one location.'); return }
@@ -915,77 +957,126 @@ function CreatePermanentLinkModal({
     try {
       const slug = generateSlug(sessionName, photographerName || 'photographer')
       const { data, error: insertErr } = await supabase.from('share_links').insert({
-        user_id: userId, slug, session_name: sessionName.trim(),
-        message: message.trim() || null, photographer_name: photographerName || null,
-        location_ids: selectedLocIds, secret_ids: [], expires_at: null, is_permanent: true,
+        user_id:           userId,
+        slug,
+        session_name:      sessionName.trim(),
+        message:           message.trim() || null,
+        photographer_name: photographerName || null,
+        location_ids:      selectedLocIds,
+        secret_ids:        [],
+        expires_at:        null,
+        is_permanent:      true,
       }).select('id,session_name,slug,created_at,location_ids').single()
       if (insertErr) throw insertErr
       onCreated(data); onClose()
-    } catch (err: any) { setError('Could not create link — please try again.'); console.error(err) }
-    finally { setSaving(false) }
+    } catch (err: any) {
+      setError('Could not create link — please try again.')
+      console.error(err)
+    } finally { setSaving(false) }
   }
-
-  const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
-  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
-
+ 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4,
+    fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
+  }
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase',
+    letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5,
+  }
+ 
+  const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
+ 
+  const filteredLocs = allLocs.filter(l => {
+    if (!locSearch.trim()) return true
+    const q = locSearch.toLowerCase()
+    return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q)
+  })
+ 
+  const favIds = new Set(favorites.map(f => String(f.location_id)))
+ 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 520, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '1.5rem' }}>
+ 
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📌 Create permanent link</div>
-              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>A reusable link that never expires. Great for your go-to locations.</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>A reusable link that never expires. Clients enter their email when they pick.</div>
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
           </div>
-
-          <div style={{ padding: '10px 14px', background: 'rgba(196,146,42,.06)', border: '1px solid rgba(196,146,42,.2)', borderRadius: 8, marginBottom: '1.25rem', fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.6, fontWeight: 300 }}>
-            📌 Clients will be asked for their email when they pick a location, so you always know who selected what.
-          </div>
-
+ 
           <div style={{ marginBottom: '1rem' }}>
             <label style={labelStyle}>Link name *</label>
             <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. Kansas City Favorites · Spring 2025" autoFocus />
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Clients see this as the session name at the top of their page.</div>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Clients see this as the session name on their page.</div>
           </div>
-
+ 
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={labelStyle}>Message to clients (optional)</label>
-            <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="Hi! Here are my go-to locations for the area. Take a look and pick your favorite!" style={{ ...inputStyle, resize: 'vertical' }} />
+            <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="Hi! Here are my go-to locations. Take a look and pick your favorite!" style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
-
+ 
+          {/* Location selector */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <label style={labelStyle}>Select locations * ({selectedLocIds.length} selected)</label>
-            {favorites.length === 0 ? (
-              <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center' }}>No favorites saved yet — browse the map to save locations first.</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>
+                Locations * <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({selectedLocIds.length} selected)</span>
+              </label>
+              {selectedLocIds.length > 0 && (
+                <button onClick={() => setSelectedLocIds([])} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>
+              )}
+            </div>
+ 
+            <input
+              type="text"
+              value={locSearch}
+              onChange={e => setLocSearch(e.target.value)}
+              placeholder="Search all locations by name or city…"
+              style={{ ...inputStyle, marginBottom: 8, fontSize: 13 }}
+            />
+ 
+            {locsLoading ? (
+              <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)' }}>Loading locations…</div>
             ) : (
-              <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
-                {favorites.map((fav, i) => {
-                  const sel = selectedLocIds.includes(fav.location_id)
+              <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
+                {filteredLocs.length === 0 && (
+                  <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No locations match &quot;{locSearch}&quot;</div>
+                )}
+                {filteredLocs.map((loc, i) => {
+                  const sel    = isSelected(loc.id)
+                  const isFav  = favIds.has(String(loc.id))
                   return (
-                    <div key={fav.id} onClick={() => toggleLoc(fav.location_id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', borderBottom: i < favorites.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}>
+                    <div
+                      key={String(loc.id)}
+                      onClick={() => toggleLoc(loc.id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', borderBottom: i < filteredLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}
+                    >
                       <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--sand)'}`, background: sel ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>
                         {sel ? '✓' : ''}
                       </div>
+                      <div className={loc.bg} style={{ width: 34, height: 34, borderRadius: 6, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fav.locations?.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {fav.locations?.city}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {loc.name}
+                          {isFav && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--gold)', fontWeight: 400 }}>★ saved</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {loc.city}</div>
                       </div>
-                      {sel && <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 500, flexShrink: 0 }}>✓</span>}
                     </div>
                   )
                 })}
               </div>
             )}
           </div>
-
+ 
           {error && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{error}</div>}
-
+ 
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={create} disabled={saving || !sessionName.trim() || selectedLocIds.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !sessionName.trim() || selectedLocIds.length === 0 ? 0.5 : 1 }}>
-              {saving ? 'Creating…' : 'Create permanent link →'}
+              {saving ? 'Creating…' : `Create permanent link →`}
             </button>
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>
