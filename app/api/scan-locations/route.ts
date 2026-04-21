@@ -22,6 +22,9 @@ interface ScannedLocation {
   parking_info: string
   permit_required: boolean
   permit_notes: string | null
+  permit_fee: number | null
+  permit_website: string | null
+  permit_certainty: 'verified' | 'likely' | 'unknown'
   quality_score: number
   rating: number
 }
@@ -61,57 +64,89 @@ const SCAN_CATEGORIES = [
   },
 ]
 
+// ── Fuzzy deduplication ───────────────────────────────────────────────────────
+
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\b(the|a|an|of|at|in|on|and|park|trail|area|lake|river|creek|garden|grove|historic|district)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isSimilarLocation(
+  name1: string, city1: string,
+  name2: string, city2: string,
+): boolean {
+  const c1 = city1.toLowerCase().split(',')[0].trim()
+  const c2 = city2.toLowerCase().split(',')[0].trim()
+  if (!c1.includes(c2) && !c2.includes(c1) && c1 !== c2) return false
+
+  const n1 = normalizeName(name1)
+  const n2 = normalizeName(name2)
+  if (!n1 || !n2) return false
+
+  if (n1 === n2) return true
+
+  if (n1.length > 8 && n2.length > 8) {
+    if (n1.includes(n2) || n2.includes(n1)) return true
+  }
+
+  const w1 = n1.split(' ').filter(w => w.length > 3)
+  const w2 = n2.split(' ').filter(w => w.length > 3)
+  if (w1.length < 2 || w2.length < 2) return false
+  const common = w1.filter(w => w2.includes(w))
+  return common.length / Math.min(w1.length, w2.length) >= 0.75
+}
+
+// ── Coordinate verification ───────────────────────────────────────────────────
+
 async function verifyCoordinates(
-  name: string,
-  city: string,
-  state: string
+  name: string, city: string, state: string
 ): Promise<{ lat: number; lng: number } | null> {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY
   if (!apiKey) return null
-
   const query = encodeURIComponent(`${name}, ${city}, ${state}`)
-  const url   = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${apiKey}`
-
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${apiKey}`
   try {
     const res  = await fetch(url)
     const data = await res.json()
     if (data.status === 'OK' && data.results?.[0]) {
       const loc = data.results[0].geometry.location
-      console.log(`  ✓ Verified: ${name} → ${loc.lat}, ${loc.lng}`)
       return { lat: loc.lat, lng: loc.lng }
-    } else {
-      console.log(`  ⚠ Could not verify: ${name} (${data.status}) — using Claude coords`)
     }
-  } catch (err) {
-    console.log(`  ⚠ Geocoding error for ${name}:`, err)
-  }
+  } catch {}
   return null
 }
+
+// ── Sanitize ──────────────────────────────────────────────────────────────────
 
 function sanitizeLocation(loc: ScannedLocation): ScannedLocation {
   return {
     ...loc,
-    rating:       Math.min(5.0, Math.max(0, Math.round((loc.rating ?? 4.0) * 10) / 10)),
-    quality_score:Math.min(100, Math.max(0, Math.round(loc.quality_score ?? 75))),
-    latitude:     Math.round((loc.latitude  ?? 0) * 1000000) / 1000000,
-    longitude:    Math.round((loc.longitude ?? 0) * 1000000) / 1000000,
-    name:         (loc.name ?? '').slice(0, 200),
-    city:         (loc.city ?? '').slice(0, 100),
-    state:        (loc.state ?? '').slice(0, 50),
-    description:  (loc.description ?? '').slice(0, 2000),
-    best_time:    (loc.best_time ?? '').slice(0, 200),
-    parking_info: (loc.parking_info ?? '').slice(0, 500),
-    permit_notes: loc.permit_notes ? loc.permit_notes.slice(0, 500) : null,
-    access_type:  loc.access_type === 'private' ? 'private' : 'public',
-    tags:         Array.isArray(loc.tags) ? loc.tags.slice(0, 10) : [],
+    rating:           Math.min(5.0, Math.max(0, Math.round((loc.rating ?? 4.0) * 10) / 10)),
+    quality_score:    Math.min(100, Math.max(0, Math.round(loc.quality_score ?? 75))),
+    permit_fee:       typeof loc.permit_fee === 'number' ? Math.round(loc.permit_fee * 100) / 100 : null,
+    latitude:         Math.round((loc.latitude  ?? 0) * 1000000) / 1000000,
+    longitude:        Math.round((loc.longitude ?? 0) * 1000000) / 1000000,
+    name:             (loc.name ?? '').slice(0, 200),
+    city:             (loc.city ?? '').slice(0, 100),
+    state:            (loc.state ?? '').slice(0, 50),
+    description:      (loc.description ?? '').slice(0, 2000),
+    best_time:        (loc.best_time ?? '').slice(0, 200),
+    parking_info:     (loc.parking_info ?? '').slice(0, 500),
+    permit_notes:     loc.permit_notes  ? loc.permit_notes.slice(0, 500)  : null,
+    permit_website:   loc.permit_website ? loc.permit_website.slice(0, 500) : null,
+    permit_certainty: ['verified','likely','unknown'].includes(loc.permit_certainty) ? loc.permit_certainty : 'unknown',
+    access_type:      loc.access_type === 'private' ? 'private' : 'public',
+    tags:             Array.isArray(loc.tags) ? loc.tags.slice(0, 10) : [],
   }
 }
 
-async function scanWithRetry(
-  city: string,
-  categoryPrompt: string,
-  maxRetries = 3
-): Promise<ScannedLocation[]> {
+// ── Retry on 429 ─────────────────────────────────────────────────────────────
+
+async function scanWithRetry(city: string, categoryPrompt: string, maxRetries = 3): Promise<ScannedLocation[]> {
   let lastError: Error | null = null
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -120,7 +155,7 @@ async function scanWithRetry(
       lastError = err
       if (err.message?.includes('429')) {
         const waitMs = attempt * 65000
-        console.log(`Rate limited. Waiting ${waitMs / 1000}s before retry ${attempt}/${maxRetries}`)
+        console.log(`Rate limited — waiting ${waitMs / 1000}s (attempt ${attempt}/${maxRetries})`)
         await new Promise(r => setTimeout(r, waitMs))
       } else {
         throw err
@@ -130,17 +165,18 @@ async function scanWithRetry(
   throw lastError ?? new Error('Max retries exceeded')
 }
 
+// ── POST handler ──────────────────────────────────────────────────────────────
+
 export async function POST(request: Request) {
   try {
-    const supabase = getServiceClient()
-    const body     = await request.json().catch(() => ({}))
-
+    const supabase    = getServiceClient()
+    const body        = await request.json().catch(() => ({}))
     const cities: string[]     = body.cities     ?? []
     const userId: string       = body.userId      ?? ''
     const categories: string[] = body.categories  ?? SCAN_CATEGORIES.map(c => c.name)
 
-    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    if (cities.length === 0) return NextResponse.json({ error: 'No cities provided' }, { status: 400 })
+    if (!userId)          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!cities.length)   return NextResponse.json({ error: 'No cities provided' }, { status: 400 })
 
     const allInserted: string[] = []
     const allErrors:   string[] = []
@@ -149,9 +185,18 @@ export async function POST(request: Request) {
     const selectedCategories = SCAN_CATEGORIES.filter(c => categories.includes(c.name))
 
     for (const city of cities) {
+      // Load existing locations for this city into memory for fuzzy dedup
+      const citySlug = city.split(',')[0].trim()
+      const { data: existingInCity } = await supabase
+        .from('locations')
+        .select('name, city')
+        .ilike('city', `%${citySlug}%`)
+      const existingSet: { name: string; city: string }[] = existingInCity ?? []
+      console.log(`\nLoaded ${existingSet.length} existing locations for ${city}`)
+
       for (const category of selectedCategories) {
         try {
-          console.log(`\nScanning [${category.name}] in ${city}`)
+          console.log(`Scanning [${category.name}] in ${city}…`)
           totalScanned++
 
           const locations = await scanWithRetry(city, category.prompt(city))
@@ -160,52 +205,61 @@ export async function POST(request: Request) {
           for (const rawLoc of locations) {
             const loc = sanitizeLocation(rawLoc)
 
-            const { data: existing } = await supabase
+            // Fuzzy dedup check against in-memory set
+            const isFuzzyDup = existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))
+            if (isFuzzyDup) {
+              allErrors.push(`Similar exists: ${loc.name}`)
+              continue
+            }
+
+            // Exact DB check as fallback
+            const { data: exactMatch } = await supabase
               .from('locations')
               .select('id')
               .ilike('name', loc.name)
               .ilike('city', loc.city)
               .maybeSingle()
-
-            if (existing) {
+            if (exactMatch) {
               allErrors.push(`Duplicate: ${loc.name}`)
               continue
             }
 
+            // Verify coordinates with Google
             const verified = await verifyCoordinates(loc.name, loc.city, loc.state)
-            if (verified) {
-              loc.latitude  = verified.lat
-              loc.longitude = verified.lng
-            }
+            if (verified) { loc.latitude = verified.lat; loc.longitude = verified.lng }
             await new Promise(r => setTimeout(r, 200))
 
-            const { error: insertErr } = await supabase
-              .from('locations')
-              .insert({
-                name:            loc.name,
-                city:            loc.city,
-                state:           loc.state,
-                latitude:        loc.latitude,
-                longitude:       loc.longitude,
-                description:     loc.description,
-                access_type:     loc.access_type,
-                category:        loc.category || category.name,
-                tags:            loc.tags,
-                best_time:       loc.best_time,
-                parking_info:    loc.parking_info,
-                permit_required: loc.permit_required ?? false,
-                permit_notes:    loc.permit_notes,
-                quality_score:   loc.quality_score,
-                rating:          loc.rating,
-                status:          'published',
-                source:          'ai_scanner',
-                added_by:        userId,
-              })
+            // Insert
+            const { error: insertErr } = await supabase.from('locations').insert({
+              name:              loc.name,
+              city:              loc.city,
+              state:             loc.state,
+              latitude:          loc.latitude,
+              longitude:         loc.longitude,
+              description:       loc.description,
+              access_type:       loc.access_type,
+              category:          loc.category || category.name,
+              tags:              loc.tags,
+              best_time:         loc.best_time,
+              parking_info:      loc.parking_info,
+              permit_required:   loc.permit_required ?? false,
+              permit_notes:      loc.permit_notes,
+              permit_fee:        loc.permit_fee,
+              permit_website:    loc.permit_website,
+              permit_certainty:  loc.permit_certainty,
+              permit_scanned_at: new Date().toISOString(),
+              quality_score:     loc.quality_score,
+              rating:            loc.rating,
+              status:            'published',
+              source:            'ai_scanner',
+              added_by:          userId,
+            })
 
             if (insertErr) {
               allErrors.push(`Error: ${loc.name} — ${insertErr.message}`)
             } else {
               allInserted.push(`${loc.name} (${category.name})`)
+              existingSet.push({ name: loc.name, city: loc.city })
             }
           }
 
@@ -217,7 +271,7 @@ export async function POST(request: Request) {
       }
 
       if (cities.indexOf(city) < cities.length - 1) {
-        console.log('\nPausing 30s between cities')
+        console.log('\nPausing 30s between cities…')
         await new Promise(r => setTimeout(r, 30000))
       }
     }
@@ -237,38 +291,43 @@ export async function POST(request: Request) {
   }
 }
 
-async function scanCityCategory(
-  city: string,
-  categoryPrompt: string
-): Promise<ScannedLocation[]> {
+// ── Claude API call with web search ──────────────────────────────────────────
+
+async function scanCityCategory(city: string, categoryPrompt: string): Promise<ScannedLocation[]> {
   const prompt = `You are an expert photography location scout with deep knowledge of ${city}.
 
 ${categoryPrompt}
 
-For each location return:
-- Exact specific name (keep under 150 characters)
-- The city it is in
-- State abbreviation (2 letters, e.g. "MO")
-- Approximate GPS coordinates (we will verify these with Google so just get them close)
-- A vivid 2-3 sentence description of what makes it photogenic
+For each location, use web search to find and return ALL of these fields:
+- name: exact specific name (under 150 chars)
+- city: city name
+- state: 2-letter state abbreviation (e.g. "MO")
+- latitude: number
+- longitude: number
+- description: vivid 2-3 sentence description of what makes it photogenic
 - access_type: "public" or "private"
-- category name
-- tags array (from: Golden Hour, Sunrise, Sunset, Forest, Urban, Waterfront, Rooftop, Historic, Architecture, Nature, Meadow, Creek, Industrial, Rustic, Romantic, Dramatic, Colorful, Editorial, Wedding, Family, Portrait, Fashion, Boho, Gardens, Cemetery, Bridge, Mural, Alley, Barn, Ranch, Vineyard, Campus)
-- best_time: short string like "Golden hour" or "Early morning"
-- parking_info: short string
-- permit_required: true or false
-- permit_notes: string or null
-- quality_score: whole number 0-100
-- rating: one decimal place 0.0-5.0 (e.g. 4.5, not 4.756)
+- category: category name
+- tags: array from this list — Golden Hour, Sunrise, Sunset, Forest, Urban, Waterfront, Historic, Architecture, Nature, Meadow, Creek, Industrial, Rustic, Romantic, Dramatic, Colorful, Editorial, Wedding, Family, Portrait, Fashion, Boho, Gardens, Cemetery, Bridge, Mural, Alley, Barn, Ranch, Vineyard, Campus
+- best_time: e.g. "Golden hour" or "Early morning"
+- parking_info: brief parking note
+- permit_required: true or false — does commercial/professional photography require a permit?
+- permit_notes: brief description of permit requirements (null if none required or unknown)
+- permit_fee: permit cost in USD as a number, or null if free or not found
+- permit_website: the EXACT URL of the official page where you found permit information (parks dept, city govt, etc). null if not found. Do NOT make up URLs.
+- permit_certainty: "verified" = found official govt/parks page confirming requirements. "likely" = found strong indirect evidence permits needed. "unknown" = could not find specific permit info.
+- quality_score: integer 0-100
+- rating: one decimal 0.0-5.0
 
-Only include real verified locations. rating MUST be 0.0-5.0. quality_score MUST be 0-100 integer.
+RULES:
+- Only include real verified locations that exist
+- For permit_website provide the actual URL you found — never fabricate one
+- rating MUST be 0.0-5.0, quality_score MUST be 0-100 integer
 
-Respond ONLY with a raw JSON array, no markdown:
-
-[{"name":"...","city":"...","state":"MO","latitude":39.0,"longitude":-94.0,"description":"...","access_type":"public","category":"Park","tags":["Golden Hour"],"best_time":"Golden hour","parking_info":"Free lot","permit_required":false,"permit_notes":null,"quality_score":80,"rating":4.5}]`
+Respond ONLY with a raw JSON array, no markdown fences:
+[{"name":"...","city":"...","state":"MO","latitude":39.0,"longitude":-94.0,"description":"...","access_type":"public","category":"Park","tags":["Golden Hour"],"best_time":"Golden hour","parking_info":"Free lot on site","permit_required":false,"permit_notes":null,"permit_fee":null,"permit_website":null,"permit_certainty":"unknown","quality_score":80,"rating":4.5}]`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
+    method:  'POST',
     headers: {
       'Content-Type':      'application/json',
       'x-api-key':         process.env.ANTHROPIC_API_KEY!,
@@ -277,8 +336,8 @@ Respond ONLY with a raw JSON array, no markdown:
     body: JSON.stringify({
       model:      'claude-sonnet-4-6',
       max_tokens: 6000,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-      messages: [{ role: 'user', content: prompt }],
+      tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages:   [{ role: 'user', content: prompt }],
     }),
   })
 
@@ -288,11 +347,10 @@ Respond ONLY with a raw JSON array, no markdown:
   }
 
   const data = await response.json()
-
-  const textContent = data.content
-    ?.filter((b: any) => b.type === 'text')
-    ?.map((b: any) => b.text)
-    ?.join('') ?? ''
+  const textContent = (data.content ?? [])
+    .filter((b: any) => b.type === 'text')
+    .map((b: any) => b.text)
+    .join('')
 
   if (!textContent) return []
 
