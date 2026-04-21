@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { usePlacePhotos } from '@/hooks/usePlacePhotos'
+import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
@@ -42,6 +43,10 @@ const PHOTO_PALETTES: Record<string, string[]> = {
 type SortValue = 'quality' | 'rating_asc' | 'name' | 'newest' | 'saves'
 
 // ── Add Location Modal ────────────────────────────────────────────────────────
+// Replace the entire existing AddLocationModal function with this one.
+// Make sure AddressSearch is imported at the top of explore/page.tsx:
+//   import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+
 function AddLocationModal({ onClose, user }: { onClose: () => void, user: any }) {
   const [name,        setName]        = useState('')
   const [city,        setCity]        = useState('')
@@ -53,8 +58,31 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
   const [saving,      setSaving]      = useState(false)
   const [saved,       setSaved]       = useState(false)
   const [error,       setError]       = useState('')
+  const [pin,         setPin]         = useState<{ lat: number; lng: number; label: string } | null>(null)
 
   const TAG_SUGGESTIONS = ['Golden Hour','Forest','Urban','Waterfront','Historic','Nature','Gardens','Architecture','Romantic','Dramatic','Editorial','Meadow','Creek','Bridge','Mural']
+
+  function handleAddressSelect(result: AddressResult) {
+    setPin({ lat: result.lat, lng: result.lng, label: result.label ?? result.shortLabel ?? '' })
+    // Auto-fill city/state from the address if not already set
+    if (!name.trim()) {
+      const parts = result.label?.split(',') ?? []
+      if (parts.length > 0) setName(parts[0].trim())
+    }
+    if (!city.trim()) {
+      const parts = result.label?.split(',') ?? []
+      if (parts.length > 1) setCity(parts[1].trim())
+    }
+    if (!state.trim()) {
+      const parts = result.label?.split(',') ?? []
+      if (parts.length > 2) {
+        // Extract just the state abbreviation (first 2 chars of last part before zip)
+        const lastPart = parts[parts.length - 1].trim()
+        const stateMatch = lastPart.match(/^([A-Z]{2})/i)
+        if (stateMatch) setState(stateMatch[1].toUpperCase().slice(0, 2))
+      }
+    }
+  }
 
   function addTag(tag: string) {
     const t = tag.trim()
@@ -67,35 +95,26 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
       setError('Name, city, and state are required.')
       return
     }
+    if (!pin) {
+      setError('Please search for and select the location on the map first.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      // Geocode the location using Google
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY
-      const query  = encodeURIComponent(`${name}, ${city}, ${state}`)
-      const res    = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${apiKey}`)
-      const data   = await res.json()
-
-      let lat = null, lng = null
-      if (data.status === 'OK' && data.results?.[0]) {
-        lat = data.results[0].geometry.location.lat
-        lng = data.results[0].geometry.location.lng
-      }
-
       const { error: insertErr } = await supabase.from('locations').insert({
         name:        name.trim(),
         city:        city.trim(),
-        state:       state.trim(),
-        latitude:    lat,
-        longitude:   lng,
+        state:       state.trim().slice(0, 2).toUpperCase(),
+        latitude:    pin.lat,
+        longitude:   pin.lng,
         description: description.trim() || null,
         access_type: accessType,
         tags,
-        status:      'pending', // pending review before showing on map
+        status:      'pending',
         source:      'community',
         added_by:    user?.id ?? null,
       })
-
       if (insertErr) throw insertErr
       setSaved(true)
     } catch (err: any) {
@@ -112,7 +131,6 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
     fontFamily: 'var(--font-dm-sans), sans-serif',
     fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
   }
-
   const labelStyle: React.CSSProperties = {
     display: 'block', fontSize: 11, fontWeight: 500,
     textTransform: 'uppercase', letterSpacing: '.07em',
@@ -141,15 +159,11 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
           {saved ? (
             <div style={{ textAlign: 'center', padding: '2rem 0' }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
-              <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 20, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>
-                Thanks for your submission!
-              </div>
+              <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 20, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>Thanks for your submission!</div>
               <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: '1.5rem' }}>
                 Your location has been submitted for review. Once approved it will appear on the map.
               </div>
-              <button onClick={onClose} style={{ padding: '10px 24px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-                Done
-              </button>
+              <button onClick={onClose} style={{ padding: '10px 24px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Done</button>
             </div>
           ) : (
             <>
@@ -160,27 +174,56 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
                 </div>
               </div>
 
+              {/* Address search — this pins the location on the map */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={labelStyle}>Search for the location * <span style={{ color: 'var(--rust)', fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(required — sets the map pin)</span></label>
+                <AddressSearch
+                  onSelect={handleAddressSelect}
+                  placeholder="Search by name or address, e.g. 'Loose Park Kansas City'"
+                />
+                {pin ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', borderRadius: 6, marginTop: 8, background: 'rgba(74,103,65,.08)', border: '1px solid rgba(74,103,65,.2)', fontSize: 13, color: 'var(--sage)' }}>
+                    <span>📍</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, fontSize: 13 }}>Pin placed</div>
+                      <div style={{ fontSize: 11, fontWeight: 300, color: 'var(--ink-soft)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pin.label}</div>
+                      <div style={{ fontSize: 10, color: 'var(--sage)', marginTop: 1 }}>Coords: {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}</div>
+                    </div>
+                    <button onClick={() => setPin(null)} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Clear</button>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                    Search for the location above — this places the pin on the map.
+                  </div>
+                )}
+              </div>
+
+              {/* Name */}
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Location name *</label>
                 <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="e.g. Loose Park Rose Garden" />
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Give it a specific, descriptive name.</div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 10, marginBottom: '1rem' }}>
+              {/* City + State */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 10, marginBottom: '1rem' }}>
                 <div>
                   <label style={labelStyle}>City *</label>
                   <input value={city} onChange={e => setCity(e.target.value)} style={inputStyle} placeholder="Kansas City" />
                 </div>
                 <div>
                   <label style={labelStyle}>State *</label>
-                  <input value={state} onChange={e => setState(e.target.value)} style={inputStyle} placeholder="MO" maxLength={2} />
+                  <input value={state} onChange={e => setState(e.target.value.slice(0, 2).toUpperCase())} style={inputStyle} placeholder="MO" maxLength={2} />
                 </div>
               </div>
 
+              {/* Description */}
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Description</label>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What makes this spot great for photography?" style={{ ...inputStyle, resize: 'vertical' }} />
               </div>
 
+              {/* Access type */}
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Access type</label>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -192,6 +235,7 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
                 </div>
               </div>
 
+              {/* Tags */}
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={labelStyle}>Tags (up to 8)</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
@@ -223,8 +267,12 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
               )}
 
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={submit} disabled={saving || !name.trim() || !city.trim() || !state.trim()} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !name.trim() || !city.trim() || !state.trim() ? 0.5 : 1 }}>
-                  {saving ? 'Submitting…' : 'Submit location →'}
+                <button
+                  onClick={submit}
+                  disabled={saving || !name.trim() || !city.trim() || !state.trim() || !pin}
+                  style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !name.trim() || !city.trim() || !state.trim() || !pin ? 0.5 : 1 }}
+                >
+                  {saving ? 'Submitting…' : !pin ? 'Search for location first' : 'Submit location →'}
                 </button>
                 <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Cancel
