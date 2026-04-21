@@ -92,6 +92,7 @@ export default function DashboardPage() {
   const [showAddSecret,       setShowAddSecret]        = useState(false)
   const [showCreatePermanent, setShowCreatePermanent]  = useState(false)
   const [deleteSecretId,      setDeleteSecretId]       = useState<string | null>(null)
+  const [mobileMenuOpen,      setMobileMenuOpen]       = useState(false)
 
   // Secret form
   const [sName,     setSName]     = useState('')
@@ -139,7 +140,6 @@ export default function DashboardPage() {
       if (secretsRes.data)            setSecretLocs(secretsRes.data)
       if (locCountRes.count !== null) setLocationCount(locCountRes.count)
 
-      // Pending community submissions
       const { data: pendingData } = await supabase
         .from('locations')
         .select('id,name,city,state,description,access_type,tags,created_at,latitude,longitude')
@@ -148,7 +148,6 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false })
       if (pendingData) setPendingLocs(pendingData)
 
-      // Permanent share links with pick history
       const { data: permData } = await supabase
         .from('share_links')
         .select('id,session_name,slug,created_at,location_ids')
@@ -180,7 +179,6 @@ export default function DashboardPage() {
   const estLocations = scanCities.length * scanCategories.length * 20
   const estMinutes   = Math.ceil(scanCities.length * scanCategories.length * 0.7)
 
-  // ── Scanner ───────────────────────────────────────────────────────────────
   async function runScanner() {
     if (!profile?.id || scanCities.length === 0 || scanCategories.length === 0) return
     setScanRunning(true); setScanResult(null)
@@ -198,7 +196,6 @@ export default function DashboardPage() {
     finally { setScanRunning(false) }
   }
 
-  // ── Pending submissions ───────────────────────────────────────────────────
   async function approveLocation(id: string) {
     const { error } = await supabase.from('locations').update({ status: 'published' }).eq('id', id)
     if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setLocationCount(prev => prev + 1); setToast('✓ Location approved and published!') }
@@ -209,12 +206,10 @@ export default function DashboardPage() {
     if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setToast('Location rejected and deleted') }
   }
 
-  // ── Permanent links ───────────────────────────────────────────────────────
   function togglePermLinkExpanded(id: string) {
     setPermanentLinks(prev => prev.map(l => l.id === id ? { ...l, expanded: !l.expanded } : l))
   }
 
-  // ── City management ───────────────────────────────────────────────────────
   function addCustomCity() {
     const city = customCityInput.trim()
     if (!city) return
@@ -229,7 +224,6 @@ export default function DashboardPage() {
 
   const filteredPopular = POPULAR_CITIES.filter(c => citySearchQuery === '' || c.toLowerCase().includes(citySearchQuery.toLowerCase()))
 
-  // ── Secret location handlers ──────────────────────────────────────────────
   function handleAddressSelect(result: AddressResult) {
     setSPin(result)
     if (!sArea.trim()) { const parts = result.label.split(','); setSArea(parts.slice(1,3).join(',').trim()) }
@@ -303,27 +297,44 @@ export default function DashboardPage() {
     <div style={{ minHeight: '100vh', background: '#f0ece4' }}>
 
       {/* NAV */}
-      <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', height: 60 }}>
+      <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 60 }}>
         <Link href="/" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 20, fontWeight: 900, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
         </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+
+        {/* Desktop nav links */}
+        <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
           <Link href="/explore" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Explore map</Link>
           <Link href="/share"   style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>New share</Link>
           <Link href="/profile" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Profile</Link>
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(196,146,42,.15)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)' }}>⭐ Pro</span>
-          <button onClick={handleSignOut} style={{ padding: '5px 12px', borderRadius: 4, background: 'transparent', border: '1px solid rgba(255,255,255,.2)', color: 'rgba(245,240,232,.6)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Sign out</button>
+          <span className="nav-links" style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(196,146,42,.15)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)' }}>⭐ Pro</span>
+          <button onClick={handleSignOut} className="nav-links" style={{ padding: '5px 12px', borderRadius: 4, background: 'transparent', border: '1px solid rgba(255,255,255,.2)', color: 'rgba(245,240,232,.6)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Sign out</button>
+          {/* Hamburger */}
+          <button className="hamburger-btn" onClick={() => setMobileMenuOpen(p => !p)} aria-label="Menu">
+            {mobileMenuOpen ? '✕' : '☰'}
+          </button>
         </div>
       </nav>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 2rem 4rem' }}>
+      {/* Mobile menu */}
+      {mobileMenuOpen && (
+        <div className="mobile-menu" onClick={() => setMobileMenuOpen(false)}>
+          <Link href="/explore">Explore map</Link>
+          <Link href="/share">New share</Link>
+          <Link href="/profile">Profile</Link>
+          <button onClick={handleSignOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
+        </div>
+      )}
+
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2rem', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 30, fontWeight: 900, color: 'var(--ink)', marginBottom: 4 }}>{greetingTime()}, {firstName} ☀</h1>
+            <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,5vw,30px)', fontWeight: 900, color: 'var(--ink)', marginBottom: 4 }}>{greetingTime()}, {firstName} ☀</h1>
             <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300 }}>
               {shareLinks.length > 0
                 ? `You have ${shareLinks.length} share link${shareLinks.length !== 1 ? 's' : ''} and ${secretLocs.length} secret location${secretLocs.length !== 1 ? 's' : ''}.`
@@ -335,8 +346,8 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: '2rem' }}>
+        {/* Stats — className enables mobile 2-col grid */}
+        <div className="dash-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: '2rem' }}>
           {[
             { label: 'Saved favorites', value: favorites.length,               sub: 'locations'        },
             { label: 'Share links',     value: shareLinks.length,              sub: 'total created'    },
@@ -351,8 +362,8 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Main grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
+        {/* Main grid — className enables mobile single-column */}
+        <div className="dash-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
 
           {/* ── LEFT COLUMN ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -543,7 +554,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* ── PERMANENT SHARE LINKS ── */}
+            {/* PERMANENT SHARE LINKS */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
@@ -553,19 +564,14 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Reusable links that never expire. Clients enter their email when they pick.</div>
                 </div>
-                <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  + Create link
-                </button>
+                <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>+ Create link</button>
               </div>
-
               {permanentLinks.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
                   <div style={{ fontSize: 28, marginBottom: 10 }}>📌</div>
                   <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>No permanent links yet</div>
                   <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 16, lineHeight: 1.5 }}>Create a reusable link for your go-to locations. Clients enter their email when they pick.</div>
-                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '9px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    Create your first permanent link
-                  </button>
+                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '9px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Create your first permanent link</button>
                 </div>
               ) : permanentLinks.map((link, i) => {
                 const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/pick/${link.slug}`
@@ -577,17 +583,11 @@ export default function DashboardPage() {
                           <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 3 }}>{link.session_name}</div>
                           <div style={{ fontSize: 11, color: 'var(--sky)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.replace('https://', '')}</div>
                         </div>
-                        <button onClick={() => { navigator.clipboard?.writeText(url).catch(() => {}); setToast('📋 Link copied!') }} style={{ padding: '5px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)', flexShrink: 0 }}>
-                          Copy link
-                        </button>
+                        <button onClick={() => { navigator.clipboard?.writeText(url).catch(() => {}); setToast('📋 Link copied!') }} style={{ padding: '5px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)', flexShrink: 0 }}>Copy link</button>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{link.picks.length === 0 ? 'No picks yet' : `${link.picks.length} pick${link.picks.length !== 1 ? 's' : ''}`}</div>
-                        {link.picks.length > 0 && (
-                          <button onClick={() => togglePermLinkExpanded(link.id)} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 500 }}>
-                            {link.expanded ? 'Hide picks ▲' : 'View picks ▼'}
-                          </button>
-                        )}
+                        {link.picks.length > 0 && <button onClick={() => togglePermLinkExpanded(link.id)} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 500 }}>{link.expanded ? 'Hide picks ▲' : 'View picks ▼'}</button>}
                         <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginLeft: 'auto' }}>Created {timeAgo(link.created_at)}</div>
                       </div>
                     </div>
@@ -595,9 +595,7 @@ export default function DashboardPage() {
                       <div style={{ background: 'var(--cream)', borderTop: '1px solid var(--cream-dark)' }}>
                         {link.picks.map((pick, pi) => (
                           <div key={pick.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 1.25rem', borderBottom: pi < link.picks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
-                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(196,146,42,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--gold)', flexShrink: 0 }}>
-                              {pick.client_email.charAt(0).toUpperCase()}
-                            </div>
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(196,146,42,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--gold)', flexShrink: 0 }}>{pick.client_email.charAt(0).toUpperCase()}</div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 1 }}>{pick.client_email}</div>
                               <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{pick.location_name ? `📍 Chose: ${pick.location_name}` : 'Made a selection'}</div>
@@ -739,8 +737,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ── RIGHT COLUMN ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* ── RIGHT COLUMN — className enables mobile stacking ── */}
+          <div className="dash-right-col" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '.9rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Quick actions</div>
               <div style={{ padding: '.75rem' }}>
@@ -885,17 +883,10 @@ export default function DashboardPage() {
 // ── Create Permanent Link Modal ───────────────────────────────────────────────
 
 function CreatePermanentLinkModal({
-  favorites,
-  userId,
-  photographerName,
-  onClose,
-  onCreated,
+  favorites, userId, photographerName, onClose, onCreated,
 }: {
   favorites: Array<{ id: number; location_id: number | string; locations: { id: number | string; name: string; city: string } }>
-  userId: string
-  photographerName: string
-  onClose: () => void
-  onCreated: (link: any) => void
+  userId: string; photographerName: string; onClose: () => void; onCreated: (link: any) => void
 }) {
   const [sessionName,    setSessionName]    = useState('')
   const [selectedLocIds, setSelectedLocIds] = useState<(number | string)[]>([])
@@ -905,51 +896,30 @@ function CreatePermanentLinkModal({
   const [allLocs,        setAllLocs]        = useState<Array<{ id: string | number; name: string; city: string; bg: string }>>([])
   const [locSearch,      setLocSearch]      = useState('')
   const [locsLoading,    setLocsLoading]    = useState(true)
- 
-  // Load all published locations
+
   useEffect(() => {
-    supabase
-      .from('locations')
-      .select('id,name,city,state')
-      .eq('status', 'published')
-      .not('latitude', 'is', null)
-      .order('save_count', { ascending: false })
-      .limit(500)
+    supabase.from('locations').select('id,name,city,state').eq('status','published').not('latitude','is',null).order('save_count',{ascending:false}).limit(500)
       .then(({ data }) => {
-        if (data) setAllLocs(data.map((l, i) => ({
-          id:   l.id,
-          name: l.name,
-          city: l.city && l.state ? `${l.city}, ${l.state}` : (l.city ?? ''),
-          bg:   `bg-${(i % 6) + 1}`,
-        })))
+        if (data) setAllLocs(data.map((l,i) => ({ id: l.id, name: l.name, city: l.city && l.state ? `${l.city}, ${l.state}` : (l.city ?? ''), bg: `bg-${(i%6)+1}` })))
         setLocsLoading(false)
       })
   }, [])
- 
-  // Pre-select favorites
+
   useEffect(() => {
-    if (favorites.length > 0) {
-      setSelectedLocIds(favorites.map(f => f.location_id))
-    }
+    if (favorites.length > 0) setSelectedLocIds(favorites.map(f => f.location_id))
   }, [favorites])
- 
+
   function toggleLoc(id: number | string) {
-    setSelectedLocIds(prev =>
-      prev.some(x => String(x) === String(id))
-        ? prev.filter(x => String(x) !== String(id))
-        : [...prev, id]
-    )
+    setSelectedLocIds(prev => prev.some(x => String(x) === String(id)) ? prev.filter(x => String(x) !== String(id)) : [...prev, id])
   }
- 
-  function isSelected(id: number | string) {
-    return selectedLocIds.some(x => String(x) === String(id))
-  }
- 
+
+  function isSelected(id: number | string) { return selectedLocIds.some(x => String(x) === String(id)) }
+
   function generateSlug(name: string, photographer: string) {
-    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 25)
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)
     return `${clean(photographer)}-${clean(name)}-${Date.now().toString(36)}`
   }
- 
+
   async function create() {
     if (!sessionName.trim()) { setError('Please enter a name for this link.'); return }
     if (selectedLocIds.length === 0) { setError('Select at least one location.'); return }
@@ -957,49 +927,26 @@ function CreatePermanentLinkModal({
     try {
       const slug = generateSlug(sessionName, photographerName || 'photographer')
       const { data, error: insertErr } = await supabase.from('share_links').insert({
-        user_id:           userId,
-        slug,
-        session_name:      sessionName.trim(),
-        message:           message.trim() || null,
-        photographer_name: photographerName || null,
-        location_ids:      selectedLocIds,
-        secret_ids:        [],
-        expires_at:        null,
-        is_permanent:      true,
+        user_id: userId, slug, session_name: sessionName.trim(),
+        message: message.trim() || null, photographer_name: photographerName || null,
+        location_ids: selectedLocIds, secret_ids: [], expires_at: null, is_permanent: true,
       }).select('id,session_name,slug,created_at,location_ids').single()
       if (insertErr) throw insertErr
       onCreated(data); onClose()
-    } catch (err: any) {
-      setError('Could not create link — please try again.')
-      console.error(err)
-    } finally { setSaving(false) }
+    } catch (err: any) { setError('Could not create link — please try again.'); console.error(err) }
+    finally { setSaving(false) }
   }
- 
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4,
-    fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
-  }
-  const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase',
-    letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5,
-  }
- 
-  const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
- 
-  const filteredLocs = allLocs.filter(l => {
-    if (!locSearch.trim()) return true
-    const q = locSearch.toLowerCase()
-    return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q)
-  })
- 
+
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
+  const filteredLocs = allLocs.filter(l => { if (!locSearch.trim()) return true; const q = locSearch.toLowerCase(); return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q) })
   const favIds = new Set(favorites.map(f => String(f.location_id)))
- 
+
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
       <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '1.5rem' }}>
- 
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📌 Create permanent link</div>
@@ -1007,62 +954,34 @@ function CreatePermanentLinkModal({
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
           </div>
- 
           <div style={{ marginBottom: '1rem' }}>
             <label style={labelStyle}>Link name *</label>
             <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. Kansas City Favorites · Spring 2025" autoFocus />
             <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Clients see this as the session name on their page.</div>
           </div>
- 
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={labelStyle}>Message to clients (optional)</label>
             <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="Hi! Here are my go-to locations. Take a look and pick your favorite!" style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
- 
-          {/* Location selector */}
           <div style={{ marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>
-                Locations * <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({selectedLocIds.length} selected)</span>
-              </label>
-              {selectedLocIds.length > 0 && (
-                <button onClick={() => setSelectedLocIds([])} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>
-              )}
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Locations * <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({selectedLocIds.length} selected)</span></label>
+              {selectedLocIds.length > 0 && <button onClick={() => setSelectedLocIds([])} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>}
             </div>
- 
-            <input
-              type="text"
-              value={locSearch}
-              onChange={e => setLocSearch(e.target.value)}
-              placeholder="Search all locations by name or city…"
-              style={{ ...inputStyle, marginBottom: 8, fontSize: 13 }}
-            />
- 
+            <input type="text" value={locSearch} onChange={e => setLocSearch(e.target.value)} placeholder="Search all locations by name or city…" style={{ ...inputStyle, marginBottom: 8, fontSize: 13 }} />
             {locsLoading ? (
               <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)' }}>Loading locations…</div>
             ) : (
               <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
-                {filteredLocs.length === 0 && (
-                  <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No locations match &quot;{locSearch}&quot;</div>
-                )}
+                {filteredLocs.length === 0 && <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No locations match &quot;{locSearch}&quot;</div>}
                 {filteredLocs.map((loc, i) => {
-                  const sel    = isSelected(loc.id)
-                  const isFav  = favIds.has(String(loc.id))
+                  const sel = isSelected(loc.id), isFav = favIds.has(String(loc.id))
                   return (
-                    <div
-                      key={String(loc.id)}
-                      onClick={() => toggleLoc(loc.id)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', borderBottom: i < filteredLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}
-                    >
-                      <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--sand)'}`, background: sel ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>
-                        {sel ? '✓' : ''}
-                      </div>
+                    <div key={String(loc.id)} onClick={() => toggleLoc(loc.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', borderBottom: i < filteredLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}>
+                      <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--sand)'}`, background: sel ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>{sel ? '✓' : ''}</div>
                       <div className={loc.bg} style={{ width: 34, height: 34, borderRadius: 6, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {loc.name}
-                          {isFav && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--gold)', fontWeight: 400 }}>★ saved</span>}
-                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}{isFav && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--gold)', fontWeight: 400 }}>★ saved</span>}</div>
                         <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {loc.city}</div>
                       </div>
                     </div>
@@ -1071,12 +990,10 @@ function CreatePermanentLinkModal({
               </div>
             )}
           </div>
- 
           {error && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{error}</div>}
- 
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={create} disabled={saving || !sessionName.trim() || selectedLocIds.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !sessionName.trim() || selectedLocIds.length === 0 ? 0.5 : 1 }}>
-              {saving ? 'Creating…' : `Create permanent link →`}
+              {saving ? 'Creating…' : 'Create permanent link →'}
             </button>
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>
