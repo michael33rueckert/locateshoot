@@ -10,6 +10,8 @@ interface ShareLink      { id: string; session_name: string; created_at: string;
 interface Favorite       { id: number; location_id: number; locations: { id: number; name: string; city: string; access_type: string; rating: number | null } }
 interface SecretLocation { id: string; name: string; area: string; description: string | null; tags: string[]; bg: string; lat: number | null; lng: number | null; created_at: string }
 interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
+interface ClientPick     { id: string; client_email: string; location_name: string | null; created_at: string }
+interface PermanentLink { id: string; session_name: string; slug: string; created_at: string; location_ids: number[]; picks: ClientPick[]; expanded: boolean }
 
 interface ScanResult {
   success: boolean
@@ -92,6 +94,8 @@ export default function DashboardPage() {
   const [favTab,         setFavTab]          = useState<'grid' | 'list'>('grid')
   const [showAddSecret,  setShowAddSecret]   = useState(false)
   const [deleteSecretId, setDeleteSecretId]  = useState<string | null>(null)
+  const [permanentLinks,      setPermanentLinks]      = useState<PermanentLink[]>([])
+  const [showCreatePermanent, setShowCreatePermanent] = useState(false)
 
   // Secret form
   const [sName,     setSName]     = useState('')
@@ -148,6 +152,26 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false })
       if (pendingData) setPendingLocs(pendingData)
 
+        // Load permanent share links with pick history
+const { data: permData } = await supabase
+  .from('share_links')
+  .select('id,session_name,slug,created_at,location_ids')
+  .eq('user_id', user.id)
+  .eq('is_permanent', true)
+  .order('created_at', { ascending: false })
+ 
+if (permData && permData.length > 0) {
+  const linksWithPicks = await Promise.all(permData.map(async (link: any) => {
+    const { data: picks } = await supabase
+      .from('client_picks')
+      .select('id,client_email,location_name,created_at')
+      .eq('share_link_id', link.id)
+      .order('created_at', { ascending: false })
+    return { ...link, picks: picks ?? [], expanded: false }
+  }))
+  setPermanentLinks(linksWithPicks)
+}
+
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }, [])
@@ -197,6 +221,117 @@ export default function DashboardPage() {
     }
   }
 
+  {/* ── PERMANENT SHARE LINKS ── */}
+<div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+  <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div>
+      <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        📌 Permanent Links
+        {permanentLinks.length > 0 && (
+          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(61,110,140,.1)', color: 'var(--sky)', border: '1px solid rgba(61,110,140,.2)' }}>
+            {permanentLinks.length}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
+        Reusable links that never expire. Clients enter their email when they pick.
+      </div>
+    </div>
+    <button
+      onClick={() => setShowCreatePermanent(true)}
+      style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}
+    >
+      + Create link
+    </button>
+  </div>
+ 
+  {permanentLinks.length === 0 ? (
+    <div style={{ padding: '2rem', textAlign: 'center' }}>
+      <div style={{ fontSize: 28, marginBottom: 10 }}>📌</div>
+      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>No permanent links yet</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 16, lineHeight: 1.5 }}>
+        Create a reusable link for your Kansas City clients — or any set of locations you offer regularly.
+      </div>
+      <button
+        onClick={() => setShowCreatePermanent(true)}
+        style={{ padding: '9px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+      >
+        Create your first permanent link
+      </button>
+    </div>
+  ) : permanentLinks.map((link, i) => {
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/pick/${link.slug}`
+    return (
+      <div key={link.id} style={{ borderBottom: i < permanentLinks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
+        <div style={{ padding: '1rem 1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 3 }}>{link.session_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--sky)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {url.replace('https://', '')}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(url).catch(() => {}); setToast('📋 Link copied!') }}
+                style={{ padding: '5px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)' }}
+              >
+                Copy link
+              </button>
+            </div>
+          </div>
+ 
+          {/* Picks summary */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+              {link.picks.length === 0
+                ? 'No picks yet'
+                : `${link.picks.length} pick${link.picks.length !== 1 ? 's' : ''}`
+              }
+            </div>
+            {link.picks.length > 0 && (
+              <button
+                onClick={() => togglePermLinkExpanded(link.id)}
+                style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 500 }}
+              >
+                {link.expanded ? 'Hide picks ▲' : 'View picks ▼'}
+              </button>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginLeft: 'auto' }}>
+              Created {timeAgo(link.created_at)}
+            </div>
+          </div>
+        </div>
+ 
+        {/* Picks list — expandable */}
+        {link.expanded && link.picks.length > 0 && (
+          <div style={{ background: 'var(--cream)', borderTop: '1px solid var(--cream-dark)', padding: '0' }}>
+            {link.picks.map((pick, pi) => (
+              <div
+                key={pick.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 1.25rem', borderBottom: pi < link.picks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}
+              >
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(196,146,42,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--gold)', flexShrink: 0 }}>
+                  {pick.client_email.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 1 }}>{pick.client_email}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+                    {pick.location_name ? `📍 Chose: ${pick.location_name}` : 'Made a selection'}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', flexShrink: 0 }}>
+                  {timeAgo(pick.created_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  })}
+</div>
+
   async function rejectLocation(id: string) {
     const { error } = await supabase.from('locations').delete().eq('id', id)
     if (!error) {
@@ -224,6 +359,10 @@ export default function DashboardPage() {
   function toggleCategory(name: string) {
     setScanCategories(prev => prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name])
   }
+
+  function togglePermLinkExpanded(id: string) {
+  setPermanentLinks(prev => prev.map(l => l.id === id ? { ...l, expanded: !l.expanded } : l))
+}
 
   const filteredPopular = POPULAR_CITIES.filter(c =>
     citySearchQuery === '' || c.toLowerCase().includes(citySearchQuery.toLowerCase())
@@ -802,7 +941,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ADD SECRET MODAL */}
-      {showAddSecret && (
+      {showAddSecret &&  ( 
         <>
           <div onClick={() => { setShowAddSecret(false); resetForm() }} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 540, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
@@ -893,7 +1032,18 @@ export default function DashboardPage() {
           </div>
         </>
       )}
-
+{showCreatePermanent && (
+      <CreatePermanentLinkModal
+        favorites={favorites}
+        userId={profile?.id ?? ''}
+        photographerName={profile?.full_name ?? ''}
+        onClose={() => setShowCreatePermanent(false)}
+        onCreated={(link) => {
+          setPermanentLinks(prev => [{ ...link, picks: [], expanded: false }, ...prev])
+          setToast('📌 Permanent link created!')
+        }}
+      />
+    )}
       {toast && (
         <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', background: 'var(--ink)', color: 'var(--cream)', padding: '10px 18px', borderRadius: 10, fontSize: 13, border: '1px solid rgba(255,255,255,.1)', zIndex: 9999, boxShadow: '0 8px 32px rgba(0,0,0,.3)', animation: 'toast-in .25s ease' }}>
           {toast}
@@ -902,5 +1052,174 @@ export default function DashboardPage() {
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
+  )
+}
+
+function CreatePermanentLinkModal({
+  favorites,
+  userId,
+  photographerName,
+  onClose,
+  onCreated,
+}: {
+  favorites: Array<{ id: number; location_id: number; locations: { id: number; name: string; city: string } }>
+  userId: string
+  photographerName: string
+  onClose: () => void
+  onCreated: (link: any) => void
+}) {
+  const [sessionName,    setSessionName]    = useState('')
+  const [selectedLocIds, setSelectedLocIds] = useState<number[]>([])
+  const [message,        setMessage]        = useState('')
+  const [saving,         setSaving]         = useState(false)
+  const [error,          setError]          = useState('')
+ 
+  function toggleLoc(id: number) {
+    setSelectedLocIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+ 
+  function generateSlug(name: string, photographer: string) {
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 25)
+    return `${clean(photographer)}-${clean(name)}-${Date.now().toString(36)}`
+  }
+ 
+  async function create() {
+    if (!sessionName.trim()) { setError('Please enter a name for this link.'); return }
+    if (selectedLocIds.length === 0) { setError('Select at least one location.'); return }
+    setSaving(true)
+    setError('')
+    try {
+      const slug = generateSlug(sessionName, photographerName || 'photographer')
+      const { data, error: insertErr } = await supabase.from('share_links').insert({
+        user_id:           userId,
+        slug,
+        session_name:      sessionName.trim(),
+        message:           message.trim() || null,
+        photographer_name: photographerName || null,
+        location_ids:      selectedLocIds,
+        secret_ids:        [],
+        expires_at:        null,
+        is_permanent:      true,
+      }).select('id,session_name,slug,created_at,location_ids').single()
+      if (insertErr) throw insertErr
+      onCreated(data)
+      onClose()
+    } catch (err: any) {
+      setError('Could not create link — please try again.')
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+ 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4,
+    fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
+  }
+  const labelStyle: React.CSSProperties = {
+    display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase',
+    letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5,
+  }
+ 
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 520, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+        <div style={{ padding: '1.5rem' }}>
+ 
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📌 Create permanent link</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                A reusable link that never expires. Great for your go-to locations.
+              </div>
+            </div>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+          </div>
+ 
+          <div style={{ padding: '10px 14px', background: 'rgba(196,146,42,.06)', border: '1px solid rgba(196,146,42,.2)', borderRadius: 8, marginBottom: '1.25rem', fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.6, fontWeight: 300 }}>
+            📌 Clients will be asked for their email when they pick a location, so you always know who selected what.
+          </div>
+ 
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle}>Link name *</label>
+            <input
+              value={sessionName}
+              onChange={e => setSessionName(e.target.value)}
+              style={inputStyle}
+              placeholder="e.g. Kansas City Favorites · Spring 2025"
+              autoFocus
+            />
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>
+              Clients see this as the session name at the top of their page.
+            </div>
+          </div>
+ 
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={labelStyle}>Message to clients (optional)</label>
+            <textarea
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              rows={3}
+              placeholder="Hi! Here are my go-to locations for the area. Take a look and pick your favorite!"
+              style={{ ...inputStyle, resize: 'vertical' }}
+            />
+          </div>
+ 
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={labelStyle}>Select locations * ({selectedLocIds.length} selected)</label>
+            {favorites.length === 0 ? (
+              <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center' }}>
+                No favorites saved yet — browse the map to save locations first.
+              </div>
+            ) : (
+              <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
+                {favorites.map((fav, i) => {
+                  const sel = selectedLocIds.includes(fav.location_id)
+                  return (
+                    <div
+                      key={fav.id}
+                      onClick={() => toggleLoc(fav.location_id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', borderBottom: i < favorites.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}
+                    >
+                      <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--sand)'}`, background: sel ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>
+                        {sel ? '✓' : ''}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fav.locations?.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {fav.locations?.city}</div>
+                      </div>
+                      {sel && <span style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 500, flexShrink: 0 }}>✓</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+ 
+          {error && (
+            <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>
+              {error}
+            </div>
+          )}
+ 
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={create}
+              disabled={saving || !sessionName.trim() || selectedLocIds.length === 0}
+              style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !sessionName.trim() || selectedLocIds.length === 0 ? 0.5 : 1 }}
+            >
+              {saving ? 'Creating…' : `Create permanent link →`}
+            </button>
+            <button
+              onClick={onClose}
+              style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
