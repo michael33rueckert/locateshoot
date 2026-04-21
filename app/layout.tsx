@@ -18,6 +18,15 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: 'LocateShoot — Find Your Perfect Photoshoot Location',
   description: 'A community-powered map of stunning photoshoot locations across the US. Discover hidden gems, save favorites, and send clients a link to choose their spot.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'LocateShoot',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
 }
 
 export default function RootLayout({
@@ -27,7 +36,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${playfair.variable} ${dmSans.variable}`}>
-      <body>{children}</body>
+      <head>
+        <meta name="theme-color" content="#c4922a" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
+      <body>
+        {children}
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                console.log('SW registration failed:', err);
+              });
+            });
+          }
+        `}} />
+      </body>
     </html>
   )
 }

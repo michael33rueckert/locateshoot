@@ -3,286 +3,268 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-interface AuthModalProps {
-  initialMode?: 'login' | 'signup'
+type Mode = 'login' | 'signup' | 'forgot'
+
+interface Props {
+  initialMode: 'login' | 'signup'
   onClose: () => void
 }
 
-export default function AuthModal({ initialMode = 'login', onClose }: AuthModalProps) {
-  const [mode,      setMode]      = useState<'login' | 'signup'>(initialMode)
+export default function AuthModal({ initialMode, onClose }: Props) {
+  const [mode,      setMode]      = useState<Mode>(initialMode)
   const [email,     setEmail]     = useState('')
   const [password,  setPassword]  = useState('')
   const [fullName,  setFullName]  = useState('')
+  const [agreed,    setAgreed]    = useState(false)
   const [loading,   setLoading]   = useState(false)
-  const [error,     setError]     = useState<string | null>(null)
-  const [success,   setSuccess]   = useState<string | null>(null)
+  const [error,     setError]     = useState('')
+  const [success,   setSuccess]   = useState('')
+
+  function switchMode(m: Mode) {
+    setMode(m); setError(''); setSuccess('')
+  }
 
   async function handleSubmit() {
-    setError(null)
-    setSuccess(null)
-    setLoading(true)
-
+    setError(''); setSuccess(''); setLoading(true)
     try {
-      if (mode === 'signup') {
-        // Create account
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName },
-            // After confirming email, user is redirected to /auth/callback
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-          },
+      if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
         })
-
         if (error) throw error
+        setSuccess('Password reset link sent — check your email.')
+        return
+      }
 
-        setSuccess(
-          "Account created! Check your email for a confirmation link. " +
-          "Click it and you'll be taken straight to your dashboard."
-        )
-      } else {
-        // Sign in
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-        if (error) {
-          // Make the error message friendlier
-          if (error.message.includes('Invalid login credentials')) {
-            throw new Error('Incorrect email or password. Please try again.')
-          }
-          if (error.message.includes('Email not confirmed')) {
-            throw new Error('Please confirm your email first — check your inbox for the link we sent.')
-          }
-          throw error
+      if (mode === 'signup') {
+        if (!agreed) { setError('Please accept the terms to continue.'); return }
+        if (!fullName.trim()) { setError('Please enter your full name.'); return }
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { full_name: fullName.trim() } },
+        })
+        if (error) throw error
+        if (data.user) {
+          await supabase.from('profiles').upsert({
+            id:        data.user.id,
+            email:     data.user.email,
+            full_name: fullName.trim(),
+          })
         }
+        setSuccess('Account created! Check your email to confirm, then sign in.')
+        return
+      }
 
-        // Successful login — redirect to dashboard
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(), password,
+        })
+        if (error) throw error
+        onClose()
         window.location.href = '/dashboard'
+        return
       }
     } catch (err: any) {
-      setError(err.message || 'Something went wrong. Please try again.')
+      setError(err.message ?? 'Something went wrong — please try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleGoogleSignIn() {
-    setError(null)
+  async function handleGoogle() {
+    setLoading(true)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     })
-    if (error) setError(error.message)
+    if (error) { setError(error.message); setLoading(false) }
   }
 
-  function switchMode(newMode: 'login' | 'signup') {
-    setMode(newMode)
-    setError(null)
-    setSuccess(null)
-  }
-
-  // ── Styles ────────────────────────────────────────────────────────────────
-  const inputStyle: React.CSSProperties = {
+  const inp: React.CSSProperties = {
     width: '100%', padding: '11px 14px',
-    border: '1px solid var(--cream-dark)',
-    borderRadius: 4,
-    fontFamily: 'var(--font-dm-sans), sans-serif',
-    fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
-    transition: 'border-color 0.18s',
+    border: '1px solid rgba(255,255,255,.15)', borderRadius: 6,
+    fontFamily: 'inherit', fontSize: 14,
+    color: '#f5f0e8', background: 'rgba(255,255,255,.08)', outline: 'none',
   }
 
   return (
     <>
-      {/* Backdrop */}
       <div
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,0.8)', backdropFilter: 'blur(4px)', zIndex: 2000 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.8)', backdropFilter: 'blur(6px)', zIndex: 1000 }}
       />
-
-      {/* Modal box */}
       <div style={{
-        position: 'fixed', top: '50%', left: '50%',
-        transform: 'translate(-50%, -50%)',
-        background: 'white', borderRadius: 10,
-        width: 460, maxWidth: '90vw',
-        padding: '2.5rem',
-        zIndex: 2001,
-        boxShadow: '0 24px 64px rgba(0,0,0,0.25)',
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        background: '#1a1612', border: '1px solid rgba(255,255,255,.1)', borderRadius: 16,
+        width: 420, maxWidth: '94vw', maxHeight: '94vh', overflowY: 'auto',
+        zIndex: 1001, boxShadow: '0 24px 64px rgba(0,0,0,.6)',
       }}>
-        {/* Close */}
-        <button
-          onClick={onClose}
-          style={{ position: 'absolute', top: '1rem', right: '1rem', width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-soft)' }}
-        >
-          ✕
-        </button>
 
-        {/* Title */}
-        <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 26, fontWeight: 700, color: 'var(--ink)', marginBottom: '0.5rem' }}>
-          {mode === 'login' ? 'Welcome back' : 'Join LocateShoot'}
+        {/* Header */}
+        <div style={{ padding: '1.5rem 1.5rem 0', position: 'relative' }}>
+          <button
+            onClick={onClose}
+            style={{ position: 'absolute', top: 14, right: 14, width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,.08)', border: 'none', cursor: 'pointer', fontSize: 15, color: 'rgba(245,240,232,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >✕</button>
+
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 14, fontWeight: 900, color: '#f5f0e8', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1.5rem' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#c4922a', display: 'inline-block' }} />
+            LocateShoot
+          </div>
+
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 700, color: '#f5f0e8', marginBottom: 6 }}>
+            {mode === 'login'  ? 'Welcome back' :
+             mode === 'signup' ? 'Create your account' :
+             'Reset your password'}
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(245,240,232,.45)', fontWeight: 300, marginBottom: '1.5rem', lineHeight: 1.5 }}>
+            {mode === 'login'  ? 'Sign in to access your dashboard and share links.' :
+             mode === 'signup' ? 'Join photographers discovering great locations.' :
+             "Enter your email and we'll send you a reset link."}
+          </div>
         </div>
-        <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '2rem', lineHeight: 1.5 }}>
-          {mode === 'login'
-            ? 'Sign in to access your saved locations and client share links.'
-            : 'Free forever. No credit card required.'}
-        </p>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', border: '1px solid var(--cream-dark)', borderRadius: 4, overflow: 'hidden', marginBottom: '1.5rem' }}>
-          {(['login', 'signup'] as const).map(m => (
-            <button
-              key={m}
-              onClick={() => switchMode(m)}
-              style={{
-                flex: 1, padding: '10px', textAlign: 'center',
-                fontSize: 14, cursor: 'pointer', border: 'none',
-                fontFamily: 'var(--font-dm-sans), sans-serif',
-                background: mode === m ? 'var(--ink)' : 'transparent',
-                color: mode === m ? 'var(--cream)' : 'var(--ink-soft)',
-                fontWeight: mode === m ? 500 : 400,
-                transition: 'all 0.15s',
-              }}
+        <div style={{ padding: '0 1.5rem 1.5rem' }}>
+
+          {/* Disclaimer for signup */}
+          {mode === 'signup' && (
+            <div
+              onClick={() => setAgreed(p => !p)}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: 'rgba(255,255,255,.04)', border: `1px solid ${agreed ? 'rgba(196,146,42,.3)' : 'rgba(255,255,255,.1)'}`, borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer', transition: 'border-color .15s' }}
             >
-              {m === 'login' ? 'Sign In' : 'Join Free'}
-            </button>
-          ))}
-        </div>
-
-        {/* Success message */}
-        {success && (
-          <div style={{ padding: '12px 14px', background: 'rgba(74,103,65,0.08)', border: '1px solid rgba(74,103,65,0.25)', borderRadius: 8, marginBottom: '1rem', fontSize: 13, color: 'var(--sage)', lineHeight: 1.55 }}>
-            ✓ {success}
-          </div>
-        )}
-
-        {/* Error message */}
-        {error && (
-          <div style={{ padding: '12px 14px', background: 'rgba(181,75,42,0.08)', border: '1px solid rgba(181,75,42,0.25)', borderRadius: 8, marginBottom: '1rem', fontSize: 13, color: 'var(--rust)', lineHeight: 1.55 }}>
-            ⚠ {error}
-          </div>
-        )}
-
-        {/* Form */}
-        {!success && (
-          <>
-            {mode === 'signup' && (
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                  Full name
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  placeholder="Jane Smith"
-                  style={inputStyle}
-                  onFocus={e => (e.target.style.borderColor = 'var(--gold)')}
-                  onBlur={e => (e.target.style.borderColor = 'var(--cream-dark)')}
-                />
+              <div style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${agreed ? '#c4922a' : 'rgba(255,255,255,.25)'}`, background: agreed ? '#c4922a' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#1a1612', transition: 'all .15s' }}>
+                {agreed ? '✓' : ''}
               </div>
-            )}
+              <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', lineHeight: 1.6, fontWeight: 300 }}>
+                I agree to the <span style={{ color: 'rgba(196,146,42,.8)' }}>Terms of Service</span> and acknowledge that location information is provided for informational purposes only. LocateShoot is not responsible for permit requirements, property access rights, or safety conditions at any listed location. Always verify access before shooting.
+              </div>
+            </div>
+          )}
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                Email address
-              </label>
+          {/* Google OAuth */}
+          {mode !== 'forgot' && (
+            <>
+              <button
+                onClick={handleGoogle}
+                disabled={loading}
+                style={{ width: '100%', padding: '11px', borderRadius: 8, background: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, color: '#1a1612', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: '1rem', opacity: loading ? 0.7 : 1 }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continue with Google
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1rem' }}>
+                <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.1)' }} />
+                <span style={{ fontSize: 12, color: 'rgba(245,240,232,.3)' }}>or</span>
+                <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.1)' }} />
+              </div>
+            </>
+          )}
+
+          {/* Full name (signup only) */}
+          {mode === 'signup' && (
+            <div style={{ marginBottom: 10 }}>
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
-                placeholder="you@example.com"
-                style={inputStyle}
-                onFocus={e => (e.target.style.borderColor = 'var(--gold)')}
-                onBlur={e => (e.target.style.borderColor = 'var(--cream-dark)')}
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                type="text"
+                placeholder="Your full name"
+                style={inp}
               />
             </div>
+          )}
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-                Password
-              </label>
+          {/* Email */}
+          <div style={{ marginBottom: 10 }}>
+            <input
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              type="email"
+              placeholder="Email address"
+              style={inp}
+              onKeyDown={e => { if (e.key === 'Enter' && mode === 'forgot') handleSubmit() }}
+            />
+          </div>
+
+          {/* Password (not for forgot) */}
+          {mode !== 'forgot' && (
+            <div style={{ marginBottom: mode === 'login' ? 6 : '1.25rem' }}>
               <input
-                type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
+                type="password"
+                placeholder="Password"
+                style={inp}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
-                placeholder="••••••••"
-                style={inputStyle}
-                onFocus={e => (e.target.style.borderColor = 'var(--gold)')}
-                onBlur={e => (e.target.style.borderColor = 'var(--cream-dark)')}
               />
-              {mode === 'signup' && (
-                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>
-                  At least 6 characters
-                </div>
-              )}
             </div>
+          )}
 
-            {/* Submit */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading || !email || !password || (mode === 'signup' && !fullName)}
-              style={{
-                width: '100%', padding: '13px',
-                background: 'var(--gold)', color: 'var(--ink)',
-                border: 'none', borderRadius: 4,
-                fontFamily: 'var(--font-dm-sans), sans-serif',
-                fontSize: 15, fontWeight: 500, cursor: 'pointer',
-                marginBottom: '1rem', transition: 'all 0.18s',
-                opacity: loading || !email || !password || (mode === 'signup' && !fullName) ? 0.6 : 1,
-              }}
-            >
-              {loading
-                ? 'Please wait…'
-                : mode === 'login' ? 'Sign In' : 'Create Free Account'}
-            </button>
-
-            {/* Divider */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1rem' }}>
-              <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
-              <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>or</span>
-              <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
+          {/* Forgot password link */}
+          {mode === 'login' && (
+            <div style={{ textAlign: 'right', marginBottom: '1.25rem' }}>
+              <button
+                onClick={() => switchMode('forgot')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'rgba(245,240,232,.35)', fontFamily: 'inherit', padding: 0 }}
+              >
+                Forgot password?
+              </button>
             </div>
+          )}
 
-            {/* Google */}
-            <button
-              onClick={handleGoogleSignIn}
-              style={{
-                width: '100%', padding: '11px',
-                background: 'white', color: 'var(--ink)',
-                border: '1px solid var(--cream-dark)', borderRadius: 4,
-                fontFamily: 'var(--font-dm-sans), sans-serif',
-                fontSize: 14, fontWeight: 500, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                transition: 'all 0.18s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--sand)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--cream-dark)')}
-            >
-              {/* Google logo SVG */}
-              <svg width="18" height="18" viewBox="0 0 18 18">
-                <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"/>
-                <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/>
-                <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/>
-                <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/>
-              </svg>
-              Continue with Google
-            </button>
-          </>
-        )}
+          {/* Error / success */}
+          {error && (
+            <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.15)', border: '1px solid rgba(181,75,42,.3)', borderRadius: 6, fontSize: 13, color: '#ff9b7b', marginBottom: 10, lineHeight: 1.5 }}>
+              {error}
+            </div>
+          )}
+          {success && (
+            <div style={{ padding: '8px 12px', background: 'rgba(74,103,65,.15)', border: '1px solid rgba(74,103,65,.3)', borderRadius: 6, fontSize: 13, color: '#c8e8c4', marginBottom: 10, lineHeight: 1.5 }}>
+              {success}
+            </div>
+          )}
 
-        {/* Footer note */}
-        {mode === 'signup' && !success && (
-          <p style={{ fontSize: 11, color: 'var(--ink-soft)', textAlign: 'center', marginTop: '1rem', fontWeight: 300, lineHeight: 1.5 }}>
-            By creating an account you agree to our{' '}
-            <a href="/terms" style={{ color: 'var(--gold)' }}>Terms of Service</a>
-            {' '}and{' '}
-            <a href="/privacy" style={{ color: 'var(--gold)' }}>Privacy Policy</a>.
-          </p>
-        )}
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={loading || (mode === 'signup' && !agreed)}
+            style={{ width: '100%', padding: '12px', borderRadius: 8, background: '#c4922a', color: '#1a1612', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: loading || (mode === 'signup' && !agreed) ? 'default' : 'pointer', opacity: loading || (mode === 'signup' && !agreed) ? 0.6 : 1, marginBottom: '1rem' }}
+          >
+            {loading ? 'Please wait…' :
+             mode === 'login'  ? 'Sign In' :
+             mode === 'signup' ? 'Create Account' :
+             'Send Reset Link'}
+          </button>
+
+          {/* Mode switcher */}
+          <div style={{ textAlign: 'center', fontSize: 13, color: 'rgba(245,240,232,.4)' }}>
+            {mode === 'login' ? (
+              <>Don&apos;t have an account?{' '}
+                <button onClick={() => switchMode('signup')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4922a', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, padding: 0 }}>
+                  Sign up free
+                </button>
+              </>
+            ) : mode === 'signup' ? (
+              <>Already have an account?{' '}
+                <button onClick={() => switchMode('login')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4922a', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, padding: 0 }}>
+                  Sign in
+                </button>
+              </>
+            ) : (
+              <>Remember your password?{' '}
+                <button onClick={() => switchMode('login')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4922a', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, padding: 0 }}>
+                  Sign in
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </>
   )
