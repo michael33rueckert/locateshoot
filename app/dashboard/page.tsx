@@ -9,6 +9,18 @@ interface Profile        { id: string; full_name: string | null; email: string |
 interface ShareLink      { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: number[]; secret_ids: string[]; slug: string }
 interface Favorite       { id: number; location_id: number; locations: { id: number; name: string; city: string; access_type: string; rating: number | null } }
 interface SecretLocation { id: string; name: string; area: string; description: string | null; tags: string[]; bg: string; lat: number | null; lng: number | null; created_at: string }
+interface PendingLocation {
+  id: string
+  name: string
+  city: string
+  state: string
+  description: string | null
+  access_type: string
+  tags: string[]
+  created_at: string
+  latitude: number | null
+  longitude: number | null
+}
 
 interface ScanResult {
   success: boolean
@@ -110,7 +122,10 @@ export default function DashboardPage() {
   const [customCityInput,  setCustomCityInput]  = useState('')
   const [citySearchQuery,  setCitySearchQuery]  = useState('')
   const [showPopular,      setShowPopular]      = useState(false)
+  const [pendingLocs,     setPendingLocs]     = useState<PendingLocation[]>([])
+  const [pendingLoading,  setPendingLoading]  = useState(false)
 
+  
   useEffect(() => {
     if (!toast) return
     const id = setTimeout(() => setToast(null), 2800)
@@ -130,6 +145,17 @@ export default function DashboardPage() {
         supabase.from('secret_locations').select('id,name,area,description,tags,bg,lat,lng,created_at').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('locations').select('id', { count: 'exact', head: true }),
       ])
+
+
+      // Load pending community submissions (admin only)
+const { data: pendingData } = await supabase
+  .from('locations')
+  .select('id,name,city,state,description,access_type,tags,created_at,latitude,longitude')
+  .eq('status', 'pending')
+  .eq('source', 'community')
+  .order('created_at', { ascending: false })
+if (pendingData) setPendingLocs(pendingData)
+
 
       if (profileRes.data)            setProfile(profileRes.data)
       if (sharesRes.data)             setShareLinks(sharesRes.data)
@@ -179,6 +205,29 @@ export default function DashboardPage() {
       setScanRunning(false)
     }
   }
+
+async function approveLocation(id: string) {
+  const { error } = await supabase
+    .from('locations')
+    .update({ status: 'published' })
+    .eq('id', id)
+  if (!error) {
+    setPendingLocs(prev => prev.filter(l => l.id !== id))
+    setLocationCount(prev => prev + 1)
+    setToast('✓ Location approved and published!')
+  }
+}
+
+async function rejectLocation(id: string) {
+  const { error } = await supabase
+    .from('locations')
+    .delete()
+    .eq('id', id)
+  if (!error) {
+    setPendingLocs(prev => prev.filter(l => l.id !== id))
+    setToast('Location rejected and deleted')
+  }
+}
 
   // ── City management ───────────────────────────────────────────────────────
   function addCustomCity() {
@@ -560,6 +609,71 @@ export default function DashboardPage() {
                         ? 'No locations in database yet — run the scanner to get started.'
                         : `${locationCount.toLocaleString()} locations in database · ${ALL_CATEGORIES.length} scan categories available`}
                     </div>
+                    {/* Pending community submissions */}
+{isAdmin && pendingLocs.length > 0 && (
+  <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+    <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          📬 Pending Submissions
+          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(181,75,42,.1)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)' }}>
+            {pendingLocs.length} to review
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
+          Community-submitted locations waiting for your approval.
+        </div>
+      </div>
+    </div>
+
+    {pendingLocs.map((loc, i) => (
+      <div key={loc.id} style={{ padding: '1rem 1.25rem', borderBottom: i < pendingLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 3 }}>{loc.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 4 }}>
+              📍 {loc.city}{loc.state ? `, ${loc.state}` : ''}
+              <span style={{ marginLeft: 8, padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access_type === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access_type === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access_type === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
+                {loc.access_type === 'public' ? '● Public' : '🔒 Private'}
+              </span>
+            </div>
+            {loc.description && (
+              <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5, marginBottom: 6 }}>
+                {loc.description}
+              </div>
+            )}
+            {loc.tags?.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                {loc.tags.map(t => (
+                  <span key={t} style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, background: 'var(--cream-dark)', color: 'var(--ink-soft)', border: '1px solid var(--sand)' }}>{t}</span>
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4 }}>
+              {loc.latitude && loc.longitude
+                ? `📌 Coords: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`
+                : '⚠ No coordinates — will need manual pin'}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => approveLocation(loc.id)}
+            style={{ flex: 1, padding: '8px', borderRadius: 4, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.25)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}
+          >
+            ✓ Approve & publish
+          </button>
+          <button
+            onClick={() => rejectLocation(loc.id)}
+            style={{ padding: '8px 16px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}
+          >
+            ✕ Reject
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
                     <button onClick={() => setShowScanPanel(true)} style={{ padding: '7px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                       {locationCount === 0 ? '🤖 Scan now' : '🤖 Scan more cities'}
                     </button>
