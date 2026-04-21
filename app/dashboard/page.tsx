@@ -9,18 +9,7 @@ interface Profile        { id: string; full_name: string | null; email: string |
 interface ShareLink      { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: number[]; secret_ids: string[]; slug: string }
 interface Favorite       { id: number; location_id: number; locations: { id: number; name: string; city: string; access_type: string; rating: number | null } }
 interface SecretLocation { id: string; name: string; area: string; description: string | null; tags: string[]; bg: string; lat: number | null; lng: number | null; created_at: string }
-interface PendingLocation {
-  id: string
-  name: string
-  city: string
-  state: string
-  description: string | null
-  access_type: string
-  tags: string[]
-  created_at: string
-  latitude: number | null
-  longitude: number | null
-}
+interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
 
 interface ScanResult {
   success: boolean
@@ -57,14 +46,14 @@ const STATUS_CONFIG = {
 }
 
 const ALL_CATEGORIES = [
-  { name: 'Parks & Nature',              icon: '🌳' },
-  { name: 'Urban & Architecture',        icon: '🏙' },
-  { name: 'Historic & Cultural',         icon: '🏛' },
-  { name: 'Waterfront & Water Features', icon: '💧' },
+  { name: 'Parks & Nature',                icon: '🌳' },
+  { name: 'Urban & Architecture',          icon: '🏙' },
+  { name: 'Historic & Cultural',           icon: '🏛' },
+  { name: 'Waterfront & Water Features',   icon: '💧' },
   { name: 'Fields, Meadows & Open Spaces', icon: '🌾' },
-  { name: 'Private Venues & Hidden Gems', icon: '✨' },
-  { name: 'Golden Hour & Sunrise Spots', icon: '🌅' },
-  { name: 'Neighborhoods & Street Life', icon: '🏘' },
+  { name: 'Private Venues & Hidden Gems',  icon: '✨' },
+  { name: 'Golden Hour & Sunrise Spots',   icon: '🌅' },
+  { name: 'Neighborhoods & Street Life',   icon: '🏘' },
 ]
 
 const POPULAR_CITIES = [
@@ -96,6 +85,7 @@ export default function DashboardPage() {
   const [favorites,      setFavorites]       = useState<Favorite[]>([])
   const [secretLocs,     setSecretLocs]      = useState<SecretLocation[]>([])
   const [locationCount,  setLocationCount]   = useState<number>(0)
+  const [pendingLocs,    setPendingLocs]     = useState<PendingLocation[]>([])
   const [loading,        setLoading]         = useState(true)
   const [toast,          setToast]           = useState<string | null>(null)
   const [copiedId,       setCopiedId]        = useState<string | null>(null)
@@ -114,18 +104,15 @@ export default function DashboardPage() {
   const [sPin,      setSPin]      = useState<AddressResult | null>(null)
 
   // Scanner state
-  const [scanRunning,      setScanRunning]      = useState(false)
-  const [scanResult,       setScanResult]       = useState<ScanResult | null>(null)
-  const [scanCities,       setScanCities]       = useState<string[]>([])
-  const [scanCategories,   setScanCategories]   = useState<string[]>(ALL_CATEGORIES.map(c => c.name))
-  const [showScanPanel,    setShowScanPanel]    = useState(false)
-  const [customCityInput,  setCustomCityInput]  = useState('')
-  const [citySearchQuery,  setCitySearchQuery]  = useState('')
-  const [showPopular,      setShowPopular]      = useState(false)
-  const [pendingLocs,     setPendingLocs]     = useState<PendingLocation[]>([])
-  const [pendingLoading,  setPendingLoading]  = useState(false)
+  const [scanRunning,     setScanRunning]     = useState(false)
+  const [scanResult,      setScanResult]      = useState<ScanResult | null>(null)
+  const [scanCities,      setScanCities]      = useState<string[]>([])
+  const [scanCategories,  setScanCategories]  = useState<string[]>(ALL_CATEGORIES.map(c => c.name))
+  const [showScanPanel,   setShowScanPanel]   = useState(false)
+  const [customCityInput, setCustomCityInput] = useState('')
+  const [citySearchQuery, setCitySearchQuery] = useState('')
+  const [showPopular,     setShowPopular]     = useState(false)
 
-  
   useEffect(() => {
     if (!toast) return
     const id = setTimeout(() => setToast(null), 2800)
@@ -146,22 +133,21 @@ export default function DashboardPage() {
         supabase.from('locations').select('id', { count: 'exact', head: true }),
       ])
 
-
-      // Load pending community submissions (admin only)
-const { data: pendingData } = await supabase
-  .from('locations')
-  .select('id,name,city,state,description,access_type,tags,created_at,latitude,longitude')
-  .eq('status', 'pending')
-  .eq('source', 'community')
-  .order('created_at', { ascending: false })
-if (pendingData) setPendingLocs(pendingData)
-
-
       if (profileRes.data)            setProfile(profileRes.data)
       if (sharesRes.data)             setShareLinks(sharesRes.data)
       if (favsRes.data)               setFavorites(favsRes.data as any)
       if (secretsRes.data)            setSecretLocs(secretsRes.data)
       if (locCountRes.count !== null) setLocationCount(locCountRes.count)
+
+      // Load pending community submissions
+      const { data: pendingData } = await supabase
+        .from('locations')
+        .select('id,name,city,state,description,access_type,tags,created_at,latitude,longitude')
+        .eq('status', 'pending')
+        .eq('source', 'community')
+        .order('created_at', { ascending: false })
+      if (pendingData) setPendingLocs(pendingData)
+
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }, [])
@@ -171,7 +157,6 @@ if (pendingData) setPendingLocs(pendingData)
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
   const isAdmin   = profile?.email === ADMIN_EMAIL
 
-  // Estimated locations & time
   const estLocations = scanCities.length * scanCategories.length * 20
   const estMinutes   = Math.ceil(scanCities.length * scanCategories.length * 0.7)
 
@@ -184,11 +169,7 @@ if (pendingData) setPendingLocs(pendingData)
       const res = await fetch('/api/scan-locations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cities:     scanCities,
-          categories: scanCategories,
-          userId:     profile.id,
-        }),
+        body: JSON.stringify({ cities: scanCities, categories: scanCategories, userId: profile.id }),
       })
       const data: ScanResult = await res.json()
       setScanResult(data)
@@ -206,28 +187,23 @@ if (pendingData) setPendingLocs(pendingData)
     }
   }
 
-async function approveLocation(id: string) {
-  const { error } = await supabase
-    .from('locations')
-    .update({ status: 'published' })
-    .eq('id', id)
-  if (!error) {
-    setPendingLocs(prev => prev.filter(l => l.id !== id))
-    setLocationCount(prev => prev + 1)
-    setToast('✓ Location approved and published!')
+  // ── Pending submissions ───────────────────────────────────────────────────
+  async function approveLocation(id: string) {
+    const { error } = await supabase.from('locations').update({ status: 'published' }).eq('id', id)
+    if (!error) {
+      setPendingLocs(prev => prev.filter(l => l.id !== id))
+      setLocationCount(prev => prev + 1)
+      setToast('✓ Location approved and published!')
+    }
   }
-}
 
-async function rejectLocation(id: string) {
-  const { error } = await supabase
-    .from('locations')
-    .delete()
-    .eq('id', id)
-  if (!error) {
-    setPendingLocs(prev => prev.filter(l => l.id !== id))
-    setToast('Location rejected and deleted')
+  async function rejectLocation(id: string) {
+    const { error } = await supabase.from('locations').delete().eq('id', id)
+    if (!error) {
+      setPendingLocs(prev => prev.filter(l => l.id !== id))
+      setToast('Location rejected and deleted')
+    }
   }
-}
 
   // ── City management ───────────────────────────────────────────────────────
   function addCustomCity() {
@@ -239,20 +215,14 @@ async function rejectLocation(id: string) {
     setToast(`Added ${formatted}`)
   }
 
-  function removeCity(city: string) {
-    setScanCities(prev => prev.filter(c => c !== city))
-  }
+  function removeCity(city: string) { setScanCities(prev => prev.filter(c => c !== city)) }
 
   function togglePopularCity(city: string) {
-    setScanCities(prev =>
-      prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]
-    )
+    setScanCities(prev => prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city])
   }
 
   function toggleCategory(name: string) {
-    setScanCategories(prev =>
-      prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name]
-    )
+    setScanCategories(prev => prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name])
   }
 
   const filteredPopular = POPULAR_CITIES.filter(c =>
@@ -394,9 +364,11 @@ async function rejectLocation(id: string) {
 
         {/* Main grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
+
+          {/* ── LEFT COLUMN ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-            {/* ── AI SCANNER — admin only ── */}
+            {/* AI SCANNER */}
             {isAdmin && (
               <div style={{ background: 'var(--ink)', borderRadius: 10, border: '1px solid rgba(255,255,255,.08)', overflow: 'hidden' }}>
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -418,43 +390,25 @@ async function rejectLocation(id: string) {
 
                 {showScanPanel && (
                   <div style={{ padding: '1.25rem' }}>
-
-                    {/* ── Custom city input ── */}
+                    {/* Custom city input */}
                     <div style={{ marginBottom: '1.25rem' }}>
                       <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)' }}>Add a city to scan</label>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <input
-                          type="text"
-                          value={customCityInput}
-                          onChange={e => setCustomCityInput(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') addCustomCity() }}
-                          placeholder="e.g. Springfield, Missouri"
-                          style={{ flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 13, outline: 'none' }}
-                        />
-                        <button onClick={addCustomCity} disabled={!customCityInput.trim()} style={{ padding: '9px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: !customCityInput.trim() ? 0.5 : 1 }}>
-                          + Add
-                        </button>
+                        <input type="text" value={customCityInput} onChange={e => setCustomCityInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCustomCity() }} placeholder="e.g. Springfield, Missouri" style={{ flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
+                        <button onClick={addCustomCity} disabled={!customCityInput.trim()} style={{ padding: '9px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: !customCityInput.trim() ? 0.5 : 1 }}>+ Add</button>
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(245,240,232,.25)', marginTop: 4 }}>Type any US city and state, press Enter or click Add</div>
                     </div>
 
-                    {/* ── Popular cities ── */}
+                    {/* Popular cities */}
                     <div style={{ marginBottom: '1.25rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                         <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Browse popular US cities</label>
-                        <button onClick={() => setShowPopular(p => !p)} style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
-                          {showPopular ? 'Hide ▲' : 'Show ▼'}
-                        </button>
+                        <button onClick={() => setShowPopular(p => !p)} style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{showPopular ? 'Hide ▲' : 'Show ▼'}</button>
                       </div>
                       {showPopular && (
                         <>
-                          <input
-                            type="text"
-                            value={citySearchQuery}
-                            onChange={e => setCitySearchQuery(e.target.value)}
-                            placeholder="Filter cities…"
-                            style={{ width: '100%', padding: '7px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 12, outline: 'none', marginBottom: 8 }}
-                          />
+                          <input type="text" value={citySearchQuery} onChange={e => setCitySearchQuery(e.target.value)} placeholder="Filter cities…" style={{ width: '100%', padding: '7px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 12, outline: 'none', marginBottom: 8 }} />
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
                             {filteredPopular.map(city => (
                               <button key={city} onClick={() => togglePopularCity(city)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${scanCities.includes(city) ? 'var(--gold)' : 'rgba(255,255,255,.15)'}`, background: scanCities.includes(city) ? 'rgba(196,146,42,.2)' : 'transparent', color: scanCities.includes(city) ? 'var(--gold)' : 'rgba(245,240,232,.5)', transition: 'all .15s' }}>
@@ -466,15 +420,11 @@ async function rejectLocation(id: string) {
                       )}
                     </div>
 
-                    {/* ── Selected cities ── */}
+                    {/* Selected cities */}
                     <div style={{ marginBottom: '1.25rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>
-                          Cities queued ({scanCities.length})
-                        </label>
-                        {scanCities.length > 0 && (
-                          <button onClick={() => setScanCities([])} style={{ fontSize: 11, color: 'rgba(181,75,42,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>
-                        )}
+                        <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Cities queued ({scanCities.length})</label>
+                        {scanCities.length > 0 && <button onClick={() => setScanCities([])} style={{ fontSize: 11, color: 'rgba(181,75,42,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>}
                       </div>
                       {scanCities.length === 0 ? (
                         <div style={{ fontSize: 12, color: 'rgba(245,240,232,.2)', fontStyle: 'italic', padding: '6px 0' }}>No cities added yet — type one above or browse popular cities.</div>
@@ -490,12 +440,10 @@ async function rejectLocation(id: string) {
                       )}
                     </div>
 
-                    {/* ── Category selection ── */}
+                    {/* Category selection */}
                     <div style={{ marginBottom: '1.25rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>
-                          Scan categories ({scanCategories.length}/{ALL_CATEGORIES.length})
-                        </label>
+                        <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Scan categories ({scanCategories.length}/{ALL_CATEGORIES.length})</label>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={() => setScanCategories(ALL_CATEGORIES.map(c => c.name))} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>All</button>
                           <span style={{ color: 'rgba(255,255,255,.15)' }}>·</span>
@@ -504,14 +452,14 @@ async function rejectLocation(id: string) {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                         {ALL_CATEGORIES.map(cat => {
-                          const selected = scanCategories.includes(cat.name)
+                          const sel = scanCategories.includes(cat.name)
                           return (
-                            <div key={cat.name} onClick={() => toggleCategory(cat.name)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: selected ? 'rgba(196,146,42,.1)' : 'rgba(255,255,255,.04)', border: `1px solid ${selected ? 'rgba(196,146,42,.3)' : 'rgba(255,255,255,.08)'}`, transition: 'all .15s' }}>
-                              <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${selected ? 'var(--gold)' : 'rgba(255,255,255,.2)'}`, background: selected ? 'var(--gold)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', flexShrink: 0, transition: 'all .15s' }}>
-                                {selected ? '✓' : ''}
+                            <div key={cat.name} onClick={() => toggleCategory(cat.name)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: sel ? 'rgba(196,146,42,.1)' : 'rgba(255,255,255,.04)', border: `1px solid ${sel ? 'rgba(196,146,42,.3)' : 'rgba(255,255,255,.08)'}`, transition: 'all .15s' }}>
+                              <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${sel ? 'var(--gold)' : 'rgba(255,255,255,.2)'}`, background: sel ? 'var(--gold)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', flexShrink: 0, transition: 'all .15s' }}>
+                                {sel ? '✓' : ''}
                               </div>
                               <span style={{ fontSize: 14, flexShrink: 0 }}>{cat.icon}</span>
-                              <span style={{ fontSize: 12, color: selected ? 'var(--gold)' : 'rgba(245,240,232,.5)', fontWeight: selected ? 500 : 300 }}>{cat.name}</span>
+                              <span style={{ fontSize: 12, color: sel ? 'var(--gold)' : 'rgba(245,240,232,.5)', fontWeight: sel ? 500 : 300 }}>{cat.name}</span>
                               <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(245,240,232,.2)' }}>~20 locations</span>
                             </div>
                           )
@@ -519,7 +467,7 @@ async function rejectLocation(id: string) {
                       </div>
                     </div>
 
-                    {/* ── Estimate ── */}
+                    {/* Estimate */}
                     {scanCities.length > 0 && scanCategories.length > 0 && (
                       <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8, marginBottom: '1.25rem' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, textAlign: 'center' }}>
@@ -538,18 +486,14 @@ async function rejectLocation(id: string) {
                         </div>
                         {estMinutes > 10 && (
                           <div style={{ marginTop: 10, fontSize: 11, color: 'rgba(245,240,232,.35)', textAlign: 'center', lineHeight: 1.5 }}>
-                            ⏱ Large scan — keep this tab open the whole time. Consider scanning a few cities at a time.
+                            ⏱ Large scan — keep this tab open. Consider scanning a few cities at a time.
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* ── Run button ── */}
-                    <button
-                      onClick={runScanner}
-                      disabled={scanRunning || scanCities.length === 0 || scanCategories.length === 0}
-                      style={{ width: '100%', padding: '13px', borderRadius: 4, background: scanRunning ? 'rgba(196,146,42,.3)' : 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: scanRunning || scanCities.length === 0 || scanCategories.length === 0 ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: scanCities.length === 0 || scanCategories.length === 0 ? 0.4 : 1 }}
-                    >
+                    {/* Run button */}
+                    <button onClick={runScanner} disabled={scanRunning || scanCities.length === 0 || scanCategories.length === 0} style={{ width: '100%', padding: '13px', borderRadius: 4, background: scanRunning ? 'rgba(196,146,42,.3)' : 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: scanRunning || scanCities.length === 0 || scanCategories.length === 0 ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: scanCities.length === 0 || scanCategories.length === 0 ? 0.4 : 1 }}>
                       {scanRunning ? (
                         <><div style={{ width: 16, height: 16, border: '2px solid rgba(26,22,18,.3)', borderTop: '2px solid var(--ink)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Scanning — please wait…</>
                       ) : scanCities.length === 0 ? '← Add at least one city to scan' :
@@ -560,30 +504,23 @@ async function rejectLocation(id: string) {
 
                     {scanRunning && (
                       <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(245,240,232,.35)', textAlign: 'center', lineHeight: 1.6 }}>
-                        Running {scanCities.length * scanCategories.length} targeted scans across {scanCities.length} {scanCities.length === 1 ? 'city' : 'cities'}. Don&apos;t close this tab.
+                        Running {scanCities.length * scanCategories.length} targeted scans. Don&apos;t close this tab.
                       </div>
                     )}
 
-                    {/* ── Results ── */}
+                    {/* Results */}
                     {scanResult && (
                       <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,.05)', borderRadius: 8, border: '1px solid rgba(255,255,255,.1)' }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--cream)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           ✓ Scan complete
-                          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(74,103,65,.3)', color: '#c8e8c4', border: '1px solid rgba(74,103,65,.4)', fontWeight: 500 }}>
-                            {scanResult.inserted} added
-                          </span>
-                          {scanResult.errors > 0 && (
-                            <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(255,255,255,.05)', color: 'rgba(245,240,232,.35)', border: '1px solid rgba(255,255,255,.1)', fontWeight: 400 }}>
-                              {scanResult.errors} skipped
-                            </span>
-                          )}
+                          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(74,103,65,.3)', color: '#c8e8c4', border: '1px solid rgba(74,103,65,.4)', fontWeight: 500 }}>{scanResult.inserted} added</span>
+                          {scanResult.errors > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(255,255,255,.05)', color: 'rgba(245,240,232,.35)', border: '1px solid rgba(255,255,255,.1)', fontWeight: 400 }}>{scanResult.errors} skipped</span>}
                           <span style={{ fontSize: 11, color: 'rgba(245,240,232,.3)' }}>({scanResult.scans} scans run)</span>
                         </div>
                         <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                           {scanResult.locations.map((loc, i) => (
                             <div key={i} style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                              <span style={{ color: 'var(--sage)', fontSize: 10, flexShrink: 0, marginTop: 2 }}>✓</span>
-                              <span>{loc}</span>
+                              <span style={{ color: 'var(--sage)', fontSize: 10, flexShrink: 0, marginTop: 2 }}>✓</span><span>{loc}</span>
                             </div>
                           ))}
                         </div>
@@ -591,9 +528,7 @@ async function rejectLocation(id: string) {
                           <details style={{ marginTop: 8 }}>
                             <summary style={{ fontSize: 11, color: 'rgba(245,240,232,.3)', cursor: 'pointer' }}>Show skipped ({scanResult.errorList.length})</summary>
                             <div style={{ marginTop: 4, maxHeight: 100, overflowY: 'auto' }}>
-                              {scanResult.errorList.map((e, i) => (
-                                <div key={i} style={{ fontSize: 10, color: 'rgba(245,240,232,.2)', padding: '1px 0' }}>{e}</div>
-                              ))}
+                              {scanResult.errorList.map((e, i) => <div key={i} style={{ fontSize: 10, color: 'rgba(245,240,232,.2)', padding: '1px 0' }}>{e}</div>)}
                             </div>
                           </details>
                         )}
@@ -609,71 +544,6 @@ async function rejectLocation(id: string) {
                         ? 'No locations in database yet — run the scanner to get started.'
                         : `${locationCount.toLocaleString()} locations in database · ${ALL_CATEGORIES.length} scan categories available`}
                     </div>
-                    {/* Pending community submissions */}
-{isAdmin && pendingLocs.length > 0 && (
-  <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-    <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div>
-        <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          📬 Pending Submissions
-          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(181,75,42,.1)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)' }}>
-            {pendingLocs.length} to review
-          </span>
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
-          Community-submitted locations waiting for your approval.
-        </div>
-      </div>
-    </div>
-
-    {pendingLocs.map((loc, i) => (
-      <div key={loc.id} style={{ padding: '1rem 1.25rem', borderBottom: i < pendingLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 3 }}>{loc.name}</div>
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 4 }}>
-              📍 {loc.city}{loc.state ? `, ${loc.state}` : ''}
-              <span style={{ marginLeft: 8, padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access_type === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access_type === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access_type === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
-                {loc.access_type === 'public' ? '● Public' : '🔒 Private'}
-              </span>
-            </div>
-            {loc.description && (
-              <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5, marginBottom: 6 }}>
-                {loc.description}
-              </div>
-            )}
-            {loc.tags?.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-                {loc.tags.map(t => (
-                  <span key={t} style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, background: 'var(--cream-dark)', color: 'var(--ink-soft)', border: '1px solid var(--sand)' }}>{t}</span>
-                ))}
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4 }}>
-              {loc.latitude && loc.longitude
-                ? `📌 Coords: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`
-                : '⚠ No coordinates — will need manual pin'}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => approveLocation(loc.id)}
-            style={{ flex: 1, padding: '8px', borderRadius: 4, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.25)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}
-          >
-            ✓ Approve & publish
-          </button>
-          <button
-            onClick={() => rejectLocation(loc.id)}
-            style={{ padding: '8px 16px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}
-          >
-            ✕ Reject
-          </button>
-        </div>
-      </div>
-    ))}
-  </div>
-)}
                     <button onClick={() => setShowScanPanel(true)} style={{ padding: '7px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                       {locationCount === 0 ? '🤖 Scan now' : '🤖 Scan more cities'}
                     </button>
@@ -682,7 +552,62 @@ async function rejectLocation(id: string) {
               </div>
             )}
 
-            {/* Share links */}
+            {/* ── PENDING SUBMISSIONS — admin only, shown when there are pending items ── */}
+            {isAdmin && pendingLocs.length > 0 && (
+              <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      📬 Pending Submissions
+                      <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(181,75,42,.1)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)' }}>
+                        {pendingLocs.length} to review
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
+                      Community-submitted locations waiting for your approval.
+                    </div>
+                  </div>
+                </div>
+
+                {pendingLocs.map((loc, i) => (
+                  <div key={loc.id} style={{ padding: '1rem 1.25rem', borderBottom: i < pendingLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>{loc.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span>📍 {loc.city}{loc.state ? `, ${loc.state}` : ''}</span>
+                        <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access_type === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access_type === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access_type === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
+                          {loc.access_type === 'public' ? '● Public' : '🔒 Private'}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{timeAgo(loc.created_at)}</span>
+                      </div>
+                      {loc.description && (
+                        <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5, marginBottom: 6 }}>{loc.description}</div>
+                      )}
+                      {loc.tags?.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                          {loc.tags.map(t => <span key={t} style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, background: 'var(--cream-dark)', color: 'var(--ink-soft)', border: '1px solid var(--sand)' }}>{t}</span>)}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: loc.latitude && loc.longitude ? 'var(--sage)' : 'var(--rust)', fontWeight: 300 }}>
+                        {loc.latitude && loc.longitude
+                          ? `📌 Coords verified: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`
+                          : '⚠ No coordinates — location will appear on map without a pin'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => approveLocation(loc.id)} style={{ flex: 1, padding: '9px', borderRadius: 4, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.25)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                        ✓ Approve & publish
+                      </button>
+                      <button onClick={() => rejectLocation(loc.id)} style={{ padding: '9px 18px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                        ✕ Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* SHARE LINKS */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)' }}>Recent share links</div>
@@ -727,7 +652,7 @@ async function rejectLocation(id: string) {
               })}
             </div>
 
-            {/* Secret locations */}
+            {/* SECRET LOCATIONS */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
@@ -737,9 +662,7 @@ async function rejectLocation(id: string) {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Hidden from the public map. Include them in share links.</div>
                 </div>
-                <button onClick={() => setShowAddSecret(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  + Add secret
-                </button>
+                <button onClick={() => setShowAddSecret(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>+ Add secret</button>
               </div>
               {secretLocs.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13, fontStyle: 'italic' }}>No secret locations yet. Add a hidden gem only you know about.</div>
@@ -766,7 +689,7 @@ async function rejectLocation(id: string) {
               ))}
             </div>
 
-            {/* Saved favorites */}
+            {/* SAVED FAVORITES */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)' }}>
@@ -821,7 +744,7 @@ async function rejectLocation(id: string) {
             </div>
           </div>
 
-          {/* RIGHT */}
+          {/* ── RIGHT COLUMN ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '.9rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Quick actions</div>
@@ -878,7 +801,7 @@ async function rejectLocation(id: string) {
         </div>
       </div>
 
-      {/* ── ADD SECRET MODAL ── */}
+      {/* ADD SECRET MODAL */}
       {showAddSecret && (
         <>
           <div onClick={() => { setShowAddSecret(false); resetForm() }} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
