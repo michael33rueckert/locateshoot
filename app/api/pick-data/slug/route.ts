@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  const { slug } = await params
+export async function GET(request: Request, context: any) {
+  const { slug } = await context.params
 
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
