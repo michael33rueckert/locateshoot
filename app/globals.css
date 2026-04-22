@@ -1067,21 +1067,18 @@ body {
 .dash-stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 2rem; }
 .dash-right-col  { display: flex; flex-direction: column; gap: 1.25rem; }
  
-/* ── Explore ──
-   KEY FIX: height: 100% on sidebar and map column ensures they
-   fill the full grid row height — eliminates the blank bottom gap. */
+/* ── Explore ── */
 .explore-body {
   flex: 1;
   min-height: 0;
-  height: 0;
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  grid-template-rows: minmax(0, 1fr);
+  display: flex;
+  flex-direction: row;
   overflow: hidden;
   background: #f9f6f1;
 }
 .explore-sidebar {
-  height: 100%;
+  width: 360px;
+  flex-shrink: 0;
   overflow: hidden;
   background: #f9f6f1;
   border-right: 1px solid var(--cream-dark);
@@ -1090,7 +1087,8 @@ body {
 }
 .explore-map-col {
   position: relative;
-  height: 100%;          /* Fill the full grid row */
+  flex: 1;
+  min-width: 0;
 }
 .explore-mobile-toggle { display: none; }
  
@@ -1127,7 +1125,7 @@ body {
   .dash-right-col  { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1rem !important; }
  
   /* Narrower sidebar so map gets more room */
-  .explore-body { grid-template-columns: 260px 1fr !important; }
+  .explore-sidebar { width: 260px !important; }
  
   .profile-outer { grid-template-columns: 200px 1fr !important; }
   .profile-main  { padding: 2rem 1.5rem !important; }
@@ -1157,6 +1155,7 @@ body {
     overflow: hidden !important;
   }
   .explore-sidebar {
+    width: auto !important;
     flex: 1 !important;
     min-height: 0 !important;
     border-right: none !important;
