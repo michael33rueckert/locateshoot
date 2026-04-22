@@ -131,6 +131,20 @@ export default function AdminPage() {
     finally { setScanRunning(false) }
   }
 
+  async function setUserPlan(userId: string, plan: 'pro' | 'free') {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/admin/users/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ userId, plan }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) { setToast(`⚠ ${data.message ?? data.error ?? 'Could not update'}`); return }
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan } : u))
+    setToast(plan === 'pro' ? '✓ Granted Pro access' : 'Reverted to Free')
+  }
+
   async function approveLocation(id: string) {
     const { error } = await supabase.from('locations').update({ status: 'published' }).eq('id', id)
     if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setLocationCount(p => p + 1); setToast('✓ Approved & published') }
@@ -227,7 +241,12 @@ export default function AdminPage() {
                       <td style={{ padding: '9px 12px', color: 'var(--ink)', whiteSpace: 'nowrap' }}>{u.email}</td>
                       <td style={{ padding: '9px 12px', color: 'var(--ink-soft)' }}>{u.full_name ?? '—'}</td>
                       <td style={{ padding: '9px 12px' }}>
-                        <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: u.plan === 'pro' ? 'rgba(196,146,42,.1)' : 'var(--cream-dark)', color: u.plan === 'pro' ? 'var(--gold)' : 'var(--ink-soft)' }}>{u.plan ?? 'free'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: u.plan === 'pro' ? 'rgba(196,146,42,.1)' : 'var(--cream-dark)', color: u.plan === 'pro' ? 'var(--gold)' : 'var(--ink-soft)' }}>{u.plan ?? 'free'}</span>
+                          {u.plan === 'pro'
+                            ? <button onClick={() => { if (confirm(`Revert ${u.email} to Free? They'll lose Pro features.`)) setUserPlan(u.id, 'free') }} style={{ padding: '2px 7px', borderRadius: 4, background: 'transparent', border: '1px solid rgba(181,75,42,.25)', fontSize: 10, color: 'var(--rust)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Revert</button>
+                            : <button onClick={() => setUserPlan(u.id, 'pro')} style={{ padding: '2px 7px', borderRadius: 4, background: 'var(--ink)', border: 'none', fontSize: 10, fontWeight: 500, color: 'var(--cream)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>⭐ Grant Pro</button>}
+                        </div>
                       </td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.portfolio_count}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.share_link_count}</td>
