@@ -224,7 +224,7 @@ export default function SharePage() {
     setIsSaving(true)
     try {
       const slug = generateSlug(sessionName, photographerName || 'photographer')
-      const locationIds = selectedLocs.filter(l => l.type !== 'secret').map(l => Number(l.id))
+      const locationIds = selectedLocs.filter(l => l.type !== 'secret').map(l => String(l.id))
       const secretIds   = selectedLocs.filter(l => l.type === 'secret').map(l => String(l.id))
       let expiresAt: string | null = null
       if (expiry !== '0') {
