@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { usePlacePhotos } from '@/hooks/usePlacePhotos'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import AuthModal from '@/components/AuthModal'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
@@ -127,8 +128,8 @@ function AddLocationModal({ onClose, user }: { onClose:()=>void; user:any }) {
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, isFav, isInPortfolio, onClose, onToggleFavorite, onAddToPortfolio, user }: {
-  loc:any; isFav:boolean; isInPortfolio:boolean; onClose:()=>void; onToggleFavorite:(id:any)=>void; onAddToPortfolio:(id:any)=>void; user:any
+function DetailPanel({ loc, isInPortfolio, onClose, onAddToPortfolio, onSignIn, user }: {
+  loc:any; isInPortfolio:boolean; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; user:any
 }) {
   const router = useRouter()
   const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
@@ -208,13 +209,10 @@ function DetailPanel({ loc, isFav, isInPortfolio, onClose, onToggleFavorite, onA
                 onClick={()=>!isInPortfolio&&onAddToPortfolio(loc.id)}
                 disabled={isInPortfolio}
                 style={{width:'100%',padding:'12px',borderRadius:4,cursor:isInPortfolio?'default':'pointer',fontFamily:'inherit',fontSize:14,fontWeight:600,marginBottom:10,background:isInPortfolio?'rgba(74,103,65,.1)':'var(--gold)',color:isInPortfolio?'var(--sage)':'var(--ink)',border:isInPortfolio?'1px solid rgba(74,103,65,.3)':'none'}}>
-                {isInPortfolio?'✓ In your portfolio':'+ Add to my portfolio'}
+                {isInPortfolio?'✓ In your portfolio':'Add to my portfolio'}
               </button>
-            : <Link href="/" style={{display:'block',width:'100%',padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:600,textDecoration:'none',textAlign:'center',marginBottom:10}}>Join free to build your portfolio →</Link>}
-          <div style={{display:'flex',gap:10,marginBottom:'1rem'}}>
-            <button onClick={()=>onToggleFavorite(loc.id)} style={{flex:1,padding:'12px',borderRadius:4,cursor:'pointer',fontFamily:'inherit',fontSize:14,fontWeight:500,background:isFav?'rgba(196,146,42,.1)':'var(--cream)',color:isFav?'var(--gold)':'var(--ink-soft)',border:`1px solid ${isFav?'rgba(196,146,42,.3)':'var(--cream-dark)'}`}}>{isFav?'♥ Saved':'♡ Save to favorites'}</button>
-            {user&&<button onClick={shareWithClient} style={{flex:1,padding:'12px',borderRadius:4,background:'var(--cream)',color:'var(--ink-soft)',border:'1px solid var(--cream-dark)',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer'}}>🔗 Share with client</button>}
-          </div>
+            : <button onClick={onSignIn} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:600,border:'none',cursor:'pointer',marginBottom:10}}>Sign in to add to your portfolio</button>}
+          {user&&<button onClick={shareWithClient} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer',marginBottom:'1rem'}}>🔗 Share with client</button>}
           <div style={{padding:'10px 12px',background:'rgba(196,146,42,.04)',border:'1px solid rgba(196,146,42,.15)',borderRadius:6,marginBottom:10}}>
             <div style={{fontSize:10,color:'var(--ink-soft)',lineHeight:1.6,fontWeight:300}}>⚠ <strong style={{fontWeight:500}}>Disclaimer:</strong> Always verify access rights, permit requirements, and safety before your session.</div>
           </div>
@@ -236,8 +234,8 @@ export default function ExplorePage() {
   const [locLoading,     setLocLoading]     = useState(false)
   const [activeId,       setActiveId]       = useState<any>(null)
   const [detailLoc,      setDetailLoc]      = useState<any>(null)
-  const [favorites,      setFavorites]      = useState<Set<any>>(new Set())
   const [user,           setUser]           = useState<any>(null)
+  const [authOpen,       setAuthOpen]       = useState<'login'|'signup'|null>(null)
   const [toast,          setToast]          = useState<string|null>(null)
   const [searchQuery,    setSearchQuery]    = useState('')
   const [showAddModal,   setShowAddModal]   = useState(false)
@@ -300,12 +298,6 @@ export default function ExplorePage() {
   }, [locations])
 
   useEffect(() => {
-    if(!user)return
-    supabase.from('favorites').select('location_id').eq('user_id',user.id)
-      .then(({data})=>{if(data)setFavorites(new Set(data.map((f:any)=>f.location_id)))})
-  }, [user])
-
-  useEffect(() => {
     if(!user){setPortfolioSources(new Set());return}
     supabase.from('portfolio_locations').select('source_location_id').eq('user_id',user.id)
       .then(({data})=>{if(data)setPortfolioSources(new Set(data.map((r:any)=>r.source_location_id).filter(Boolean)))})
@@ -338,18 +330,6 @@ export default function ExplorePage() {
     if(loc){setDetailLoc(loc);setActiveId(id);setMobileMapVisible(false)}
   },[locations])
 
-  async function toggleFavorite(locId:any, e?:React.MouseEvent) {
-    e?.stopPropagation()
-    if(!user){setToast('Sign in to save favorites');return}
-    if(favorites.has(locId)||favorites.has(Number(locId))){
-      setFavorites(prev=>{const n=new Set(prev);n.delete(locId);n.delete(Number(locId));return n});setToast('Removed from favorites')
-      await supabase.from('favorites').delete().eq('user_id',user.id).eq('location_id',locId)
-    } else {
-      setFavorites(prev=>new Set([...prev,locId]));setToast('❤ Saved!')
-      await supabase.from('favorites').insert({user_id:user.id,location_id:locId})
-    }
-  }
-
   async function addToPortfolio(locId:any) {
     if(!user){setToast('Sign in to build your portfolio');return}
     if(portfolioSources.has(locId))return
@@ -377,7 +357,7 @@ export default function ExplorePage() {
         is_secret:          false,
       })
       if(error)throw error
-      setToast('✓ Added to your portfolio! Add your own photos from your dashboard.')
+      setToast('Added to your portfolio! Upload your photos from the dashboard.')
     } catch(e){
       console.error(e)
       setPortfolioSources(prev=>{const n=new Set(prev);n.delete(locId);return n})
@@ -526,7 +506,6 @@ export default function ExplorePage() {
             </div>
           ):filtered.map((loc:any)=>{
             const isActive=String(activeId)===String(loc.id)
-            const isFav=favorites.has(loc.id)||favorites.has(Number(loc.id))
             const thumb=photoMap[loc.id]
             return(
               <div key={String(loc.id)}
@@ -541,9 +520,6 @@ export default function ExplorePage() {
                   <div style={{fontSize:11,color:'var(--ink-soft)',marginBottom:4}}>📍 {loc.city}</div>
                   <span style={{padding:'2px 7px',borderRadius:20,fontSize:10,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.1)':'rgba(181,75,42,.1)',color:loc.access==='public'?'var(--sage)':'var(--rust)',border:`1px solid ${loc.access==='public'?'rgba(74,103,65,.2)':'rgba(181,75,42,.2)'}`}}>{loc.access==='public'?'● Public':'🔒 Private'}</span>
                 </div>
-                <button onClick={e=>toggleFavorite(loc.id,e)} style={{width:28,height:28,borderRadius:'50%',border:`1px solid ${isFav?'rgba(196,146,42,.4)':'var(--cream-dark)'}`,background:isFav?'rgba(196,146,42,.1)':'white',cursor:'pointer',fontSize:14,color:isFav?'var(--gold)':'var(--ink-soft)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  {isFav?'♥':'♡'}
-                </button>
               </div>
             )
           })}
@@ -576,9 +552,10 @@ export default function ExplorePage() {
       </button>
 
       {detailLoc&&(
-        <DetailPanel loc={detailLoc} isFav={favorites.has(detailLoc.id)||favorites.has(Number(detailLoc.id))} isInPortfolio={portfolioSources.has(detailLoc.id)} onClose={()=>setDetailLoc(null)} onToggleFavorite={toggleFavorite} onAddToPortfolio={addToPortfolio} user={user}/>
+        <DetailPanel loc={detailLoc} isInPortfolio={portfolioSources.has(detailLoc.id)} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} user={user}/>
       )}
       {showAddModal&&<AddLocationModal onClose={()=>setShowAddModal(false)} user={user}/>}
+      {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}
 
       {toast&&(
         <div style={{position:'fixed',bottom:'5rem',right:'1.5rem',background:'var(--ink)',color:'var(--cream)',padding:'10px 18px',borderRadius:10,fontSize:13,border:'1px solid rgba(255,255,255,.1)',zIndex:9999,boxShadow:'0 8px 32px rgba(0,0,0,.3)'}}>
