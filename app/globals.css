@@ -1028,10 +1028,8 @@ body {
   body { padding-bottom: env(safe-area-inset-bottom, 0) !important; }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   MOBILE RESPONSIVE — append to bottom of globals.css
-   ───────────────────────────────────────────────────────────────────────────── */
-
+*/
+ 
 /* ── Hamburger nav ── */
 .hamburger-btn {
   display: none;
@@ -1046,19 +1044,19 @@ body {
   justify-content: center;
   flex-shrink: 0;
 }
-
+ 
 .mobile-menu {
   position: fixed;
-  top: 52px; left: 0; right: 0;
+  top: 60px; left: 0; right: 0;
   background: rgba(26,22,18,.98);
   border-bottom: 1px solid rgba(255,255,255,.1);
   z-index: 500;
   padding: 1rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
-
+ 
 .mobile-menu a, .mobile-menu button {
   display: block;
   padding: 12px 0;
@@ -1071,78 +1069,81 @@ body {
   cursor: pointer;
   text-align: left;
   border-bottom: 1px solid rgba(255,255,255,.06);
+  width: 100%;
 }
-
+ 
 .mobile-menu a:last-child, .mobile-menu button:last-child {
   border-bottom: none;
 }
-
-/* ── Dashboard ── */
+ 
+/* ── Dashboard grid classes ── */
 .dash-main-grid {
   display: grid;
   grid-template-columns: 1fr 340px;
   gap: 1.5rem;
   align-items: start;
 }
-
+ 
 .dash-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 2rem;
 }
-
+ 
 .dash-right-col {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
 }
-
-/* ── Explore page ── */
+ 
+/* ── Explore page classes ── */
 .explore-body {
   flex: 1;
   display: grid;
   grid-template-columns: 360px 1fr;
   overflow: hidden;
 }
-
+ 
 .explore-sidebar {
   border-right: 1px solid var(--cream-dark);
   overflow-y: auto;
   background: #f9f6f1;
 }
-
+ 
 .explore-map-col {
   position: relative;
 }
-
+ 
 .explore-mobile-toggle {
   display: none;
 }
-
-/* ── Share page ── */
+ 
+/* ── Share page classes ── */
 .share-outer {
   display: grid;
   grid-template-columns: 440px 1fr;
   height: 100vh;
   overflow: hidden;
 }
-
+ 
 .share-map-col {
   position: relative;
   height: 100vh;
 }
-
+ 
 .share-legend {
   position: absolute;
   top: 16px; right: 16px;
   z-index: 500;
 }
-
+ 
 /* ─────────────────────────────────────────────────────────────────────────────
-   TABLET (≤1024px)
+   TABLET (769px – 1024px)
    ───────────────────────────────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
+@media (min-width: 769px) and (max-width: 1024px) {
+ 
+  /* Dashboard — right column goes side-by-side */
   .dash-main-grid {
     grid-template-columns: 1fr !important;
   }
@@ -1150,59 +1151,71 @@ body {
     grid-template-columns: repeat(2, 1fr) !important;
   }
   .dash-right-col {
-    /* Move right column above left column content on tablet */
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 1rem !important;
   }
+ 
+  /* Explore — narrower sidebar so map gets more room */
+  .explore-body {
+    grid-template-columns: 260px 1fr !important;
+  }
 }
-
+ 
 /* ─────────────────────────────────────────────────────────────────────────────
    PHONE (≤768px)
    ───────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-
-  /* Hamburger */
+ 
+  /* ── Hamburger ── */
   .hamburger-btn { display: flex !important; }
   .nav-links     { display: none !important; }
-
+ 
   /* ── Dashboard ── */
   .dash-main-grid {
     grid-template-columns: 1fr !important;
+    width: 100% !important;
+  }
+  /* Prevent inner panels from overflowing */
+  .dash-main-grid > div {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
   }
   .dash-stats-grid {
     grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
   }
   .dash-right-col {
     display: flex !important;
     flex-direction: column !important;
-    gap: 1.25rem !important;
-    order: -1 !important; /* Show quick actions ABOVE the main panels */
+    gap: 1rem !important;
+    order: -1 !important;
   }
-
+ 
   /* ── Explore ── */
   .explore-body {
     display: block !important;
     overflow: visible !important;
     height: auto !important;
   }
-
+ 
   .explore-sidebar {
     height: calc(100svh - 115px) !important;
     border-right: none !important;
     border-bottom: 1px solid var(--cream-dark) !important;
     display: block !important;
+    overflow-y: auto !important;
   }
-
+ 
   .explore-sidebar.mobile-hidden {
     display: none !important;
   }
-
+ 
   .explore-map-col {
-    height: calc(100svh - 115px) !important;
     display: none !important;
   }
-
+ 
   .explore-map-col.mobile-visible {
     display: block !important;
     position: fixed !important;
@@ -1210,7 +1223,13 @@ body {
     z-index: 300 !important;
     height: 100svh !important;
   }
-
+ 
+  /* Force Leaflet map to fill its container */
+  .explore-map-col.mobile-visible .leaflet-container {
+    height: 100svh !important;
+    width: 100% !important;
+  }
+ 
   .explore-mobile-toggle {
     display: flex !important;
     position: fixed !important;
@@ -1232,40 +1251,35 @@ body {
     background: var(--ink) !important;
     color: var(--cream) !important;
   }
-
-  /* ── Share page ── */
+ 
+  /* ── Share page ──
+     Key fix: sidebar uses flex column with sticky footer.
+     Do NOT set overflow-y on the sidebar itself — only the inner content div scrolls.
+     This keeps the "Generate →" button visible at all times. */
   .share-outer {
     display: block !important;
     height: 100svh !important;
     overflow: hidden !important;
   }
-
+ 
   .share-map-col {
     display: none !important;
   }
-
+ 
   .share-sidebar {
     height: 100svh !important;
-    overflow-y: auto !important;
     width: 100% !important;
+    max-width: 100% !important;
+    /* Keep display:flex flex-direction:column from inline style — don't override */
   }
-
+ 
   .share-legend {
     display: none !important;
   }
 }
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   SMALL PHONE (≤480px)
-   ───────────────────────────────────────────────────────────────────────────── */
-@media (max-width: 480px) {
-  .dash-stats-grid {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 8px !important;
-  }
-}
-
+ 
 /* ── PWA safe areas ── */
 @media (display-mode: standalone) {
-  .nav-fixed { padding-top: env(safe-area-inset-top, 0) !important; }
+  nav { padding-top: env(safe-area-inset-top, 0) !important; }
 }
+ 

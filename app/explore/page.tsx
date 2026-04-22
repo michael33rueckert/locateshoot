@@ -484,6 +484,12 @@ export default function ExplorePage() {
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
 
+useEffect(() => {
+  if (mobileMapVisible) {
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
+  }
+}, [mobileMapVisible])
+
   useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => setUser(user)) }, [])
 
   useEffect(() => {
