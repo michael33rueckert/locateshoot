@@ -253,8 +253,6 @@ export default function ExplorePage() {
   const [portfolioSources, setPortfolioSources] = useState<Set<string>>(new Set())
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
-  const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
-  const [showPinSearch,    setShowPinSearch]    = useState(false)
 
   // ── FIX 1: Trigger Leaflet resize on mount so map fills its container ──
   useEffect(() => {
@@ -315,7 +313,7 @@ export default function ExplorePage() {
   }, [toast])
 
   useEffect(() => {
-    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowAddModal(false);setShowFilters(false);setMobileMenuOpen(false);setShowPinSearch(false)}}
+    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowAddModal(false);setShowFilters(false);setMobileMenuOpen(false)}}
     window.addEventListener('keydown',onKey)
     return()=>window.removeEventListener('keydown',onKey)
   }, [])
@@ -327,8 +325,6 @@ export default function ExplorePage() {
       ()=>{setLocLoading(false)},{timeout:10000}
     )
   }
-
-  function handlePinSearch(r:AddressResult){setSearchPin({lat:r.lat,lng:r.lng,label:r.label??r.shortLabel??''});setUserLocation({lat:r.lat,lng:r.lng});setShowPinSearch(false);setToast(`📍 Showing locations near ${r.shortLabel}`)}
 
   const handleMarkerClick = useCallback((id:any)=>{
     const loc=locations.find((l:any)=>String(l.id)===String(id))
@@ -445,21 +441,10 @@ export default function ExplorePage() {
             {accessFilter==='My Portfolio'?'✓ My Portfolio':'⭐ My Portfolio'}
             {portfolioSources.size>0&&<span style={{padding:'1px 7px',borderRadius:20,fontSize:10,fontWeight:700,background:accessFilter==='My Portfolio'?'rgba(26,22,18,.15)':'rgba(196,146,42,.3)',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--gold)'}}>{portfolioSources.size}</span>}
           </button>}
-          <button onClick={()=>setShowPinSearch(p=>!p)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${searchPin?'var(--sky)':'var(--cream-dark)'}`,background:searchPin?'rgba(61,110,140,.08)':'white',color:searchPin?'var(--sky)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
-            📍 {searchPin?searchPin.label.split(',')[0]:'Find near…'}
-            {searchPin&&<span onClick={e=>{e.stopPropagation();setSearchPin(null);setUserLocation(null)}} style={{marginLeft:2}}>✕</span>}
-          </button>
           {accessFilter!=='All'&&<span onClick={()=>setAccessFilter('All')} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{accessFilter} ✕</span>}
           {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{t} ✕</span>)}
           {activeFilterCount>0&&<button onClick={clearAllFilters} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:0,fontWeight:500}}>Clear all</button>}
         </div>
-
-        {showPinSearch&&(
-          <div style={{padding:'0 1.5rem 1rem',borderTop:'1px solid var(--cream-dark)'}}>
-            <div style={{fontSize:12,color:'var(--ink-soft)',marginBottom:6,paddingTop:10}}>Search for a city or address to find nearby locations:</div>
-            <AddressSearch onSelect={handlePinSearch} placeholder="e.g. Loose Park, Kansas City…"/>
-          </div>
-        )}
 
         {showFilters&&(
           <div className="explore-filter-panel">
