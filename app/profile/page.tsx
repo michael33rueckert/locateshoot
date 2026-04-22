@@ -5,9 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
 interface Template {
-  id: string
-  name: string
-  body: string
+  id: string; name: string; body: string
 }
 
 interface Preferences {
@@ -53,21 +51,18 @@ export default function ProfilePage() {
   const [toast,         setToast]         = useState<string | null>(null)
   const [saving,        setSaving]        = useState(false)
 
-  // Profile fields
   const [fullName,   setFullName]   = useState('')
   const [studioName, setStudioName] = useState('')
   const [email,      setEmail]      = useState('')
   const [instagram,  setInstagram]  = useState('')
   const [website,    setWebsite]    = useState('')
 
-  // Branding
   const [logoPreview,    setLogoPreview]    = useState<string | null>(null)
   const [brandAccent,    setBrandAccent]    = useState('#c4922a')
   const [showStudioName, setShowStudioName] = useState(true)
   const [shareTagline,   setShareTagline]   = useState("Let's find your perfect spot together.")
   const logoInputRef = useRef<HTMLInputElement>(null)
 
-  // Templates
   const [templates,     setTemplates]     = useState<Template[]>([])
   const [editingId,     setEditingId]     = useState<string | null>(null)
   const [editName,      setEditName]      = useState('')
@@ -78,10 +73,7 @@ export default function ProfilePage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [templSaving,   setTemplSaving]   = useState(false)
 
-  // Preferences
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
-
-  // Password
   const [newPw,     setNewPw]     = useState('')
   const [confirmPw, setConfirmPw] = useState('')
 
@@ -101,18 +93,10 @@ export default function ProfilePage() {
   const loadProfile = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { window.location.href = '/'; return }
-    setUserId(user.id)
-    setEmail(user.email ?? '')
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name, preferences, plan')
-      .eq('id', user.id)
-      .single()
-
+    setUserId(user.id); setEmail(user.email ?? '')
+    const { data: profile } = await supabase.from('profiles').select('full_name,preferences,plan').eq('id', user.id).single()
     if (profile) {
-      setFullName(profile.full_name ?? '')
-      setPlan(profile.plan ?? 'free')
+      setFullName(profile.full_name ?? ''); setPlan(profile.plan ?? 'free')
       const p = profile.preferences as Preferences | null
       if (p) {
         setPrefs({ ...DEFAULT_PREFS, ...p })
@@ -122,43 +106,29 @@ export default function ProfilePage() {
         if (p.logo_url)        setLogoPreview(p.logo_url)
       }
     }
-
-    const { data: tmplData } = await supabase
-      .from('message_templates')
-      .select('id,name,body')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
+    const { data: tmplData } = await supabase.from('message_templates').select('id,name,body').eq('user_id', user.id).order('created_at', { ascending: true })
     if (tmplData) setTemplates(tmplData)
   }, [])
 
   useEffect(() => { loadProfile() }, [loadProfile])
 
   async function saveProfile() {
-    if (!userId) return
-    setSaving(true)
-    const { error } = await supabase.from('profiles').upsert({
-      id: userId, full_name: fullName.trim(), email: email.trim(),
-    })
-    setSaving(false)
-    setToast(error ? '⚠ Could not save — please try again' : '✓ Profile saved!')
+    if (!userId) return; setSaving(true)
+    const { error } = await supabase.from('profiles').upsert({ id: userId, full_name: fullName.trim(), email: email.trim() })
+    setSaving(false); setToast(error ? '⚠ Could not save' : '✓ Profile saved!')
   }
 
   async function savePreferences() {
-    if (!userId) return
-    setSaving(true)
+    if (!userId) return; setSaving(true)
     const { error } = await supabase.from('profiles').update({ preferences: prefs }).eq('id', userId)
-    setSaving(false)
-    setToast(error ? '⚠ Could not save — please try again' : '✓ Preferences saved!')
+    setSaving(false); setToast(error ? '⚠ Could not save' : '✓ Preferences saved!')
   }
 
   async function saveBranding() {
-    if (!userId) return
-    setSaving(true)
+    if (!userId) return; setSaving(true)
     const updated = { ...prefs, brand_accent: brandAccent, show_studio_name: showStudioName, share_tagline: shareTagline }
     const { error } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
-    setPrefs(updated)
-    setSaving(false)
-    setToast(error ? '⚠ Could not save — please try again' : '✓ Branding saved!')
+    setPrefs(updated); setSaving(false); setToast(error ? '⚠ Could not save' : '✓ Branding saved!')
   }
 
   function updatePref<K extends keyof Preferences>(key: K, val: Preferences[K]) {
@@ -171,60 +141,44 @@ export default function ProfilePage() {
     const reader = new FileReader()
     reader.onload = ev => setLogoPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
-    const ext  = file.name.split('.').pop()
-    const path = `${userId}/logo.${ext}`
+    const ext = file.name.split('.').pop(), path = `${userId}/logo.${ext}`
     const { error } = await supabase.storage.from('location-photos').upload(path, file, { upsert: true })
     if (!error) {
       const { data } = supabase.storage.from('location-photos').getPublicUrl(path)
-      const updated  = { ...prefs, logo_url: data.publicUrl }
+      const updated = { ...prefs, logo_url: data.publicUrl }
       await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
       setPrefs(updated)
     }
   }
 
-  function startEdit(t: Template) {
-    setEditingId(t.id); setEditName(t.name); setEditBody(t.body); setShowNewForm(false)
-  }
+  function startEdit(t: Template) { setEditingId(t.id); setEditName(t.name); setEditBody(t.body); setShowNewForm(false) }
   function cancelEdit() { setEditingId(null); setEditName(''); setEditBody('') }
 
   async function saveEdit() {
-    if (!editName.trim() || !editBody.trim() || !userId) return
-    setTemplSaving(true)
-    const { error } = await supabase.from('message_templates')
-      .update({ name: editName.trim(), body: editBody.trim() })
-      .eq('id', editingId!)
-    if (!error) {
-      setTemplates(prev => prev.map(t => t.id === editingId ? { ...t, name: editName.trim(), body: editBody.trim() } : t))
-      setEditingId(null); setToast('✓ Template saved!')
-    } else { setToast('⚠ Could not save') }
+    if (!editName.trim() || !editBody.trim() || !userId) return; setTemplSaving(true)
+    const { error } = await supabase.from('message_templates').update({ name: editName.trim(), body: editBody.trim() }).eq('id', editingId!)
+    if (!error) { setTemplates(prev => prev.map(t => t.id === editingId ? { ...t, name: editName.trim(), body: editBody.trim() } : t)); setEditingId(null); setToast('✓ Template saved!') }
+    else { setToast('⚠ Could not save') }
     setTemplSaving(false)
   }
 
   async function addTemplate() {
-    if (!newName.trim() || !newBody.trim() || !userId) return
-    setTemplSaving(true)
-    const { data, error } = await supabase.from('message_templates')
-      .insert({ user_id: userId, name: newName.trim(), body: newBody.trim() })
-      .select().single()
-    if (!error && data) {
-      setTemplates(prev => [...prev, data])
-      setNewName(''); setNewBody(''); setShowNewForm(false); setToast('✓ Template created!')
-    } else { setToast('⚠ Could not save') }
+    if (!newName.trim() || !newBody.trim() || !userId) return; setTemplSaving(true)
+    const { data, error } = await supabase.from('message_templates').insert({ user_id: userId, name: newName.trim(), body: newBody.trim() }).select().single()
+    if (!error && data) { setTemplates(prev => [...prev, data]); setNewName(''); setNewBody(''); setShowNewForm(false); setToast('✓ Template created!') }
+    else { setToast('⚠ Could not save') }
     setTemplSaving(false)
   }
 
   async function deleteTemplate(id: string) {
     if (deleteConfirm !== id) { setDeleteConfirm(id); return }
     const { error } = await supabase.from('message_templates').delete().eq('id', id)
-    if (!error) {
-      setTemplates(prev => prev.filter(t => t.id !== id))
-      setDeleteConfirm(null); setToast('Template deleted')
-    }
+    if (!error) { setTemplates(prev => prev.filter(t => t.id !== id)); setDeleteConfirm(null); setToast('Template deleted') }
   }
 
   async function updatePassword() {
     if (newPw !== confirmPw) { setToast('⚠ Passwords do not match'); return }
-    if (newPw.length < 8)    { setToast('⚠ Password must be at least 8 characters'); return }
+    if (newPw.length < 8) { setToast('⚠ Password must be at least 8 characters'); return }
     setSaving(true)
     const { error } = await supabase.auth.updateUser({ password: newPw })
     setSaving(false)
@@ -233,15 +187,12 @@ export default function ProfilePage() {
   }
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px',
-    border: '1px solid var(--cream-dark)', borderRadius: 4,
-    fontFamily: 'var(--font-dm-sans),sans-serif',
-    fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
+    width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4,
+    fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
   }
   const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 11, fontWeight: 500,
-    textTransform: 'uppercase', letterSpacing: '.07em',
-    color: 'var(--ink-soft)', marginBottom: 5,
+    display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase',
+    letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5,
   }
   const sectionTitle = (title: string, sub?: string) => (
     <div style={{ marginBottom: '2rem', paddingBottom: '1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
@@ -253,11 +204,7 @@ export default function ProfilePage() {
   const prefRow = (label: string, sub: string, key: keyof Preferences, proOnly = false) => {
     const locked = proOnly && !isPro
     return (
-      <label
-        key={key}
-        onClick={() => !locked && updatePref(key, !prefs[key])}
-        style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: locked ? 'default' : 'pointer', marginBottom: 14, opacity: locked ? 0.5 : 1 }}
-      >
+      <label key={key} onClick={() => !locked && updatePref(key, !prefs[key])} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: locked ? 'default' : 'pointer', marginBottom: 14, opacity: locked ? 0.5 : 1 }}>
         <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${prefs[key] && !locked ? 'var(--gold)' : 'var(--sand)'}`, background: prefs[key] && !locked ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>
           {prefs[key] && !locked ? '✓' : ''}
         </div>
@@ -274,37 +221,40 @@ export default function ProfilePage() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: '100vh', background: '#f0ece4' }}>
+    <div className="profile-outer">
 
-      {/* SIDEBAR */}
-      <div style={{ background: 'white', borderRight: '1px solid var(--cream-dark)', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh' }}>
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--cream-dark)' }}>
+      {/* SIDEBAR — className enables mobile horizontal tab bar */}
+      <div className="profile-sidebar">
+        {/* Logo + back — hidden on mobile via .profile-sidebar-logo/.profile-sidebar-back */}
+        <div className="profile-sidebar-logo" style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--cream-dark)' }}>
           <Link href="/" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 900, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
           </Link>
         </div>
-        <div style={{ padding: '1rem 1.5rem 0.5rem' }}>
+        <div className="profile-sidebar-back" style={{ padding: '1rem 1.5rem 0.5rem' }}>
           <Link href="/dashboard" style={{ fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>← Back to dashboard</Link>
         </div>
+
+        {/* Nav items */}
         <div style={{ padding: '0.5rem 0.75rem', flex: 1 }}>
           {NAV_ITEMS.map(item => (
             <button
               key={item.id}
               onClick={() => setActive(item.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', borderRadius: 4, border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 13, fontWeight: active === item.id ? 500 : 400, color: active === item.id ? 'var(--gold)' : 'var(--ink-soft)', background: active === item.id ? 'rgba(196,146,42,.08)' : 'transparent', marginBottom: 2, transition: 'all .15s' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', borderRadius: 4, border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 13, fontWeight: active === item.id ? 500 : 400, color: active === item.id ? 'var(--gold)' : 'var(--ink-soft)', background: active === item.id ? 'rgba(196,146,42,.08)' : 'transparent', marginBottom: 2, transition: 'all .15s', whiteSpace: 'nowrap' }}
             >
               <span style={{ fontSize: 15, width: 18, textAlign: 'center' }}>{item.icon}</span>
               {item.label}
             </button>
           ))}
         </div>
-        <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid var(--cream-dark)' }}>
+
+        {/* Avatar — hidden on mobile */}
+        <div className="profile-sidebar-avatar" style={{ padding: '1rem 1.25rem', borderTop: '1px solid var(--cream-dark)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {logoPreview
               ? <img src={logoPreview} alt="Logo" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-              : <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(196,146,42,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: 'var(--gold)', flexShrink: 0 }}>
-                  {fullName.charAt(0) || '?'}
-                </div>
+              : <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(196,146,42,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: 'var(--gold)', flexShrink: 0 }}>{fullName.charAt(0) || '?'}</div>
             }
             <div>
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{fullName || 'Your Name'}</div>
@@ -316,14 +266,16 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div style={{ padding: '2.5rem 3rem', maxWidth: 760 }}>
+      {/* MAIN CONTENT — className enables mobile full-width */}
+      <div className="profile-main">
 
         {/* ── PROFILE ── */}
         {active === 'profile' && (
           <div>
             {sectionTitle('Profile', 'Your information shown to clients and the community.')}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            {/* Back link on mobile */}
+            <Link href="/dashboard" style={{ display: 'none', fontSize: 13, color: 'var(--ink-soft)', textDecoration: 'none', marginBottom: '1.5rem' }} className="profile-mobile-back">← Dashboard</Link>
+            <div className="profile-form-grid">
               <div><label style={labelStyle}>Full name</label><input value={fullName} onChange={e => setFullName(e.target.value)} style={inputStyle} /></div>
               <div><label style={labelStyle}>Studio / business name</label><input value={studioName} onChange={e => setStudioName(e.target.value)} style={inputStyle} placeholder="e.g. Jane Doe Photography" /></div>
               <div><label style={labelStyle}>Email address</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} /></div>
@@ -339,9 +291,7 @@ export default function ProfilePage() {
         {/* ── BRANDING ── */}
         {active === 'branding' && (
           <div>
-            {sectionTitle('Branding', "Your logo and colors appear on client share pages.")}
-
-            {/* White-label toggle — Pro only */}
+            {sectionTitle('Branding', 'Your logo and colors appear on client share pages.')}
             <div style={{ background: isPro ? 'white' : 'var(--cream)', border: `1px solid ${isPro ? 'var(--cream-dark)' : 'var(--sand)'}`, borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div>
@@ -349,33 +299,19 @@ export default function ProfilePage() {
                     🎨 White-label share pages
                     {!isPro && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)', fontWeight: 500 }}>Pro only</span>}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>
-                    Your logo replaces the LocateShoot branding on client-facing share pages.
-                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>Your logo replaces the LocateShoot branding on client share pages.</div>
                 </div>
-                <div
-                  onClick={() => isPro && updatePref('remove_ls_branding', !prefs.remove_ls_branding)}
-                  style={{ width: 44, height: 24, borderRadius: 12, background: prefs.remove_ls_branding && isPro ? 'var(--gold)' : 'var(--cream-dark)', cursor: isPro ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background .2s', flexShrink: 0, opacity: isPro ? 1 : 0.5 }}
-                >
+                <div onClick={() => isPro && updatePref('remove_ls_branding', !prefs.remove_ls_branding)} style={{ width: 44, height: 24, borderRadius: 12, background: prefs.remove_ls_branding && isPro ? 'var(--gold)' : 'var(--cream-dark)', cursor: isPro ? 'pointer' : 'not-allowed', position: 'relative', transition: 'background .2s', flexShrink: 0, opacity: isPro ? 1 : 0.5 }}>
                   <div style={{ position: 'absolute', top: 3, left: prefs.remove_ls_branding && isPro ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
                 </div>
               </div>
-              {!isPro && (
-                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--gold)' }}>
-                  <button onClick={() => setActive('billing')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gold)', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, padding: 0 }}>Upgrade to Pro</button> to white-label your share pages.
-                </div>
-              )}
             </div>
 
-            {/* Logo upload */}
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>Studio logo</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                 <div style={{ width: 80, height: 80, borderRadius: '50%', border: '2px dashed var(--sand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', background: 'var(--cream)' }}>
-                  {logoPreview
-                    ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <div style={{ textAlign: 'center' }}><div style={{ fontSize: 22, marginBottom: 2 }}>📷</div><div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>No logo</div></div>
-                  }
+                  {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ textAlign: 'center' }}><div style={{ fontSize: 22, marginBottom: 2 }}>📷</div><div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>No logo</div></div>}
                 </div>
                 <div>
                   <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
@@ -386,7 +322,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Accent color */}
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>Accent color</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem' }}>Used for buttons and highlights on your client share pages.</div>
@@ -401,8 +336,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Share page display options */}
-            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
+            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>Share page display</div>
               <label onClick={() => setShowStudioName(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: '1rem' }}>
                 <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${showStudioName ? 'var(--gold)' : 'var(--sand)'}`, background: showStudioName ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>
@@ -419,24 +353,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Preview */}
-            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, overflow: 'hidden', marginBottom: '1.5rem' }}>
-              <div style={{ padding: '.9rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Preview — client share page header</div>
-              <div style={{ background: 'var(--ink)', padding: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '.75rem' }}>
-                  {logoPreview
-                    ? <img src={logoPreview} alt="Logo" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-                    : <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'rgba(245,240,232,.5)' }}>LS</div>
-                  }
-                  {showStudioName && <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(245,240,232,.8)' }}>{studioName || fullName || 'Your Studio'}</div>}
-                </div>
-                <div style={{ fontSize: 'clamp(22px,3vw,36px)', fontFamily: 'var(--font-playfair),serif', fontWeight: 900, color: 'var(--cream)', marginBottom: 4 }}>
-                  Choose your <em style={{ fontStyle: 'italic', color: brandAccent }}>perfect</em> spot
-                </div>
-                <div style={{ fontSize: 13, color: 'rgba(245,240,232,.5)', fontWeight: 300 }}>{shareTagline}</div>
-              </div>
-            </div>
-
             <button onClick={saveBranding} disabled={saving} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 24px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Saving…' : 'Save branding'}
             </button>
@@ -449,12 +365,10 @@ export default function ProfilePage() {
             {sectionTitle('Message Templates', 'Reusable messages for your client share links.')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
               {templates.length === 0 && !showNewForm && (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13, fontStyle: 'italic', background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)' }}>
-                  No templates yet — add your first one below.
-                </div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13, fontStyle: 'italic', background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)' }}>No templates yet — add your first one below.</div>
               )}
               {templates.map(t => (
-                <div key={t.id} style={{ background: 'white', border: `1px solid ${editingId === t.id ? 'var(--gold)' : 'var(--cream-dark)'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color .15s' }}>
+                <div key={t.id} style={{ background: 'white', border: `1px solid ${editingId === t.id ? 'var(--gold)' : 'var(--cream-dark)'}`, borderRadius: 10, overflow: 'hidden' }}>
                   {editingId === t.id ? (
                     <div style={{ padding: '1.25rem' }}>
                       <div style={{ marginBottom: '.75rem' }}><label style={labelStyle}>Template name</label><input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} autoFocus /></div>
@@ -469,8 +383,8 @@ export default function ProfilePage() {
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
                         <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{t.name}</div>
                         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                          <button onClick={() => startEdit(t)} style={{ padding: '4px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>Edit</button>
-                          <button onClick={() => deleteTemplate(t.id)} style={{ padding: '4px 12px', borderRadius: 4, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', background: deleteConfirm === t.id ? 'var(--rust)' : 'rgba(181,75,42,.08)', color: deleteConfirm === t.id ? 'white' : 'var(--rust)', transition: 'all .15s' }}>
+                          <button onClick={() => startEdit(t)} style={{ padding: '4px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                          <button onClick={() => deleteTemplate(t.id)} style={{ padding: '4px 12px', borderRadius: 4, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', background: deleteConfirm === t.id ? 'var(--rust)' : 'rgba(181,75,42,.08)', color: deleteConfirm === t.id ? 'white' : 'var(--rust)' }}>
                             {deleteConfirm === t.id ? 'Confirm delete' : 'Delete'}
                           </button>
                         </div>
@@ -532,7 +446,7 @@ export default function ProfilePage() {
         {active === 'billing' && (
           <div>
             {sectionTitle('Subscription & Billing', 'Manage your plan.')}
-            <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+            <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--cream)', marginBottom: 3 }}>{isPro ? 'Pro Plan' : 'Free Plan'}</div>
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,.45)' }}>{isPro ? 'Active subscription' : 'Upgrade to unlock all Pro features'}</div>
@@ -548,11 +462,7 @@ export default function ProfilePage() {
                 <button onClick={() => setToast('Stripe billing coming soon!')} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '9px 20px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Upgrade to Pro →</button>
               </div>
             )}
-            {isPro && (
-              <button onClick={() => setToast('Cancellation flow coming soon')} style={{ background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.25)', padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-                Cancel subscription
-              </button>
-            )}
+            {isPro && <button onClick={() => setToast('Cancellation flow coming soon')} style={{ background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.25)', padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel subscription</button>}
           </div>
         )}
 
@@ -582,6 +492,26 @@ export default function ProfilePage() {
           {toast}
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 768px) {
+          .profile-sidebar { padding: 0 !important; }
+          .profile-sidebar > div:first-child { display: none !important; }     /* logo */
+          .profile-sidebar > div:nth-child(2) { display: none !important; }   /* back */
+          .profile-sidebar > div:nth-child(3) { 
+            padding: 0 !important; flex: unset !important;
+            display: flex !important; flex-direction: row !important;
+            overflow-x: auto !important; gap: 0 !important;
+          }
+          .profile-sidebar > div:nth-child(3) button {
+            min-width: max-content !important; border-radius: 0 !important;
+            padding: 12px 14px !important; margin-bottom: 0 !important;
+            border-bottom: 2px solid transparent !important; font-size: 12px !important;
+          }
+          .profile-sidebar > div:last-child { display: none !important; }     /* avatar */
+          .profile-mobile-back { display: block !important; }
+        }
+      `}</style>
     </div>
   )
 }
