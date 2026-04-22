@@ -19,6 +19,9 @@ interface Preferences {
   show_studio_name?:       boolean
   share_tagline?:          string
   logo_url?:               string
+  studio_name?:            string
+  instagram?:              string
+  website?:                string
 }
 
 const DEFAULT_PREFS: Preferences = {
@@ -120,6 +123,9 @@ export default function ProfilePage() {
         if (p.show_studio_name !== undefined) setShowStudioName(p.show_studio_name)
         if (p.share_tagline)   setShareTagline(p.share_tagline)
         if (p.logo_url)        setLogoPreview(p.logo_url)
+        if (p.studio_name)     setStudioName(p.studio_name)
+        if (p.instagram)       setInstagram(p.instagram)
+        if (p.website)         setWebsite(p.website)
       }
     }
     const { data: tmplData } = await supabase.from('message_templates').select('id,name,body').eq('user_id', user.id).order('created_at', { ascending: true })
@@ -236,7 +242,18 @@ export default function ProfilePage() {
 
   async function saveProfile() {
     if (!userId) return; setSaving(true)
-    const { error } = await supabase.from('profiles').upsert({ id: userId, full_name: fullName.trim(), email: email.trim() })
+    const updated: Preferences = {
+      ...prefs,
+      studio_name: studioName.trim() || undefined,
+      instagram:   instagram.trim() || undefined,
+      website:     website.trim() || undefined,
+    }
+    const { error } = await supabase.from('profiles').update({
+      full_name:   fullName.trim(),
+      email:       email.trim(),
+      preferences: updated,
+    }).eq('id', userId)
+    if (!error) setPrefs(updated)
     setSaving(false); setToast(error ? '⚠ Could not save' : '✓ Profile saved!')
   }
 
