@@ -42,6 +42,18 @@ export async function GET(request: Request, context: any) {
       .in('id', locIds)
     if (error) console.error('locations query error:', error)
     locations = data ?? []
+
+    const { data: photoData } = await admin
+      .from('location_photos')
+      .select('location_id,url,created_at')
+      .in('location_id', locIds)
+      .eq('is_private', false)
+      .order('created_at', { ascending: true })
+    const photoMap: Record<string, string> = {}
+    ;(photoData ?? []).forEach((p: any) => {
+      if (!photoMap[p.location_id]) photoMap[p.location_id] = p.url
+    })
+    locations = locations.map((l: any) => ({ ...l, photo_url: photoMap[l.id] ?? null }))
   }
 
   const secIds: any[] = (share.secret_ids ?? []).filter((id: any) => id != null && id !== '')
