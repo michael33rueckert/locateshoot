@@ -1027,8 +1027,6 @@ body {
   .nav { padding-top: env(safe-area-inset-top, 0) !important; }
   body { padding-bottom: env(safe-area-inset-bottom, 0) !important; }
 }
-
-*/
  
 /* ── Hamburger nav ── */
 .hamburger-btn {
