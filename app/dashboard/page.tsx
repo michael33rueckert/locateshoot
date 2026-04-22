@@ -3,18 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { ADMIN_EMAIL } from '@/lib/admin'
 
 interface Profile           { id: string; full_name: string | null; email: string | null }
 interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number }
-interface PendingLocation   { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
 interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; picks: ClientPick[]; expanded: boolean }
-
-interface ScanResult {
-  success: boolean; inserted: number; errors: number; scans: number
-  locations: string[]; errorList: string[]
-}
 
 function timeAgo(d: string) {
   const diff  = Date.now() - new Date(d).getTime()
@@ -39,46 +34,10 @@ const STATUS_CONFIG = {
   expired: { label: '⏱ Expired', bg: 'var(--cream-dark)',    color: 'var(--ink-soft)', border: 'var(--sand)'          },
 }
 
-const ALL_CATEGORIES = [
-  { name: 'Parks & Nature',                icon: '🌳' },
-  { name: 'Urban & Architecture',          icon: '🏙' },
-  { name: 'Historic & Cultural',           icon: '🏛' },
-  { name: 'Waterfront & Water Features',   icon: '💧' },
-  { name: 'Fields, Meadows & Open Spaces', icon: '🌾' },
-  { name: 'Private Venues & Hidden Gems',  icon: '✨' },
-  { name: 'Golden Hour & Sunrise Spots',   icon: '🌅' },
-  { name: 'Neighborhoods & Street Life',   icon: '🏘' },
-]
-
-const POPULAR_CITIES = [
-  'New York, New York', 'Los Angeles, California', 'Chicago, Illinois',
-  'Houston, Texas', 'Phoenix, Arizona', 'Philadelphia, Pennsylvania',
-  'San Antonio, Texas', 'San Diego, California', 'Dallas, Texas',
-  'Austin, Texas', 'Nashville, Tennessee', 'Denver, Colorado',
-  'Seattle, Washington', 'Portland, Oregon', 'Atlanta, Georgia',
-  'Miami, Florida', 'Tampa, Florida', 'Charlotte, North Carolina',
-  'Raleigh, North Carolina', 'Minneapolis, Minnesota', 'St. Louis, Missouri',
-  'Louisville, Kentucky', 'Indianapolis, Indiana', 'Columbus, Ohio',
-  'Cleveland, Ohio', 'Pittsburgh, Pennsylvania', 'Detroit, Michigan',
-  'Milwaukee, Wisconsin', 'Oklahoma City, Oklahoma', 'Tulsa, Oklahoma',
-  'Albuquerque, New Mexico', 'Tucson, Arizona', 'Las Vegas, Nevada',
-  'Salt Lake City, Utah', 'Boise, Idaho', 'Sacramento, California',
-  'San Francisco, California', 'San Jose, California', 'New Orleans, Louisiana',
-  'Memphis, Tennessee', 'Richmond, Virginia', 'Virginia Beach, Virginia',
-  'Baltimore, Maryland', 'Washington, DC', 'Boston, Massachusetts',
-  'Providence, Rhode Island', 'Hartford, Connecticut', 'Buffalo, New York',
-  'Kansas City, Missouri', 'Kansas City, Kansas', 'Overland Park, Kansas',
-  'Parkville, Missouri', "Lee's Summit, Missouri", 'Independence, Missouri',
-]
-
-const ADMIN_EMAIL = 'michael@locateshoot.com'
-
 export default function DashboardPage() {
   const [profile,             setProfile]             = useState<Profile | null>(null)
   const [shareLinks,          setShareLinks]           = useState<ShareLink[]>([])
   const [portfolioLocs,       setPortfolioLocs]        = useState<PortfolioLocation[]>([])
-  const [locationCount,       setLocationCount]        = useState<number>(0)
-  const [pendingLocs,         setPendingLocs]          = useState<PendingLocation[]>([])
   const [permanentLinks,      setPermanentLinks]       = useState<PermanentLink[]>([])
   const [loading,             setLoading]              = useState(true)
   const [toast,               setToast]                = useState<string | null>(null)
@@ -87,16 +46,6 @@ export default function DashboardPage() {
   const [preselectAllPortfolio, setPreselectAllPortfolio] = useState(false)
   const [deleteShareId,       setDeleteShareId]        = useState<string | null>(null)
   const [mobileMenuOpen,      setMobileMenuOpen]       = useState(false)
-
-  // Scanner state
-  const [scanRunning,     setScanRunning]     = useState(false)
-  const [scanResult,      setScanResult]      = useState<ScanResult | null>(null)
-  const [scanCities,      setScanCities]      = useState<string[]>([])
-  const [scanCategories,  setScanCategories]  = useState<string[]>(ALL_CATEGORIES.map(c => c.name))
-  const [showScanPanel,   setShowScanPanel]   = useState(false)
-  const [customCityInput, setCustomCityInput] = useState('')
-  const [citySearchQuery, setCitySearchQuery] = useState('')
-  const [showPopular,     setShowPopular]     = useState(false)
 
   useEffect(() => {
     if (!toast) return
@@ -110,16 +59,14 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/'; return }
 
-      const [profileRes, sharesRes, portfolioRes, locCountRes] = await Promise.all([
+      const [profileRes, sharesRes, portfolioRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email').eq('id', user.id).single(),
         supabase.from('share_links').select('id,session_name,created_at,expires_at,location_ids,secret_ids,portfolio_location_ids,slug').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10),
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,is_secret,created_at').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('locations').select('id', { count: 'exact', head: true }),
       ])
 
       if (profileRes.data)            setProfile(profileRes.data)
       if (sharesRes.data)             setShareLinks(sharesRes.data)
-      if (locCountRes.count !== null) setLocationCount(locCountRes.count)
 
       if (portfolioRes.data && portfolioRes.data.length > 0) {
         const pIds = portfolioRes.data.map((p: any) => p.id)
@@ -136,14 +83,6 @@ export default function DashboardPage() {
       } else {
         setPortfolioLocs([])
       }
-
-      const { data: pendingData } = await supabase
-        .from('locations')
-        .select('id,name,city,state,description,access_type,tags,created_at,latitude,longitude')
-        .eq('status', 'pending')
-        .eq('source', 'community')
-        .order('created_at', { ascending: false })
-      if (pendingData) setPendingLocs(pendingData)
 
       const { data: permData } = await supabase
         .from('share_links')
@@ -173,53 +112,9 @@ export default function DashboardPage() {
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
   const isAdmin   = profile?.email === ADMIN_EMAIL
 
-  const estLocations = scanCities.length * scanCategories.length * 20
-  const estMinutes   = Math.ceil(scanCities.length * scanCategories.length * 0.7)
-
-  async function runScanner() {
-    if (!profile?.id || scanCities.length === 0 || scanCategories.length === 0) return
-    setScanRunning(true); setScanResult(null)
-    try {
-      const res = await fetch('/api/scan-locations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cities: scanCities, categories: scanCategories, userId: profile.id }),
-      })
-      const data: ScanResult = await res.json()
-      setScanResult(data)
-      if (data.inserted > 0) { setLocationCount(prev => prev + data.inserted); setToast(`✓ Added ${data.inserted} new locations!`) }
-      else setToast('Scan complete — no new locations found')
-    } catch (err: any) { setToast('⚠ Scanner error — check console'); console.error(err) }
-    finally { setScanRunning(false) }
-  }
-
-  async function approveLocation(id: string) {
-    const { error } = await supabase.from('locations').update({ status: 'published' }).eq('id', id)
-    if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setLocationCount(prev => prev + 1); setToast('✓ Location approved and published!') }
-  }
-
-  async function rejectLocation(id: string) {
-    const { error } = await supabase.from('locations').delete().eq('id', id)
-    if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setToast('Location rejected and deleted') }
-  }
-
   function togglePermLinkExpanded(id: string) {
     setPermanentLinks(prev => prev.map(l => l.id === id ? { ...l, expanded: !l.expanded } : l))
   }
-
-  function addCustomCity() {
-    const city = customCityInput.trim()
-    if (!city) return
-    const formatted = city.replace(/\b\w/g, c => c.toUpperCase())
-    if (!scanCities.includes(formatted)) setScanCities(prev => [...prev, formatted])
-    setCustomCityInput(''); setToast(`Added ${formatted}`)
-  }
-
-  function removeCity(city: string) { setScanCities(prev => prev.filter(c => c !== city)) }
-  function togglePopularCity(city: string) { setScanCities(prev => prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]) }
-  function toggleCategory(name: string) { setScanCategories(prev => prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name]) }
-
-  const filteredPopular = POPULAR_CITIES.filter(c => citySearchQuery === '' || c.toLowerCase().includes(citySearchQuery.toLowerCase()))
 
   async function deleteShareLink(id: string) {
     if (deleteShareId !== id) { setDeleteShareId(id); return }
@@ -242,9 +137,6 @@ export default function DashboardPage() {
   function linkStatus(s: ShareLink) {
     return s.expires_at && new Date(s.expires_at) < new Date() ? 'expired' : 'active'
   }
-
-  const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
-  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
 
   if (loading) {
     return (
@@ -271,6 +163,7 @@ export default function DashboardPage() {
           <Link href="/explore" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Explore map</Link>
           <Link href="/share"   style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>New share</Link>
           <Link href="/profile" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Profile</Link>
+          {isAdmin && <Link href="/admin" style={{ fontSize: 13, color: 'var(--gold)', textDecoration: 'none', fontWeight: 500 }}>Admin</Link>}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -316,7 +209,7 @@ export default function DashboardPage() {
             { label: 'Portfolio',       value: portfolioLocs.length,           sub: 'your curated set' },
             { label: 'Share links',     value: shareLinks.length,              sub: 'total created'    },
             { label: 'Permanent links', value: permanentLinks.length,          sub: 'booking-workflow' },
-            { label: 'Map locations',   value: locationCount.toLocaleString(), sub: 'in the database'  },
+            { label: 'Client picks',    value: permanentLinks.reduce((s,l) => s + l.picks.length, 0), sub: 'from permanent links' },
           ].map(stat => (
             <div key={stat.label} style={{ background: 'white', borderRadius: 10, padding: '1rem 1.25rem', border: '1px solid var(--cream-dark)' }}>
               <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 6 }}>{stat.label}</div>
@@ -379,192 +272,6 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-
-            {/* AI SCANNER */}
-            {isAdmin && (
-              <div style={{ background: 'var(--ink)', borderRadius: 10, border: '1px solid rgba(255,255,255,.08)', overflow: 'hidden' }}>
-                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      🤖 AI Location Scanner
-                      <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.2)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)' }}>
-                        {locationCount.toLocaleString()} in DB
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12, color: 'rgba(245,240,232,.4)', fontWeight: 300, marginTop: 2 }}>
-                      Multi-pass scan by category — finds every type of photoshoot location in any US city.
-                    </div>
-                  </div>
-                  <button onClick={() => setShowScanPanel(p => !p)} style={{ padding: '6px 14px', borderRadius: 4, background: 'rgba(255,255,255,.08)', color: 'rgba(245,240,232,.7)', border: '1px solid rgba(255,255,255,.15)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {showScanPanel ? 'Hide' : 'Configure'}
-                  </button>
-                </div>
-
-                {showScanPanel && (
-                  <div style={{ padding: '1.25rem' }}>
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)' }}>Add a city to scan</label>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input type="text" value={customCityInput} onChange={e => setCustomCityInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCustomCity() }} placeholder="e.g. Springfield, Missouri" style={{ flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-                        <button onClick={addCustomCity} disabled={!customCityInput.trim()} style={{ padding: '9px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: !customCityInput.trim() ? 0.5 : 1 }}>+ Add</button>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'rgba(245,240,232,.25)', marginTop: 4 }}>Type any US city and state, press Enter or click Add</div>
-                    </div>
-
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Browse popular US cities</label>
-                        <button onClick={() => setShowPopular(p => !p)} style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{showPopular ? 'Hide ▲' : 'Show ▼'}</button>
-                      </div>
-                      {showPopular && (
-                        <>
-                          <input type="text" value={citySearchQuery} onChange={e => setCitySearchQuery(e.target.value)} placeholder="Filter cities…" style={{ width: '100%', padding: '7px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 12, outline: 'none', marginBottom: 8 }} />
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
-                            {filteredPopular.map(city => (
-                              <button key={city} onClick={() => togglePopularCity(city)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${scanCities.includes(city) ? 'var(--gold)' : 'rgba(255,255,255,.15)'}`, background: scanCities.includes(city) ? 'rgba(196,146,42,.2)' : 'transparent', color: scanCities.includes(city) ? 'var(--gold)' : 'rgba(245,240,232,.5)', transition: 'all .15s' }}>
-                                {scanCities.includes(city) ? '✓ ' : ''}{city.split(',')[0]}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Cities queued ({scanCities.length})</label>
-                        {scanCities.length > 0 && <button onClick={() => setScanCities([])} style={{ fontSize: 11, color: 'rgba(181,75,42,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>}
-                      </div>
-                      {scanCities.length === 0 ? (
-                        <div style={{ fontSize: 12, color: 'rgba(245,240,232,.2)', fontStyle: 'italic', padding: '6px 0' }}>No cities added yet — type one above or browse popular cities.</div>
-                      ) : (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 100, overflowY: 'auto' }}>
-                          {scanCities.map(city => (
-                            <div key={city} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 10px', borderRadius: 20, background: 'rgba(196,146,42,.15)', border: '1px solid rgba(196,146,42,.25)' }}>
-                              <span style={{ fontSize: 11, color: 'var(--gold)' }}>{city}</span>
-                              <button onClick={() => removeCity(city)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(196,146,42,.5)', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>✕</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ marginBottom: '1.25rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Scan categories ({scanCategories.length}/{ALL_CATEGORIES.length})</label>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button onClick={() => setScanCategories(ALL_CATEGORIES.map(c => c.name))} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>All</button>
-                          <span style={{ color: 'rgba(255,255,255,.15)' }}>·</span>
-                          <button onClick={() => setScanCategories([])} style={{ fontSize: 11, color: 'rgba(245,240,232,.3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>None</button>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        {ALL_CATEGORIES.map(cat => {
-                          const sel = scanCategories.includes(cat.name)
-                          return (
-                            <div key={cat.name} onClick={() => toggleCategory(cat.name)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: sel ? 'rgba(196,146,42,.1)' : 'rgba(255,255,255,.04)', border: `1px solid ${sel ? 'rgba(196,146,42,.3)' : 'rgba(255,255,255,.08)'}`, transition: 'all .15s' }}>
-                              <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${sel ? 'var(--gold)' : 'rgba(255,255,255,.2)'}`, background: sel ? 'var(--gold)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', flexShrink: 0, transition: 'all .15s' }}>
-                                {sel ? '✓' : ''}
-                              </div>
-                              <span style={{ fontSize: 14, flexShrink: 0 }}>{cat.icon}</span>
-                              <span style={{ fontSize: 12, color: sel ? 'var(--gold)' : 'rgba(245,240,232,.5)', fontWeight: sel ? 500 : 300 }}>{cat.name}</span>
-                              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(245,240,232,.2)' }}>~20 locations</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {scanCities.length > 0 && scanCategories.length > 0 && (
-                      <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8, marginBottom: '1.25rem' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, textAlign: 'center' }}>
-                          <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>{scanCities.length}</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>cities</div></div>
-                          <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>~{estLocations.toLocaleString()}</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>est. locations</div></div>
-                          <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: estMinutes > 10 ? 'var(--rust)' : 'var(--sage)' }}>~{estMinutes}m</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>est. time</div></div>
-                        </div>
-                        {estMinutes > 10 && <div style={{ marginTop: 10, fontSize: 11, color: 'rgba(245,240,232,.35)', textAlign: 'center', lineHeight: 1.5 }}>⏱ Large scan — keep this tab open. Consider scanning a few cities at a time.</div>}
-                      </div>
-                    )}
-
-                    <button onClick={runScanner} disabled={scanRunning || scanCities.length === 0 || scanCategories.length === 0} style={{ width: '100%', padding: '13px', borderRadius: 4, background: scanRunning ? 'rgba(196,146,42,.3)' : 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: scanRunning || scanCities.length === 0 || scanCategories.length === 0 ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: scanCities.length === 0 || scanCategories.length === 0 ? 0.4 : 1 }}>
-                      {scanRunning ? (<><div style={{ width: 16, height: 16, border: '2px solid rgba(26,22,18,.3)', borderTop: '2px solid var(--ink)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Scanning — please wait…</>) :
-                        scanCities.length === 0 ? '← Add at least one city to scan' :
-                        scanCategories.length === 0 ? '← Select at least one category' :
-                        `🤖 Run Scanner — ${scanCities.length} ${scanCities.length === 1 ? 'city' : 'cities'} × ${scanCategories.length} categories`}
-                    </button>
-
-                    {scanRunning && <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(245,240,232,.35)', textAlign: 'center', lineHeight: 1.6 }}>Running {scanCities.length * scanCategories.length} targeted scans. Don&apos;t close this tab.</div>}
-
-                    {scanResult && (
-                      <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,.05)', borderRadius: 8, border: '1px solid rgba(255,255,255,.1)' }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--cream)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          ✓ Scan complete
-                          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(74,103,65,.3)', color: '#c8e8c4', border: '1px solid rgba(74,103,65,.4)', fontWeight: 500 }}>{scanResult.inserted} added</span>
-                          {scanResult.errors > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(255,255,255,.05)', color: 'rgba(245,240,232,.35)', border: '1px solid rgba(255,255,255,.1)', fontWeight: 400 }}>{scanResult.errors} skipped</span>}
-                          <span style={{ fontSize: 11, color: 'rgba(245,240,232,.3)' }}>({scanResult.scans} scans run)</span>
-                        </div>
-                        <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                          {scanResult.locations.map((loc, i) => <div key={i} style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}><span style={{ color: 'var(--sage)', fontSize: 10, flexShrink: 0, marginTop: 2 }}>✓</span><span>{loc}</span></div>)}
-                        </div>
-                        {scanResult.errorList.length > 0 && (
-                          <details style={{ marginTop: 8 }}>
-                            <summary style={{ fontSize: 11, color: 'rgba(245,240,232,.3)', cursor: 'pointer' }}>Show skipped ({scanResult.errorList.length})</summary>
-                            <div style={{ marginTop: 4, maxHeight: 100, overflowY: 'auto' }}>{scanResult.errorList.map((e, i) => <div key={i} style={{ fontSize: 10, color: 'rgba(245,240,232,.2)', padding: '1px 0' }}>{e}</div>)}</div>
-                          </details>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {!showScanPanel && (
-                  <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: 13, color: 'rgba(245,240,232,.4)', fontWeight: 300 }}>
-                      {locationCount === 0 ? 'No locations in database yet — run the scanner to get started.' : `${locationCount.toLocaleString()} locations in database · ${ALL_CATEGORIES.length} scan categories available`}
-                    </div>
-                    <button onClick={() => setShowScanPanel(true)} style={{ padding: '7px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                      {locationCount === 0 ? '🤖 Scan now' : '🤖 Scan more cities'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* PENDING SUBMISSIONS */}
-            {isAdmin && pendingLocs.length > 0 && (
-              <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      📬 Pending Submissions
-                      <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(181,75,42,.1)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)' }}>{pendingLocs.length} to review</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Community-submitted locations waiting for your approval.</div>
-                  </div>
-                </div>
-                {pendingLocs.map((loc, i) => (
-                  <div key={loc.id} style={{ padding: '1rem 1.25rem', borderBottom: i < pendingLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>{loc.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span>📍 {loc.city}{loc.state ? `, ${loc.state}` : ''}</span>
-                        <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access_type === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access_type === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access_type === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>{loc.access_type === 'public' ? '● Public' : '🔒 Private'}</span>
-                        <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{timeAgo(loc.created_at)}</span>
-                      </div>
-                      {loc.description && <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5, marginBottom: 6 }}>{loc.description}</div>}
-                      {loc.tags?.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>{loc.tags.map(t => <span key={t} style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, background: 'var(--cream-dark)', color: 'var(--ink-soft)', border: '1px solid var(--sand)' }}>{t}</span>)}</div>}
-                      <div style={{ fontSize: 11, color: loc.latitude && loc.longitude ? 'var(--sage)' : 'var(--rust)', fontWeight: 300 }}>
-                        {loc.latitude && loc.longitude ? `📌 Coords: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : '⚠ No coordinates'}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => approveLocation(loc.id)} style={{ flex: 1, padding: '9px', borderRadius: 4, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.25)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Approve & publish</button>
-                      <button onClick={() => rejectLocation(loc.id)} style={{ padding: '9px 18px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Reject</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* PERMANENT SHARE LINKS */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>

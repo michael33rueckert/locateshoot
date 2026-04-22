@@ -1,0 +1,405 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { isAdminEmail } from '@/lib/admin'
+
+interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
+
+interface AdminUser { id: string; email: string; full_name: string | null; plan: string | null; created_at: string; portfolio_count: number; share_link_count: number }
+
+interface AdminMetrics {
+  users:        { total: number; by_plan: Record<string, number>; new_this_week: number }
+  locations:    { total: number; by_status: Record<string, number> }
+  share_links:  { total: number; permanent: number; new_this_week: number }
+  client_picks: { total: number }
+  portfolio:    { total_rows: number; active_users: number }
+}
+
+interface ScanResult {
+  success: boolean; inserted: number; errors: number; scans: number
+  locations: string[]; errorList: string[]
+}
+
+const ALL_CATEGORIES = [
+  { name: 'Parks & Nature',                icon: '🌳' },
+  { name: 'Urban & Architecture',          icon: '🏙' },
+  { name: 'Historic & Cultural',           icon: '🏛' },
+  { name: 'Waterfront & Water Features',   icon: '💧' },
+  { name: 'Fields, Meadows & Open Spaces', icon: '🌾' },
+  { name: 'Private Venues & Hidden Gems',  icon: '✨' },
+  { name: 'Golden Hour & Sunrise Spots',   icon: '🌅' },
+  { name: 'Neighborhoods & Street Life',   icon: '🏘' },
+]
+
+const POPULAR_CITIES = [
+  'New York, New York', 'Los Angeles, California', 'Chicago, Illinois',
+  'Houston, Texas', 'Phoenix, Arizona', 'Philadelphia, Pennsylvania',
+  'San Antonio, Texas', 'San Diego, California', 'Dallas, Texas',
+  'Austin, Texas', 'Nashville, Tennessee', 'Denver, Colorado',
+  'Seattle, Washington', 'Portland, Oregon', 'Atlanta, Georgia',
+  'Miami, Florida', 'Tampa, Florida', 'Charlotte, North Carolina',
+  'Raleigh, North Carolina', 'Minneapolis, Minnesota', 'St. Louis, Missouri',
+  'Louisville, Kentucky', 'Indianapolis, Indiana', 'Columbus, Ohio',
+  'Cleveland, Ohio', 'Pittsburgh, Pennsylvania', 'Detroit, Michigan',
+  'Milwaukee, Wisconsin', 'Oklahoma City, Oklahoma', 'Tulsa, Oklahoma',
+  'Albuquerque, New Mexico', 'Tucson, Arizona', 'Las Vegas, Nevada',
+  'Salt Lake City, Utah', 'Boise, Idaho', 'Sacramento, California',
+  'San Francisco, California', 'San Jose, California', 'New Orleans, Louisiana',
+  'Memphis, Tennessee', 'Richmond, Virginia', 'Virginia Beach, Virginia',
+  'Baltimore, Maryland', 'Washington, DC', 'Boston, Massachusetts',
+  'Providence, Rhode Island', 'Hartford, Connecticut', 'Buffalo, New York',
+  'Kansas City, Missouri', 'Kansas City, Kansas', 'Overland Park, Kansas',
+  'Parkville, Missouri', "Lee's Summit, Missouri", 'Independence, Missouri',
+]
+
+function timeAgo(d: string) {
+  const diff = Date.now() - new Date(d).getTime()
+  const mins = Math.floor(diff / 60000), hours = Math.floor(diff / 3600000), days = Math.floor(diff / 86400000)
+  if (mins < 2) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${days}d ago`
+}
+
+export default function AdminPage() {
+  const router = useRouter()
+  const [ready,    setReady]    = useState(false)
+  const [userId,   setUserId]   = useState<string | null>(null)
+  const [toast,    setToast]    = useState<string | null>(null)
+
+  const [metrics,     setMetrics]     = useState<AdminMetrics | null>(null)
+  const [users,       setUsers]       = useState<AdminUser[]>([])
+  const [pendingLocs, setPendingLocs] = useState<PendingLocation[]>([])
+  const [locationCount, setLocationCount] = useState<number>(0)
+
+  const [scanRunning,     setScanRunning]     = useState(false)
+  const [scanResult,      setScanResult]      = useState<ScanResult | null>(null)
+  const [scanCities,      setScanCities]      = useState<string[]>([])
+  const [scanCategories,  setScanCategories]  = useState<string[]>(ALL_CATEGORIES.map(c => c.name))
+  const [customCityInput, setCustomCityInput] = useState('')
+  const [citySearchQuery, setCitySearchQuery] = useState('')
+  const [showPopular,     setShowPopular]     = useState(false)
+
+  const loadAll = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) { router.push('/'); return }
+    if (!isAdminEmail(session.user.email)) { router.push('/dashboard'); return }
+    setUserId(session.user.id)
+
+    const headers = { Authorization: `Bearer ${session.access_token}` }
+    const [metricsRes, usersRes, pendingRes, locCountRes] = await Promise.all([
+      fetch('/api/admin/metrics', { headers }).then(r => r.ok ? r.json() : null),
+      fetch('/api/admin/users',   { headers }).then(r => r.ok ? r.json() : null),
+      supabase.from('locations').select('id,name,city,state,description,access_type,tags,created_at,latitude,longitude').eq('status','pending').eq('source','community').order('created_at',{ascending:false}),
+      supabase.from('locations').select('id', { count: 'exact', head: true }),
+    ])
+    if (metricsRes)             setMetrics(metricsRes)
+    if (usersRes?.users)        setUsers(usersRes.users)
+    if (pendingRes.data)        setPendingLocs(pendingRes.data)
+    if (locCountRes.count !== null && locCountRes.count !== undefined) setLocationCount(locCountRes.count)
+    setReady(true)
+  }, [router])
+
+  useEffect(() => { loadAll() }, [loadAll])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2600)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  const estLocations = scanCities.length * scanCategories.length * 20
+  const estMinutes   = Math.ceil(scanCities.length * scanCategories.length * 0.7)
+  const filteredPopular = POPULAR_CITIES.filter(c => citySearchQuery === '' || c.toLowerCase().includes(citySearchQuery.toLowerCase()))
+
+  async function runScanner() {
+    if (!userId || scanCities.length === 0 || scanCategories.length === 0) return
+    setScanRunning(true); setScanResult(null)
+    try {
+      const res = await fetch('/api/scan-locations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cities: scanCities, categories: scanCategories, userId }),
+      })
+      const data: ScanResult = await res.json()
+      setScanResult(data)
+      if (data.inserted > 0) { setLocationCount(prev => prev + data.inserted); setToast(`✓ Added ${data.inserted} locations`) }
+      else setToast('Scan complete — no new locations')
+    } catch (e) { setToast('⚠ Scanner error'); console.error(e) }
+    finally { setScanRunning(false) }
+  }
+
+  async function approveLocation(id: string) {
+    const { error } = await supabase.from('locations').update({ status: 'published' }).eq('id', id)
+    if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setLocationCount(p => p + 1); setToast('✓ Approved & published') }
+  }
+  async function rejectLocation(id: string) {
+    const { error } = await supabase.from('locations').delete().eq('id', id)
+    if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setToast('Rejected & deleted') }
+  }
+
+  function addCustomCity() {
+    const city = customCityInput.trim(); if (!city) return
+    const formatted = city.replace(/\b\w/g, c => c.toUpperCase())
+    if (!scanCities.includes(formatted)) setScanCities(p => [...p, formatted])
+    setCustomCityInput('')
+  }
+  function removeCity(c: string) { setScanCities(p => p.filter(x => x !== c)) }
+  function togglePopularCity(c: string) { setScanCities(p => p.includes(c) ? p.filter(x => x !== c) : [...p, c]) }
+  function toggleCategory(n: string) { setScanCategories(p => p.includes(n) ? p.filter(x => x !== n) : [...p, n]) }
+
+  if (!ready) {
+    return (
+      <div style={{ minHeight: '100svh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 32, height: 32, border: '2px solid rgba(0,0,0,.1)', borderTop: '2px solid var(--gold)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    )
+  }
+
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
+
+  return (
+    <div style={{ minHeight: '100svh', background: 'var(--cream)' }}>
+      <div style={{ background: 'var(--ink)', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Link href="/dashboard" style={{ fontSize: 12, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>← Dashboard</Link>
+          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 900, color: 'var(--cream)' }}>Admin</div>
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)' }}>Admin-only tools & metrics</div>
+      </div>
+
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.5rem 1rem 4rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+        {/* METRICS */}
+        <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', padding: '1rem 1.25rem' }}>
+          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 12 }}>📊 Metrics</div>
+          {!metrics ? (
+            <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>Loading…</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+              <MetricCard label="Total users" value={metrics.users.total} sub={`+${metrics.users.new_this_week} this week`} />
+              <MetricCard label="Paid plans" value={Object.entries(metrics.users.by_plan).filter(([p]) => p !== 'free').reduce((s,[,v]) => s+v, 0)} sub={`${metrics.users.by_plan['free'] ?? 0} free`} />
+              <MetricCard label="Share links" value={metrics.share_links.total} sub={`+${metrics.share_links.new_this_week} this week`} />
+              <MetricCard label="Permanent links" value={metrics.share_links.permanent} sub="booking integration" />
+              <MetricCard label="Client picks" value={metrics.client_picks.total} sub="lifetime" />
+              <MetricCard label="Map locations" value={metrics.locations.total} sub={`${metrics.locations.by_status['pending'] ?? 0} pending`} />
+              <MetricCard label="Portfolio rows" value={metrics.portfolio.total_rows} sub={`${metrics.portfolio.active_users} active users`} />
+            </div>
+          )}
+          {metrics && Object.keys(metrics.users.by_plan).length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--cream-dark)', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {Object.entries(metrics.users.by_plan).map(([plan, count]) => (
+                <span key={plan} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: plan === 'pro' ? 'rgba(196,146,42,.1)' : 'var(--cream-dark)', color: plan === 'pro' ? 'var(--gold)' : 'var(--ink-soft)', border: `1px solid ${plan === 'pro' ? 'rgba(196,146,42,.2)' : 'var(--sand)'}` }}>
+                  {plan}: {count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* USERS */}
+        <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>👥 Users</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{users.length} shown</div>
+          </div>
+          {users.length === 0 ? (
+            <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No users yet</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--cream)' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Email</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Name</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Plan</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Portfolio</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Shares</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Joined</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map(u => (
+                    <tr key={u.id} style={{ borderBottom: '1px solid var(--cream-dark)' }}>
+                      <td style={{ padding: '9px 12px', color: 'var(--ink)', whiteSpace: 'nowrap' }}>{u.email}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--ink-soft)' }}>{u.full_name ?? '—'}</td>
+                      <td style={{ padding: '9px 12px' }}>
+                        <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: u.plan === 'pro' ? 'rgba(196,146,42,.1)' : 'var(--cream-dark)', color: u.plan === 'pro' ? 'var(--gold)' : 'var(--ink-soft)' }}>{u.plan ?? 'free'}</span>
+                      </td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.portfolio_count}</td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.share_link_count}</td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink-soft)', fontSize: 11, whiteSpace: 'nowrap' }}>{timeAgo(u.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* PENDING SUBMISSIONS */}
+        {pendingLocs.length > 0 && (
+          <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>📬 Pending Submissions</div>
+              <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(181,75,42,.1)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)' }}>{pendingLocs.length}</span>
+            </div>
+            {pendingLocs.map((loc, i) => (
+              <div key={loc.id} style={{ padding: '1rem 1.25rem', borderBottom: i < pendingLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>{loc.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>📍 {loc.city}{loc.state ? `, ${loc.state}` : ''}</span>
+                    <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access_type === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access_type === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access_type === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>{loc.access_type === 'public' ? '● Public' : '🔒 Private'}</span>
+                    <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{timeAgo(loc.created_at)}</span>
+                  </div>
+                  {loc.description && <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5, marginBottom: 6 }}>{loc.description}</div>}
+                  {loc.tags?.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>{loc.tags.map(t => <span key={t} style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, background: 'var(--cream-dark)', color: 'var(--ink-soft)', border: '1px solid var(--sand)' }}>{t}</span>)}</div>}
+                  <div style={{ fontSize: 11, color: loc.latitude && loc.longitude ? 'var(--sage)' : 'var(--rust)', fontWeight: 300 }}>
+                    {loc.latitude && loc.longitude ? `📌 Coords: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}` : '⚠ No coordinates'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => approveLocation(loc.id)} style={{ flex: 1, padding: '9px', borderRadius: 4, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.25)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Approve & publish</button>
+                  <button onClick={() => rejectLocation(loc.id)} style={{ padding: '9px 18px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Reject</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* AI SCANNER */}
+        <div style={{ background: 'var(--ink)', borderRadius: 10, border: '1px solid rgba(255,255,255,.08)', overflow: 'hidden' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              🤖 AI Location Scanner
+              <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.2)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)' }}>{locationCount.toLocaleString()} in DB</span>
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', fontWeight: 300 }}>Multi-pass scan by category — finds locations in any US city.</div>
+          </div>
+
+          <div style={{ padding: '1.25rem' }}>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)' }}>Add a city to scan</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="text" value={customCityInput} onChange={e => setCustomCityInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCustomCity() }} placeholder="e.g. Springfield, Missouri" style={{ flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
+                <button onClick={addCustomCity} disabled={!customCityInput.trim()} style={{ padding: '9px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: !customCityInput.trim() ? 0.5 : 1 }}>+ Add</button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Popular US cities</label>
+                <button onClick={() => setShowPopular(p => !p)} style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{showPopular ? 'Hide ▲' : 'Show ▼'}</button>
+              </div>
+              {showPopular && (
+                <>
+                  <input type="text" value={citySearchQuery} onChange={e => setCitySearchQuery(e.target.value)} placeholder="Filter cities…" style={{ width: '100%', padding: '7px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 12, outline: 'none', marginBottom: 8 }} />
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
+                    {filteredPopular.map(c => (
+                      <button key={c} onClick={() => togglePopularCity(c)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${scanCities.includes(c) ? 'var(--gold)' : 'rgba(255,255,255,.15)'}`, background: scanCities.includes(c) ? 'rgba(196,146,42,.2)' : 'transparent', color: scanCities.includes(c) ? 'var(--gold)' : 'rgba(245,240,232,.5)' }}>
+                        {scanCities.includes(c) ? '✓ ' : ''}{c.split(',')[0]}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Queued ({scanCities.length})</label>
+                {scanCities.length > 0 && <button onClick={() => setScanCities([])} style={{ fontSize: 11, color: 'rgba(181,75,42,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear</button>}
+              </div>
+              {scanCities.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'rgba(245,240,232,.2)', fontStyle: 'italic' }}>No cities added yet</div>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {scanCities.map(c => (
+                    <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 10px', borderRadius: 20, background: 'rgba(196,146,42,.15)', border: '1px solid rgba(196,146,42,.25)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--gold)' }}>{c}</span>
+                      <button onClick={() => removeCity(c)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(196,146,42,.5)', fontSize: 13, padding: '0 2px' }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Categories ({scanCategories.length}/{ALL_CATEGORIES.length})</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setScanCategories(ALL_CATEGORIES.map(c => c.name))} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>All</button>
+                  <span style={{ color: 'rgba(255,255,255,.15)' }}>·</span>
+                  <button onClick={() => setScanCategories([])} style={{ fontSize: 11, color: 'rgba(245,240,232,.3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>None</button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {ALL_CATEGORIES.map(cat => {
+                  const sel = scanCategories.includes(cat.name)
+                  return (
+                    <div key={cat.name} onClick={() => toggleCategory(cat.name)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: sel ? 'rgba(196,146,42,.1)' : 'rgba(255,255,255,.04)', border: `1px solid ${sel ? 'rgba(196,146,42,.3)' : 'rgba(255,255,255,.08)'}` }}>
+                      <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${sel ? 'var(--gold)' : 'rgba(255,255,255,.2)'}`, background: sel ? 'var(--gold)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)' }}>{sel ? '✓' : ''}</div>
+                      <span style={{ fontSize: 14 }}>{cat.icon}</span>
+                      <span style={{ fontSize: 12, color: sel ? 'var(--gold)' : 'rgba(245,240,232,.5)', fontWeight: sel ? 500 : 300 }}>{cat.name}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {scanCities.length > 0 && scanCategories.length > 0 && (
+              <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8, marginBottom: '1.25rem', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, textAlign: 'center' }}>
+                <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>{scanCities.length}</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>cities</div></div>
+                <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>~{estLocations.toLocaleString()}</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>est.</div></div>
+                <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: estMinutes > 10 ? 'var(--rust)' : 'var(--sage)' }}>~{estMinutes}m</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>time</div></div>
+              </div>
+            )}
+
+            <button onClick={runScanner} disabled={scanRunning || scanCities.length === 0 || scanCategories.length === 0} style={{ width: '100%', padding: '13px', borderRadius: 4, background: scanRunning ? 'rgba(196,146,42,.3)' : 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: scanRunning || scanCities.length === 0 || scanCategories.length === 0 ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: scanCities.length === 0 || scanCategories.length === 0 ? 0.4 : 1 }}>
+              {scanRunning ? (<><div style={{ width: 16, height: 16, border: '2px solid rgba(26,22,18,.3)', borderTop: '2px solid var(--ink)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Scanning…</>) :
+                scanCities.length === 0 ? '← Add a city' :
+                scanCategories.length === 0 ? '← Select a category' :
+                `🤖 Run — ${scanCities.length} × ${scanCategories.length}`}
+            </button>
+
+            {scanResult && (
+              <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,.05)', borderRadius: 8, border: '1px solid rgba(255,255,255,.1)' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--cream)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  ✓ Scan complete
+                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(74,103,65,.3)', color: '#c8e8c4', fontWeight: 500 }}>{scanResult.inserted} added</span>
+                  {scanResult.errors > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(255,255,255,.05)', color: 'rgba(245,240,232,.35)' }}>{scanResult.errors} skipped</span>}
+                </div>
+                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                  {scanResult.locations.map((loc, i) => <div key={i} style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', padding: '2px 0' }}>✓ {loc}</div>)}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', background: 'var(--ink)', color: 'var(--cream)', padding: '10px 18px', borderRadius: 10, fontSize: 13, border: '1px solid rgba(255,255,255,.1)', zIndex: 9999, boxShadow: '0 8px 32px rgba(0,0,0,.3)' }}>
+          {toast}
+        </div>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
+
+function MetricCard({ label, value, sub }: { label: string; value: number | string; sub: string }) {
+  return (
+    <div style={{ padding: '12px 14px', background: 'var(--cream)', borderRadius: 8, border: '1px solid var(--cream-dark)' }}>
+      <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 24, fontWeight: 700, color: 'var(--ink)', lineHeight: 1, marginBottom: 3 }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      <div style={{ fontSize: 11, color: 'var(--sage)' }}>{sub}</div>
+    </div>
+  )
+}
