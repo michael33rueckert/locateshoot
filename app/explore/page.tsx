@@ -23,7 +23,7 @@ const PERMIT_CFG: Record<string,{label:string;bg:string;color:string;border:stri
 }
 
 type SortValue = 'quality'|'rating_asc'|'name'|'newest'|'saves'
-type AccessFilter = 'All'|'Public'|'Private'|'My Locations'
+type AccessFilter = 'All'|'Public'|'Private'|'My Portfolio'
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -207,7 +207,7 @@ function DetailPanel({ loc, isInPortfolio, onClose, onAddToPortfolio, onSignIn, 
             <span style={{padding:'3px 9px',borderRadius:20,fontSize:11,fontWeight:600,background:permitCfg.bg,color:permitCfg.color,border:`1px solid ${permitCfg.border}`}}>{permitCfg.label}</span>
             {loc.permit_fee>0&&<span style={{marginLeft:8,fontSize:12,color:'var(--ink)',fontWeight:500}}>Fee: ${loc.permit_fee}</span>}
             {loc.permit_notes&&<div style={{fontSize:12,color:'var(--ink-soft)',lineHeight:1.55,marginTop:8}}>{loc.permit_notes}</div>}
-            {loc.permit_website&&<a href={loc.permit_website} target="_blank" rel="noopener noreferrer" style={{display:'block',marginTop:6,fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500}}>View permit info →</a>}
+            {loc.permit_website&&<a href={loc.permit_website} target="_blank" rel="noopener noreferrer" style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:6,fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500}}>🔗 Permit info source →</a>}
           </div>
           {user
             ? <button
@@ -375,7 +375,7 @@ export default function ExplorePage() {
 
   const filtered = useMemo(()=>{
     let result=locations.filter((loc:any)=>{
-      const matchesAccess=accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Locations'?loc.addedBy===user?.id:true
+      const matchesAccess=accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Portfolio'?portfolioSources.has(loc.id):true
       const matchesTags=selectedTags.length===0||selectedTags.some(t=>(loc.tags??[]).some((lt:string)=>lt.toLowerCase().includes(t.toLowerCase())))
       const q=searchQuery.toLowerCase().trim()
       const matchesSearch=q===''||loc.name.toLowerCase().includes(q)||loc.city.toLowerCase().includes(q)||(loc.tags??[]).some((t:string)=>t.toLowerCase().includes(q))
@@ -441,6 +441,10 @@ export default function ExplorePage() {
             ⚙ Filters & Sort
             {activeFilterCount>0&&<span style={{width:16,height:16,borderRadius:'50%',background:'var(--gold)',color:'var(--ink)',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{activeFilterCount}</span>}
           </button>
+          {user&&<button onClick={()=>setAccessFilter(accessFilter==='My Portfolio'?'All':'My Portfolio')} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:600,border:'none',background:accessFilter==='My Portfolio'?'var(--gold)':'var(--ink)',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--cream)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,boxShadow:'0 2px 6px rgba(26,22,18,.15)'}}>
+            {accessFilter==='My Portfolio'?'✓ My Portfolio':'⭐ My Portfolio'}
+            {portfolioSources.size>0&&<span style={{padding:'1px 7px',borderRadius:20,fontSize:10,fontWeight:700,background:accessFilter==='My Portfolio'?'rgba(26,22,18,.15)':'rgba(196,146,42,.3)',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--gold)'}}>{portfolioSources.size}</span>}
+          </button>}
           <button onClick={()=>setShowPinSearch(p=>!p)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${searchPin?'var(--sky)':'var(--cream-dark)'}`,background:searchPin?'rgba(61,110,140,.08)':'white',color:searchPin?'var(--sky)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
             📍 {searchPin?searchPin.label.split(',')[0]:'Find near…'}
             {searchPin&&<span onClick={e=>{e.stopPropagation();setSearchPin(null);setUserLocation(null)}} style={{marginLeft:2}}>✕</span>}
@@ -459,7 +463,7 @@ export default function ExplorePage() {
 
         {showFilters&&(
           <div className="explore-filter-panel">
-            <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Access</div><div className="explore-filter-section">{(['All','Public','Private','My Locations'] as AccessFilter[]).map(opt=><button key={opt} onClick={()=>setAccessFilter(opt)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${accessFilter===opt?'var(--gold)':'var(--cream-dark)'}`,background:accessFilter===opt?'rgba(196,146,42,.12)':'white',color:accessFilter===opt?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt}</button>)}</div></div>
+            <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Access</div><div className="explore-filter-section">{(['All','Public','Private','My Portfolio'] as AccessFilter[]).map(opt=><button key={opt} onClick={()=>setAccessFilter(opt)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${accessFilter===opt?'var(--gold)':'var(--cream-dark)'}`,background:accessFilter===opt?'rgba(196,146,42,.12)':'white',color:accessFilter===opt?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt}</button>)}</div></div>
             <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Location type</div><div className="explore-filter-section">{ALL_TAGS.map(tag=><button key={tag} onClick={()=>toggleTag(tag)} style={{padding:'5px 10px',borderRadius:20,fontSize:11,fontWeight:500,border:`1px solid ${selectedTags.includes(tag)?'var(--gold)':'var(--cream-dark)'}`,background:selectedTags.includes(tag)?'rgba(196,146,42,.12)':'white',color:selectedTags.includes(tag)?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{tag}</button>)}</div></div>
             <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Min rating</div><div className="explore-filter-section">{RATING_OPTIONS.map(opt=><button key={opt.value} onClick={()=>setMinRating(opt.value)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${minRating===opt.value?'var(--gold)':'var(--cream-dark)'}`,background:minRating===opt.value?'rgba(196,146,42,.12)':'white',color:minRating===opt.value?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt.label}</button>)}</div></div>
             <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Sort by</div><div className="explore-filter-section">{SORT_OPTIONS.map(opt=><button key={opt.value} onClick={()=>setSortBy(opt.value as SortValue)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${sortBy===opt.value?'var(--gold)':'var(--cream-dark)'}`,background:sortBy===opt.value?'rgba(196,146,42,.12)':'white',color:sortBy===opt.value?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt.label}</button>)}</div></div>
