@@ -1052,7 +1052,6 @@ body {
   padding: 1rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0;
 }
  
 .mobile-menu a, .mobile-menu button {
@@ -1095,9 +1094,10 @@ body {
   gap: 1.25rem;
 }
  
-/* ── Explore page classes ── */
+/* ── Explore page ── */
 .explore-body {
   flex: 1;
+  min-height: 0;           /* KEY: lets flex child shrink so it doesn't overflow */
   display: grid;
   grid-template-columns: 360px 1fr;
   overflow: hidden;
@@ -1107,17 +1107,31 @@ body {
   border-right: 1px solid var(--cream-dark);
   overflow-y: auto;
   background: #f9f6f1;
+  min-height: 0;
 }
  
 .explore-map-col {
   position: relative;
+  min-height: 0;
 }
  
 .explore-mobile-toggle {
   display: none;
 }
  
-/* ── Share page classes ── */
+/* Explore filter panel — responsive */
+.explore-filter-panel {
+  padding: 1rem 1.5rem 1.25rem;
+  border-top: 1px solid var(--cream-dark);
+  background: var(--cream);
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 1.5rem;
+  align-items: start;
+  overflow-x: auto;
+}
+ 
+/* ── Share page ── */
 .share-outer {
   display: grid;
   grid-template-columns: 440px 1fr;
@@ -1141,7 +1155,7 @@ body {
    ───────────────────────────────────────────────────────────────────────────── */
 @media (min-width: 769px) and (max-width: 1024px) {
  
-  /* Dashboard — right column goes side-by-side */
+  /* Dashboard */
   .dash-main-grid {
     grid-template-columns: 1fr !important;
   }
@@ -1174,7 +1188,6 @@ body {
     grid-template-columns: 1fr !important;
     width: 100% !important;
   }
-  /* Prevent inner panels from overflowing */
   .dash-main-grid > div {
     min-width: 0 !important;
     max-width: 100% !important;
@@ -1193,21 +1206,32 @@ body {
  
   /* ── Explore ── */
   .explore-body {
-    display: block !important;
-    overflow: visible !important;
-    height: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    flex: 1 !important;
+    min-height: 0 !important;
   }
  
   .explore-sidebar {
-    height: calc(100svh - 115px) !important;
+    flex: 1 !important;
+    min-height: 0 !important;
     border-right: none !important;
     border-bottom: 1px solid var(--cream-dark) !important;
-    display: block !important;
-    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
  
   .explore-sidebar.mobile-hidden {
     display: none !important;
+  }
+ 
+  /* Scrollable content inside sidebar */
+  .explore-sidebar-content {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    min-height: 0 !important;
   }
  
   .explore-map-col {
@@ -1222,7 +1246,6 @@ body {
     height: 100svh !important;
   }
  
-  /* Force Leaflet map to fill its container */
   .explore-map-col.mobile-visible .leaflet-container {
     height: 100svh !important;
     width: 100% !important;
@@ -1250,34 +1273,39 @@ body {
     color: var(--cream) !important;
   }
  
-  /* ── Share page ──
-     Key fix: sidebar uses flex column with sticky footer.
-     Do NOT set overflow-y on the sidebar itself — only the inner content div scrolls.
-     This keeps the "Generate →" button visible at all times. */
+  /* Explore filter panel — single column on mobile */
+  .explore-filter-panel {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+    padding: 1rem !important;
+    max-height: 60svh !important;
+    overflow-y: auto !important;
+    grid-template-columns: unset !important;
+  }
+ 
+  .explore-filter-section {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+ 
+  /* ── Share page ── */
   .share-outer {
     display: block !important;
     height: 100svh !important;
     overflow: hidden !important;
   }
- 
-  .share-map-col {
-    display: none !important;
-  }
- 
+  .share-map-col { display: none !important; }
   .share-sidebar {
     height: 100svh !important;
     width: 100% !important;
     max-width: 100% !important;
-    /* Keep display:flex flex-direction:column from inline style — don't override */
   }
- 
-  .share-legend {
-    display: none !important;
-  }
+  .share-legend { display: none !important; }
 }
  
 /* ── PWA safe areas ── */
 @media (display-mode: standalone) {
   nav { padding-top: env(safe-area-inset-top, 0) !important; }
 }
- 

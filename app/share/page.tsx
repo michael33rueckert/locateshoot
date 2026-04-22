@@ -54,7 +54,7 @@ export default function SharePage() {
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
 
   // Handle ?step=3 from explore page
-  useEffect(() => {
+  (() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('step') === '3') {
@@ -94,25 +94,20 @@ export default function SharePage() {
 
   // Load all published locations
   useEffect(() => {
-    supabase.from('locations')
-      .select('id,name,city,state,latitude,longitude,access_type,rating,save_count')
-      .eq('status','published').not('latitude','is',null).not('longitude','is',null)
-      .order('save_count',{ascending:false}).limit(500)
-      .then(({ data }) => {
-        if (!data) return
-        setAllDbLocs(data.map((loc,idx) => ({
-          id:     loc.id,
-          name:   loc.name,
-          city:   loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? ''),
-          lat:    loc.latitude,
-          lng:    loc.longitude,
-          access: loc.access_type ?? 'public',
-          rating: loc.rating ? String(parseFloat(loc.rating).toFixed(1)) : '—',
-          bg:     BG_CYCLE[idx % BG_CYCLE.length],
-          type:   'favorite' as const,
-          d:      null,
-        })))
-      })
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('step') === '3') {
+      const stored = sessionStorage.getItem('sharePreselectedLocation')
+      if (stored) {
+        // Only jump to step 3 when we actually have a preselected location
+        try {
+          const loc = JSON.parse(stored)
+          setSelected(new Set([String(loc.id)]))
+          setStep(3)
+        } catch {}
+        sessionStorage.removeItem('sharePreselectedLocation')
+      }
+      // If no stored location, ignore the ?step=3 param and stay on step 1
+    }
   }, [])
 
   useEffect(() => {
@@ -175,7 +170,7 @@ export default function SharePage() {
     return [...favorites, ...secretLocs, ...allDbLocs].filter(l => {
       const key = String(l.id)
       if (seen.has(key)) return false
-      seen.add(key)
+      seen.add(key)useEffect
       return true
     })
   }, [favorites, secretLocs, allDbLocs])
