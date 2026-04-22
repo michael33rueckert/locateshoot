@@ -988,11 +988,8 @@ body {
 
   /* EXPLORE */
   .explore-nav-search { display: none !important; }
-  .explore-sidebar    {
-    position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important;
-    height: 50vh !important; z-index: 300 !important; border-right: none !important;
-    border-top: 2px solid var(--cream-dark) !important; border-radius: 16px 16px 0 0 !important;
-  }
+  /* Legacy bottom-sheet sidebar rule removed — see the flex-column mobile
+     layout further down (~line 1150) for the current behavior. */
 
   /* SHARE PAGE */
   .share-sidebar { height: 100svh !important; overflow-y: auto !important; }
