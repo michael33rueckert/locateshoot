@@ -1075,6 +1075,7 @@ body {
   min-height: 0;
   display: grid;
   grid-template-columns: 360px 1fr;
+  grid-template-rows: 1fr;
   overflow: hidden;
   background: #f9f6f1;
 }
@@ -1153,11 +1154,11 @@ body {
     flex: 1 !important;
     min-height: 0 !important;
     overflow: hidden !important;
-    height: auto !important;  /* override the height:100% from base rule */
+    height: 0 !important;
   }
   .explore-sidebar {
     flex: 1 !important;
-    height: auto !important;  /* override height:100% for mobile flex layout */
+    height: 0 !important;
     min-height: 0 !important;
     border-right: none !important;
     border-bottom: 1px solid var(--cream-dark) !important;
