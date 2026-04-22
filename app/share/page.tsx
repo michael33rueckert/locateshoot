@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import { buildShareUrl } from '@/lib/custom-domain'
 import type { MapLocation } from '@/components/ShareMap'
 
 const ShareMap = dynamic(() => import('@/components/ShareMap'), { ssr: false })
@@ -48,6 +49,8 @@ export default function SharePage() {
   const [expiry,           setExpiry]           = useState('14')
   const [myPhotosOnly,     setMyPhotosOnly]     = useState(false)
   const [generatedSlug,    setGeneratedSlug]    = useState<string | null>(null)
+  const [customDomain,     setCustomDomain]     = useState<string | null>(null)
+  const [customVerified,   setCustomVerified]   = useState(false)
   const [isSaving,         setIsSaving]         = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
 
@@ -84,11 +87,15 @@ export default function SharePage() {
       const [portfolioRes, templatesRes, profileRes] = await Promise.all([
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,latitude,longitude,access_type').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('message_templates').select('id,name,body').eq('user_id', user.id).order('created_at', { ascending: true }),
-        supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+        supabase.from('profiles').select('full_name,custom_domain,custom_domain_verified').eq('id', user.id).single(),
       ])
       if (portfolioRes.data) setPortfolio(portfolioRes.data)
       if (templatesRes.data) setDbTemplates(templatesRes.data)
       if (profileRes.data?.full_name) setPhotographerName(profileRes.data.full_name)
+      if (profileRes.data) {
+        setCustomDomain(profileRes.data.custom_domain ?? null)
+        setCustomVerified(!!profileRes.data.custom_domain_verified)
+      }
     } catch (err) { console.error(err) }
     finally { setDataLoading(false) }
   }, [])
@@ -201,7 +208,7 @@ export default function SharePage() {
 
   function copyLink() {
     if (!generatedSlug) return
-    navigator.clipboard?.writeText(`${window.location.origin}/pick/${generatedSlug}`).catch(() => {})
+    navigator.clipboard?.writeText(buildShareUrl(generatedSlug, { customDomain, customDomainVerified: customVerified })).catch(() => {})
     setToast('📋 Link copied!')
   }
 
@@ -512,7 +519,7 @@ export default function SharePage() {
               <label style={labelStyle}>Client link</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--cream)', border: '1px solid var(--sand)', borderRadius: 4, padding: '7px 7px 7px 12px', marginBottom: '1.25rem' }}>
                 <span style={{ fontSize: 11, color: 'var(--sky)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
-                  {typeof window !== 'undefined' && `${window.location.host}/pick/${generatedSlug}`}
+                  {typeof window !== 'undefined' && buildShareUrl(generatedSlug, { customDomain, customDomainVerified: customVerified }).replace(/^https?:\/\//, '')}
                 </span>
                 <button onClick={copyLink} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '5px 12px', borderRadius: 4, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Copy</button>
               </div>

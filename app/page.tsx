@@ -51,7 +51,7 @@ function PricingToggle({ onSignup }: { onSignup: () => void }) {
       <ul className="price-features">
         <li>Everything in Free</li>
         <li><strong>Unlimited client share links</strong></li>
-        <li>🤫 <strong>Secret locations</strong> — share hidden gems exclusively with clients</li>
+        <li>🌐 <strong>Custom domain</strong> — share links on <code>locations.yoursite.com</code></li>
         <li>🔒 <strong>Permit info &amp; access details</strong> on every location</li>
         <li>Email notification when client picks</li>
         <li>Share analytics — views &amp; time spent</li>

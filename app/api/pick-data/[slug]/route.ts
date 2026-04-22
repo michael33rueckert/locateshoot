@@ -19,6 +19,19 @@ export async function GET(request: Request, context: any) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
 
+  // If the request comes in on a custom domain, require that the share link
+  // belongs to the photographer who owns that domain. Keeps one photographer's
+  // custom domain from serving another photographer's links.
+  const host = (request.headers.get('host') ?? '').toLowerCase().split(':')[0]
+  const apex = (process.env.NEXT_PUBLIC_APEX_DOMAIN ?? 'locateshoot.com').toLowerCase()
+  const isPrimary = !host || host === apex || host === `www.${apex}` || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.vercel.app')
+  if (!isPrimary) {
+    const { data: owner } = await admin.from('profiles').select('id').ilike('custom_domain', host).maybeSingle()
+    if (!owner || owner.id !== share.user_id) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+  }
+
   if (share.expires_at && new Date(share.expires_at) < new Date()) {
     return NextResponse.json({ error: 'expired' }, { status: 410 })
   }

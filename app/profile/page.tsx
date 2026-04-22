@@ -36,6 +36,7 @@ const DEFAULT_PREFS: Preferences = {
 const NAV_ITEMS = [
   { id: 'profile',     icon: '👤', label: 'Profile'                },
   { id: 'branding',    icon: '🎨', label: 'Branding'               },
+  { id: 'domain',      icon: '🌐', label: 'Custom Domain'          },
   { id: 'templates',   icon: '✉️',  label: 'Message Templates'      },
   { id: 'preferences', icon: '⚙',  label: 'Preferences'            },
   { id: 'billing',     icon: '💳', label: 'Subscription & Billing' },
@@ -82,6 +83,16 @@ export default function ProfilePage() {
   const [mfaCode,      setMfaCode]      = useState('')
   const [mfaBusy,      setMfaBusy]      = useState(false)
 
+  // Custom domain
+  const [domainInput,   setDomainInput]   = useState('')
+  const [domain,        setDomain]        = useState<string | null>(null)
+  const [domainState,   setDomainState]   = useState<'none'|'pending_dns'|'misconfigured'|'verified'>('none')
+  const [domainDetail,  setDomainDetail]  = useState<string | null>(null)
+  const [cnameTarget,   setCnameTarget]   = useState('cname.vercel-dns.com')
+  const [domainBusy,    setDomainBusy]    = useState(false)
+  const [domainError,   setDomainError]   = useState('')
+  const [showDomainHelp,setShowDomainHelp]= useState(false)
+
   const isPro = plan === 'pro' || plan === 'Pro'
 
   useEffect(() => {
@@ -123,6 +134,58 @@ export default function ProfilePage() {
   }, [])
 
   useEffect(() => { loadMfa() }, [loadMfa])
+
+  const loadDomainStatus = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/custom-domain/status', { headers: { Authorization: `Bearer ${session.access_token}` } })
+    if (!res.ok) return
+    const data = await res.json()
+    setDomain(data.domain ?? null)
+    setDomainState(data.state ?? 'none')
+    setDomainDetail(data.detail ?? null)
+    if (data.cname_target) setCnameTarget(data.cname_target)
+    if (data.domain && !domainInput) setDomainInput(data.domain)
+  }, [domainInput])
+
+  useEffect(() => { loadDomainStatus() }, [loadDomainStatus])
+
+  async function saveDomain() {
+    setDomainError(''); setDomainBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setDomainError('Not signed in.'); return }
+      const res = await fetch('/api/custom-domain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ domain: domainInput.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setDomainError(data.message ?? data.error ?? 'Could not save domain.')
+        return
+      }
+      setDomain(data.domain)
+      setDomainState(data.state)
+      setDomainDetail(data.detail ?? null)
+      setToast(data.verified ? '✓ Domain verified!' : '✓ Domain added — waiting for DNS')
+    } finally { setDomainBusy(false) }
+  }
+
+  async function removeDomain() {
+    if (!confirm('Remove your custom domain? Client links will revert to locateshoot.com.')) return
+    setDomainBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await fetch('/api/custom-domain', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      setDomain(null); setDomainState('none'); setDomainDetail(null); setDomainInput('')
+      setToast('Custom domain removed')
+    } finally { setDomainBusy(false) }
+  }
 
   const verifiedFactor = mfaFactors.find(f => f.status === 'verified')
 
@@ -429,6 +492,52 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* ── CUSTOM DOMAIN ── */}
+        {active === 'domain' && (
+          <div>
+            {sectionTitle('Custom Domain', 'Serve your client share links from your own domain (e.g. locations.yoursite.com).')}
+            {!isPro && (
+              <div style={{ padding: '12px 14px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>⭐ Pro plan feature</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', flex: 1, minWidth: 200 }}>Upgrade to use your own domain for share links.</div>
+                <Link href="/profile#billing" onClick={() => setActive('billing')} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>Upgrade</Link>
+              </div>
+            )}
+
+            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', maxWidth: 560 }}>
+
+              {domain && (
+                <div style={{ marginBottom: '1rem', padding: '10px 12px', borderRadius: 8, background: domainState === 'verified' ? 'rgba(74,103,65,.08)' : domainState === 'misconfigured' ? 'rgba(181,75,42,.08)' : 'rgba(196,146,42,.08)', border: `1px solid ${domainState === 'verified' ? 'rgba(74,103,65,.25)' : domainState === 'misconfigured' ? 'rgba(181,75,42,.25)' : 'rgba(196,146,42,.25)'}` }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: domainState === 'verified' ? 'var(--sage)' : domainState === 'misconfigured' ? 'var(--rust)' : 'var(--gold)', marginBottom: 2 }}>
+                    {domainState === 'verified' ? '✓ Verified' : domainState === 'misconfigured' ? '⚠ DNS misconfigured' : '⏳ Waiting for DNS'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontFamily: 'monospace' }}>{domain}</div>
+                  {domainDetail && <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4, lineHeight: 1.5 }}>{domainDetail}</div>}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button onClick={loadDomainStatus} disabled={domainBusy} style={{ padding: '5px 12px', borderRadius: 4, background: 'white', border: '1px solid var(--cream-dark)', fontSize: 11, fontWeight: 500, cursor: 'pointer', color: 'var(--ink-soft)', fontFamily: 'inherit' }}>Refresh status</button>
+                    <button onClick={removeDomain} disabled={domainBusy} style={{ padding: '5px 12px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Remove domain</button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: '.75rem' }}>
+                <label style={labelStyle}>Your domain</label>
+                <input value={domainInput} onChange={e => setDomainInput(e.target.value)} style={inputStyle} placeholder="locations.yoursite.com" disabled={!isPro || !!domain} />
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Use a subdomain like <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>locations.yoursite.com</code> — not the root domain.</div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {!domain && <button onClick={saveDomain} disabled={!isPro || domainBusy || !domainInput.trim()} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 20px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: !isPro || domainBusy || !domainInput.trim() ? 0.5 : 1 }}>
+                  {domainBusy ? 'Saving…' : 'Save domain'}
+                </button>}
+                <button onClick={() => setShowDomainHelp(true)} style={{ background: 'transparent', color: 'var(--sky)', border: 'none', padding: 0, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>How do I set this up?</button>
+              </div>
+
+              {domainError && <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)' }}>{domainError}</div>}
+            </div>
+          </div>
+        )}
+
         {/* ── TEMPLATES ── */}
         {active === 'templates' && (
           <div>
@@ -595,6 +704,56 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {showDomainHelp && (
+        <>
+          <div onClick={() => setShowDomainHelp(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+            <div style={{ padding: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', gap: 12 }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>🌐 Set up your custom domain</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Roughly a 3-minute setup.</div>
+                </div>
+                <button onClick={() => setShowDomainHelp(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>1. Pick a subdomain</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>Something like <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>locations.yoursite.com</code> or <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>book.yoursite.com</code>. Use a subdomain, not the root domain.</div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>2. Add a CNAME record at your DNS provider</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: 8 }}>Log in to the DNS manager for your domain (GoDaddy, Namecheap, Cloudflare, Google Domains, etc.) and add this record:</div>
+                <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 6, padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: 'var(--ink)' }}>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}><span style={{ color: 'var(--ink-soft)', width: 60 }}>Type:</span><strong>CNAME</strong></div>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}><span style={{ color: 'var(--ink-soft)', width: 60 }}>Host:</span><strong>locations</strong> <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(or whatever subdomain you want)</span></div>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}><span style={{ color: 'var(--ink-soft)', width: 60 }}>Value:</span><strong>{cnameTarget}</strong></div>
+                  <div style={{ display: 'flex', gap: 10 }}><span style={{ color: 'var(--ink-soft)', width: 60 }}>TTL:</span><strong>Auto</strong> <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(or 3600)</span></div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontStyle: 'italic', fontWeight: 300 }}>Some providers use "Points to" or "Target" instead of "Value". Same thing.</div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>3. Enter your domain above and click Save</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>We'll check the CNAME and provision a free SSL certificate (Let's Encrypt) automatically. Usually finishes in under 2 minutes, sometimes up to a few hours if your DNS hasn't propagated yet.</div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>4. Your client share links switch automatically</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>Once verified, all share links (both expiring and permanent) will use your domain. Clients see <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>locations.yoursite.com/pick/…</code> instead of locateshoot.com.</div>
+              </div>
+
+              <div style={{ padding: '10px 12px', background: 'rgba(61,110,140,.06)', border: '1px solid rgba(61,110,140,.2)', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--sky)' }}>Heads up:</strong> Only <code style={{ background: 'white', padding: '1px 5px', borderRadius: 3, border: '1px solid var(--cream-dark)' }}>/pick/…</code> pages serve from your custom domain. Your dashboard, profile, etc. stay on locateshoot.com.
+              </div>
+
+              <button onClick={() => setShowDomainHelp(false)} style={{ marginTop: '1.25rem', width: '100%', padding: '11px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Got it</button>
+            </div>
+          </div>
+        </>
+      )}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', background: 'var(--ink)', color: 'var(--cream)', padding: '10px 18px', borderRadius: 10, fontSize: 13, border: '1px solid rgba(255,255,255,.1)', zIndex: 9999, boxShadow: '0 8px 32px rgba(0,0,0,.3)', animation: 'toast-in .25s ease' }}>

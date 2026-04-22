@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { ADMIN_EMAIL } from '@/lib/admin'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import { buildShareUrl } from '@/lib/custom-domain'
 
-interface Profile           { id: string; full_name: string | null; email: string | null }
+interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean }
 interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
@@ -63,7 +64,7 @@ export default function DashboardPage() {
       if (!user) { window.location.href = '/'; return }
 
       const [profileRes, sharesRes, portfolioRes] = await Promise.all([
-        supabase.from('profiles').select('id,full_name,email').eq('id', user.id).single(),
+        supabase.from('profiles').select('id,full_name,email,custom_domain,custom_domain_verified').eq('id', user.id).single(),
         supabase.from('share_links').select('id,session_name,created_at,expires_at,location_ids,secret_ids,portfolio_location_ids,slug').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10),
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,is_secret,created_at').eq('user_id', user.id).order('created_at', { ascending: false }),
       ])
@@ -129,7 +130,7 @@ export default function DashboardPage() {
 
 
   function copyLink(slug: string, id: string) {
-    const url = `${window.location.origin}/pick/${slug}`
+    const url = buildShareUrl(slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
     navigator.clipboard?.writeText(url).catch(() => {})
     setCopiedId(id); setToast('📋 Link copied!')
     setTimeout(() => setCopiedId(null), 2000)
@@ -301,7 +302,7 @@ export default function DashboardPage() {
                   <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '9px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Create your first permanent link</button>
                 </div>
               ) : permanentLinks.map((link, i) => {
-                const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/pick/${link.slug}`
+                const url = buildShareUrl(link.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
                 return (
                   <div key={link.id} style={{ borderBottom: i < permanentLinks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
                     <div style={{ padding: '1rem 1.25rem' }}>
@@ -354,7 +355,7 @@ export default function DashboardPage() {
                 const status = linkStatus(share)
                 const cfg    = STATUS_CONFIG[status]
                 const count  = (share.portfolio_location_ids?.length ?? 0) + (share.location_ids?.length ?? 0) + (share.secret_ids?.length ?? 0)
-                const url    = `${typeof window !== 'undefined' ? window.location.origin : ''}/pick/${share.slug}`
+                const url    = buildShareUrl(share.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
                 return (
                   <div key={share.id} style={{ padding: '1rem 1.25rem', borderBottom: i < shareLinks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
