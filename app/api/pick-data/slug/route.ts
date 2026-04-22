@@ -3,18 +3,19 @@ import { createClient } from '@supabase/supabase-js'
 
 export async function GET(
   req: Request,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
+  const { slug } = await params
+
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Load share link
   const { data: share, error: shareErr } = await admin
     .from('share_links')
     .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,location_ids,secret_ids,is_permanent')
-    .eq('slug', params.slug)
+    .eq('slug', slug)
     .single()
 
   if (shareErr || !share) {
@@ -25,7 +26,6 @@ export async function GET(
     return NextResponse.json({ error: 'expired' }, { status: 410 })
   }
 
-  // Load photographer branding
   let branding = null
   if (share.user_id) {
     const { data: prof } = await admin
@@ -36,7 +36,6 @@ export async function GET(
     branding = prof?.preferences ?? null
   }
 
-  // Load regular locations — use service role so RLS is bypassed entirely
   const locIds: any[] = (share.location_ids ?? []).filter((id: any) => id != null)
   let locations: any[] = []
   if (locIds.length > 0) {
@@ -48,7 +47,6 @@ export async function GET(
     locations = data ?? []
   }
 
-  // Load secret locations
   const secIds: any[] = (share.secret_ids ?? []).filter((id: any) => id != null && id !== '')
   let secrets: any[] = []
   if (secIds.length > 0) {
@@ -60,8 +58,7 @@ export async function GET(
     secrets = data ?? []
   }
 
-  // Debug log so you can see in Vercel logs what's happening
-  console.log(`pick-data/${params.slug}: locIds=${JSON.stringify(locIds)}, found=${locations.length} locations, ${secrets.length} secrets`)
+  console.log(`pick-data/${slug}: locIds=${JSON.stringify(locIds)}, found=${locations.length} locations, ${secrets.length} secrets`)
 
   return NextResponse.json({ share, branding, locations, secrets })
 }
