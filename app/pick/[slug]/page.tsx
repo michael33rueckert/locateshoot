@@ -195,26 +195,56 @@ export default function ClientPickerPage() {
 
       {/* Header */}
       <div style={{ background: 'var(--ink)', padding: '1.25rem 1.5rem', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-        {branding?.remove_ls_branding && branding?.logo_url ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
-            <img src={branding.logo_url} alt={branding.studio_name ?? 'Studio logo'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', background: 'rgba(255,255,255,.08)' }} />
-            {branding.show_studio_name !== false && branding.studio_name && (
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 700, color: 'var(--cream)' }}>{branding.studio_name}</div>
-            )}
-          </div>
-        ) : (
-          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
-          </div>
-        )}
-        <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: 'var(--cream)', marginBottom: '.4rem' }}>
-          Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
-        </h1>
-        {shareData?.message && <p style={{ fontSize: 14, fontWeight: 300, color: 'rgba(245,240,232,.55)', lineHeight: 1.6, maxWidth: 560, marginBottom: '.75rem' }}>{shareData.message}</p>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
-          {shareData?.photographer_name && <div style={{ fontSize: 12, color: 'rgba(245,240,232,.4)' }}>📷 {shareData.photographer_name}</div>}
-          {shareData?.session_name && <div style={{ fontSize: 12, color: 'rgba(245,240,232,.4)' }}>🗒 {shareData.session_name}</div>}
-        </div>
+        {(() => {
+          const whiteLabel = branding?.remove_ls_branding && branding?.logo_url
+          const studioName = branding?.show_studio_name !== false ? branding?.studio_name : null
+          const instagramRaw = branding?.instagram ? String(branding.instagram).trim() : ''
+          const instagramHandle = instagramRaw.replace(/^@+/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '')
+          const instagramUrl = instagramHandle ? `https://instagram.com/${instagramHandle}` : null
+          const websiteRaw = branding?.website ? String(branding.website).trim() : ''
+          const websiteUrl = websiteRaw ? (websiteRaw.startsWith('http') ? websiteRaw : `https://${websiteRaw}`) : null
+          const websiteLabel = websiteRaw.replace(/^https?:\/\//, '').replace(/\/$/, '')
+          const meta = [
+            shareData?.photographer_name ? { key: 'name', icon: '📷', label: shareData.photographer_name, href: null as string | null } : null,
+            instagramHandle ? { key: 'ig', icon: '◎', label: `@${instagramHandle}`, href: instagramUrl } : null,
+            websiteLabel ? { key: 'web', icon: '🌐', label: websiteLabel, href: websiteUrl } : null,
+            shareData?.session_name ? { key: 'session', icon: '🗒', label: shareData.session_name, href: null } : null,
+          ].filter(Boolean) as { key: string; icon: string; label: string; href: string | null }[]
+
+          return (
+            <>
+              {whiteLabel ? (
+                <div style={{ marginBottom: '1rem' }}>
+                  <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: 56, maxWidth: 260, width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                  {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: 'rgba(245,240,232,.7)', marginTop: 6 }}>{studioName}</div>}
+                </div>
+              ) : (
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
+                </div>
+              )}
+
+              <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: 'var(--cream)', marginBottom: '.4rem' }}>
+                Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
+              </h1>
+              {shareData?.message && <p style={{ fontSize: 14, fontWeight: 300, color: 'rgba(245,240,232,.55)', lineHeight: 1.6, maxWidth: 560, marginBottom: '.75rem' }}>{shareData.message}</p>}
+              {meta.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11, color: 'rgba(245,240,232,.4)' }}>
+                  {meta.map((m, i) => {
+                    const content = <><span style={{ marginRight: 4 }}>{m.icon}</span>{m.label}</>
+                    return (
+                      <span key={m.key} style={{ display: 'inline-flex', alignItems: 'center', gap: i === 0 ? 0 : 0 }}>
+                        {m.href
+                          ? <a href={m.href} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>{content}</a>
+                          : <span>{content}</span>}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       {/* Progress bar */}
