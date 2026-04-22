@@ -92,6 +92,7 @@ export default function DashboardPage() {
   const [showAddSecret,       setShowAddSecret]        = useState(false)
   const [showCreatePermanent, setShowCreatePermanent]  = useState(false)
   const [deleteSecretId,      setDeleteSecretId]       = useState<string | null>(null)
+  const [deleteShareId,       setDeleteShareId]        = useState<string | null>(null)
   const [mobileMenuOpen,      setMobileMenuOpen]       = useState(false)
 
   // Secret form
@@ -252,6 +253,14 @@ export default function DashboardPage() {
       setSecretLocs(prev => [data, ...prev]); resetForm(); setShowAddSecret(false); setToast('🤫 Secret location saved!')
     } catch (err) { console.error(err); setToast('⚠ Could not save — please try again') }
     finally { setSSaving(false) }
+  }
+
+  async function deleteShareLink(id: string) {
+    if (deleteShareId !== id) { setDeleteShareId(id); return }
+    const { error } = await supabase.from('share_links').delete().eq('id', id)
+    if (error) { setToast('⚠ Could not delete — please try again'); console.error(error); return }
+    setShareLinks(prev => prev.filter(s => s.id !== id))
+    setDeleteShareId(null); setToast('Share link deleted')
   }
 
   async function deleteSecret(id: string) {
@@ -644,6 +653,9 @@ export default function DashboardPage() {
                           {copiedId === share.id ? '✓ Copied' : 'Copy link'}
                         </button>
                       )}
+                      <button onClick={() => deleteShareLink(share.id)} onBlur={() => setDeleteShareId(null)} style={{ padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, border: 'none', background: deleteShareId === share.id ? 'var(--rust)' : 'rgba(181,75,42,.08)', color: deleteShareId === share.id ? 'white' : 'var(--rust)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                        {deleteShareId === share.id ? 'Confirm' : 'Delete'}
+                      </button>
                     </div>
                   </div>
                 )

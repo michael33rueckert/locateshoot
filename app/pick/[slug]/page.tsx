@@ -79,7 +79,7 @@ export default function ClientPickerPage() {
             access: 'public', rating: '—',
             bg: s.bg ?? 'bg-1', type: 'secret',
             tags: s.tags ?? [],
-            desc: s.description ?? "One of your photographer's hidden gems — shared exclusively with you.",
+            desc: s.description ?? '',
             permit: null, saves: 0,
             photoUrl: null,
           })
@@ -170,10 +170,10 @@ export default function ClientPickerPage() {
     return (
       <div style={{ minHeight: '100svh', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
         <div style={{ background: 'white', borderRadius: 16, padding: '2.5rem 2rem', maxWidth: 460, width: '100%', textAlign: 'center' }}>
-          <div style={{ fontSize: 52, marginBottom: '1rem' }}>{chosenLoc.type === 'secret' ? '🤫' : '🎉'}</div>
+          <div style={{ fontSize: 52, marginBottom: '1rem' }}>🎉</div>
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 28, fontWeight: 900, color: 'var(--ink)', marginBottom: '.5rem' }}>You&apos;re all set!</div>
           <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, marginBottom: '1.5rem' }}>
-            {chosenLoc.type === 'secret' ? 'Your photographer will be in touch with the location details.' : 'Your photographer has been notified and will be in touch to confirm.'}
+            Your photographer has been notified and will be in touch to confirm.
           </div>
           <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
             <div className={chosenLoc.bg} style={{ width: 56, height: 56, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
@@ -237,7 +237,6 @@ export default function ClientPickerPage() {
             ) : locations.map((loc, i) => {
               const isChosen = String(chosenId) === String(loc.id)
               const isActive = String(activeId) === String(loc.id)
-              const isSecret = loc.type === 'secret'
               return (
                 <div key={String(loc.id)} onClick={() => { setDetailLoc(loc); setActiveId(loc.id) }}
                   style={{ display: 'flex', gap: 12, padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`, transition: 'all .15s' }}>
@@ -246,14 +245,13 @@ export default function ClientPickerPage() {
                     <div style={{ position: 'absolute', top: 4, left: 4, width: 22, height: 22, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.9)' : 'rgba(26,22,18,.6)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
                       {isChosen ? '✓' : i + 1}
                     </div>
-                    {isSecret && <div style={{ position: 'absolute', bottom: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(124,92,191,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, zIndex: 1 }}>🤫</div>}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
                     <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 4 }}>📍 {loc.city}</div>
                     <div style={{ display: 'flex', gap: 5 }}>
-                      <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: isSecret ? 'rgba(124,92,191,.1)' : loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: isSecret ? '#7c5cbf' : loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${isSecret ? 'rgba(124,92,191,.2)' : loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
-                        {isSecret ? '🤫 Secret' : loc.access === 'public' ? '● Public' : '🔒 Private'}
+                      <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
+                        {loc.access === 'public' ? '● Public' : '🔒 Private'}
                       </span>
                     </div>
                   </div>
@@ -309,8 +307,8 @@ export default function ClientPickerPage() {
             <button onClick={() => setDetailLoc(null)} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: '50%', background: 'rgba(26,22,18,.6)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>✕</button>
             <div className={detailLoc.bg} style={{ height: 200, position: 'relative', overflow: 'hidden' }}>
               {detailLoc.photoUrl && <img src={detailLoc.photoUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-              <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: detailLoc.type === 'secret' ? 'rgba(124,92,191,.85)' : detailLoc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: detailLoc.type === 'secret' ? 'white' : detailLoc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1 }}>
-                {detailLoc.type === 'secret' ? '🤫 Secret spot' : detailLoc.access === 'public' ? '● Public' : '🔒 Private'}
+              <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: detailLoc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: detailLoc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1 }}>
+                {detailLoc.access === 'public' ? '● Public' : '🔒 Private'}
               </div>
             </div>
             <div style={{ padding: '1.25rem' }}>

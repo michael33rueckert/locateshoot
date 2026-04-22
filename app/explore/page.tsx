@@ -186,7 +186,12 @@ function DetailPanel({ loc, isInPortfolio, onClose, onAddToPortfolio, onSignIn, 
         {/* Details */}
         <div style={{padding:'1rem 1.25rem 1.5rem'}}>
           <div style={{fontFamily:'var(--font-playfair),serif',fontSize:22,fontWeight:700,color:'var(--ink)',marginBottom:3}}>{loc.name}</div>
-          <div style={{fontSize:13,color:'var(--ink-soft)',marginBottom:'1rem'}}>📍 {loc.city}</div>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:'1rem',flexWrap:'wrap'}}>
+            <span style={{fontSize:13,color:'var(--ink-soft)'}}>📍 {loc.city}</span>
+            <a href={`https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500,display:'inline-flex',alignItems:'center',gap:4}}>
+              Open in Google Maps →
+            </a>
+          </div>
           {(loc.tags??[]).length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:'1rem'}}>{(loc.tags??[]).map((t:string)=><span key={t} style={{padding:'4px 10px',borderRadius:20,fontSize:12,background:'var(--cream-dark)',color:'var(--ink-soft)',border:'1px solid var(--sand)'}}>{t}</span>)}</div>}
           {loc.desc&&<p style={{fontSize:14,color:'var(--ink-soft)',fontWeight:300,lineHeight:1.7,marginBottom:'1.25rem'}}>{loc.desc}</p>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:'1rem'}}>
