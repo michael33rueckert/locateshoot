@@ -405,7 +405,7 @@ export default function ExplorePage() {
           <span style={{width:6,height:6,borderRadius:'50%',background:'var(--gold)',display:'inline-block'}}/>LocateShoot
         </Link>
         <div className="nav-links" style={{flex:1,maxWidth:400,margin:'0 1.5rem',position:'relative'}}>
-          <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search locations, tags, cities…" style={{width:'100%',padding:'7px 14px 7px 34px',background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.15)',borderRadius:6,color:'var(--cream)',fontFamily:'inherit',fontSize:13,outline:'none'}}/>
+          <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search locations" style={{width:'100%',padding:'7px 14px 7px 34px',background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.15)',borderRadius:6,color:'var(--cream)',fontFamily:'inherit',fontSize:13,outline:'none'}}/>
           <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',fontSize:14,color:'rgba(245,240,232,.4)'}}>🔍</span>
         </div>
         <div className="nav-links" style={{display:'flex',alignItems:'center',gap:10}}>
@@ -483,7 +483,7 @@ export default function ExplorePage() {
           {/* Search — normal flow, no sticky */}
           <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',padding:'10px 1.25rem',flexShrink:0}}>
             <div style={{position:'relative'}}>
-              <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search locations, tags, cities…"
+              <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search locations"
                 style={{width:'100%',padding:'8px 32px 8px 12px',border:'1px solid var(--cream-dark)',borderRadius:6,fontFamily:'inherit',fontSize:13,outline:'none',color:'var(--ink)',background:'white'}}/>
               {searchQuery
                 ?<button onClick={()=>setSearchQuery('')} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:14,color:'var(--ink-soft)',lineHeight:1}}>✕</button>
