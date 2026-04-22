@@ -9,11 +9,11 @@ import type { MapLocation } from '@/components/ShareMap'
 
 const ShareMap = dynamic(() => import('@/components/ShareMap'), { ssr: false })
 
-interface DBFavorite {
-  id: number; location_id: number | string
-  locations: { id: number | string; name: string; city: string; latitude: number; longitude: number; access_type: string; rating: number | null }
+interface DBPortfolio {
+  id: string; source_location_id: string | null
+  name: string; city: string | null; state: string | null
+  latitude: number | null; longitude: number | null; access_type: string | null
 }
-interface DBSecret   { id: string; name: string; area: string; description: string | null; tags: string[]; bg: string; lat: number | null; lng: number | null }
 interface DBTemplate { id: string; name: string; body: string }
 
 function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
@@ -32,11 +32,9 @@ const STEP_LABELS = ['Drop pin','Select','Message','Share']
 
 export default function SharePage() {
   const [userId,           setUserId]           = useState<string | null>(null)
-  const [dbFavorites,      setDbFavorites]      = useState<DBFavorite[]>([])
-  const [dbSecrets,        setDbSecrets]        = useState<DBSecret[]>([])
+  const [portfolio,        setPortfolio]        = useState<DBPortfolio[]>([])
   const [dbTemplates,      setDbTemplates]      = useState<DBTemplate[]>([])
   const [dataLoading,      setDataLoading]      = useState(true)
-  const [allDbLocs,        setAllDbLocs]        = useState<MapLocation[]>([])
   const [locSearch,        setLocSearch]        = useState('')
   const [step,             setStep]             = useState(1)
   const [pin,              setPin]              = useState<{ lat: number; lng: number } | null>(null)
@@ -53,22 +51,29 @@ export default function SharePage() {
   const [isSaving,         setIsSaving]         = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
 
-  // Handle ?step=3 from explore page — only jump to step 3 when a location is stored
+  // Handle ?step=3 from explore page — wait for portfolio, then translate
+  // the preselected public-location id into the matching portfolio_location id.
   useEffect(() => {
+    if (dataLoading) return
     const params = new URLSearchParams(window.location.search)
-    if (params.get('step') === '3') {
-      const stored = sessionStorage.getItem('sharePreselectedLocation')
-      if (stored) {
-        try {
-          const loc = JSON.parse(stored)
-          setSelected(new Set([String(loc.id)]))
-          setStep(3)
-        } catch {}
-        sessionStorage.removeItem('sharePreselectedLocation')
+    if (params.get('step') !== '3') return
+    const stored = sessionStorage.getItem('sharePreselectedLocation')
+    if (!stored) return
+    try {
+      const loc = JSON.parse(stored)
+      const id = String(loc.id)
+      const match = portfolio.find(p => String(p.id) === id)
+        ?? portfolio.find(p => String(p.source_location_id ?? '') === id)
+      if (match) {
+        setSelected(new Set([String(match.id)]))
+        setStep(3)
+      } else {
+        setToast('Add this location to your portfolio from Explore first')
+        setStep(2)
       }
-      // No stored location = stay on step 1
-    }
-  }, [])
+    } catch {}
+    sessionStorage.removeItem('sharePreselectedLocation')
+  }, [dataLoading, portfolio])
 
   const loadData = useCallback(async () => {
     setDataLoading(true)
@@ -76,14 +81,12 @@ export default function SharePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/'; return }
       setUserId(user.id)
-      const [favsRes, secretsRes, templatesRes, profileRes] = await Promise.all([
-        supabase.from('favorites').select('id,location_id,locations(id,name,city,latitude,longitude,access_type,rating)').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('secret_locations').select('id,name,area,description,tags,bg,lat,lng').eq('user_id', user.id).order('created_at', { ascending: false }),
+      const [portfolioRes, templatesRes, profileRes] = await Promise.all([
+        supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,latitude,longitude,access_type').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('message_templates').select('id,name,body').eq('user_id', user.id).order('created_at', { ascending: true }),
         supabase.from('profiles').select('full_name').eq('id', user.id).single(),
       ])
-      if (favsRes.data)      setDbFavorites(favsRes.data as any)
-      if (secretsRes.data)   setDbSecrets(secretsRes.data)
+      if (portfolioRes.data) setPortfolio(portfolioRes.data)
       if (templatesRes.data) setDbTemplates(templatesRes.data)
       if (profileRes.data?.full_name) setPhotographerName(profileRes.data.full_name)
     } catch (err) { console.error(err) }
@@ -92,91 +95,36 @@ export default function SharePage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Load all published locations
-  useEffect(() => {
-    supabase.from('locations')
-      .select('id,name,city,state,latitude,longitude,access_type,rating,save_count')
-      .eq('status','published').not('latitude','is',null).not('longitude','is',null)
-      .order('save_count',{ascending:false}).limit(500)
-      .then(({ data }) => {
-        if (!data) return
-        setAllDbLocs(data.map((loc: any, idx: number) => ({
-          id:     loc.id,
-          name:   loc.name,
-          city:   loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? ''),
-          lat:    loc.latitude,
-          lng:    loc.longitude,
-          access: loc.access_type ?? 'public',
-          rating: loc.rating ? String(parseFloat(loc.rating).toFixed(1)) : '—',
-          bg:     BG_CYCLE[idx % BG_CYCLE.length],
-          type:   'favorite' as const,
-          d:      null,
-        })))
-      })
-  }, [])
-
   useEffect(() => {
     if (!toast) return
     const id = setTimeout(() => setToast(null), 2800)
     return () => clearTimeout(id)
   }, [toast])
 
-  const favorites: MapLocation[] = useMemo(() =>
-    dbFavorites.filter(f => f.locations?.latitude && f.locations?.longitude).map((f, idx) => ({
-      id:     f.location_id,
-      name:   f.locations.name,
-      city:   f.locations.city,
-      lat:    f.locations.latitude,
-      lng:    f.locations.longitude,
-      access: f.locations.access_type ?? 'public',
-      rating: f.locations.rating?.toString() ?? '—',
-      bg:     `bg-${(idx % 6) + 1}`,
-      type:   'favorite' as const,
-      d:      pin ? calcDist(pin.lat, pin.lng, f.locations.latitude, f.locations.longitude) : null,
-    })).sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
-  [dbFavorites, pin])
-
-  const secretLocs: MapLocation[] = useMemo(() =>
-    dbSecrets.filter(s => s.lat && s.lng).map(s => ({
-      id:     s.id,
-      name:   s.name,
-      city:   s.area,
-      lat:    s.lat!,
-      lng:    s.lng!,
-      access: 'public',
-      rating: '—',
-      bg:     s.bg,
-      type:   'secret' as const,
-      d:      pin ? calcDist(pin.lat, pin.lng, s.lat!, s.lng!) : null,
-    })).sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
-  [dbSecrets, pin])
-
-  const favIdSet = useMemo(() => new Set(favorites.map(f => String(f.id))), [favorites])
-
-  const allLocsWithDist: MapLocation[] = useMemo(() =>
-    allDbLocs
-      .filter(l => !favIdSet.has(String(l.id)))
-      .map(l => ({ ...l, d: pin ? calcDist(pin.lat, pin.lng, l.lat, l.lng) : null }))
+  const portfolioMapLocs: MapLocation[] = useMemo(() =>
+    portfolio
+      .filter(p => p.latitude != null && p.longitude != null)
+      .map((p, idx) => ({
+        id:     p.id,
+        name:   p.name,
+        city:   p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
+        lat:    p.latitude!,
+        lng:    p.longitude!,
+        access: p.access_type ?? 'public',
+        rating: '—',
+        bg:     BG_CYCLE[idx % BG_CYCLE.length],
+        type:   'favorite' as const,
+        d:      pin ? calcDist(pin.lat, pin.lng, p.latitude!, p.longitude!) : null,
+      }))
       .sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
-  [allDbLocs, favIdSet, pin])
+  [portfolio, pin])
 
-  const allMapLocations = useMemo(() => [...favorites, ...secretLocs], [favorites, secretLocs])
+  const allMapLocations = portfolioMapLocs
 
-  const favsInRange   = favorites.filter(f => f.d !== null && f.d <= radius)
-  const favsOutRange  = favorites.filter(f => f.d === null || f.d > radius)
-  const secretInRange = secretLocs.filter(s => s.d !== null && s.d <= radius)
+  const portfolioInRange  = portfolioMapLocs.filter(l => l.d !== null && l.d <= radius)
+  const portfolioOutRange = portfolioMapLocs.filter(l => l.d === null || l.d > radius)
 
-  const allSelectableLocs = useMemo(() => {
-    const seen = new Set<string>()
-    return [...favorites, ...secretLocs, ...allDbLocs].filter(l => {
-      const key = String(l.id)
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  }, [favorites, secretLocs, allDbLocs])
-
-  const selectedLocs = allSelectableLocs.filter(l => selected.has(String(l.id)))
+  const selectedLocs = portfolioMapLocs.filter(l => selected.has(String(l.id)))
 
   function handleAddressSelect(result: AddressResult) {
     setPin({ lat: result.lat, lng: result.lng })
@@ -196,10 +144,10 @@ export default function SharePage() {
       return next
     })
   }
-  function selectAllFavsInRange() {
+  function selectAllInRange() {
     setSelected(prev => {
       const next = new Set(prev)
-      favsInRange.forEach(f => next.add(String(f.id)))
+      portfolioInRange.forEach(l => next.add(String(l.id)))
       return next
     })
   }
@@ -224,8 +172,7 @@ export default function SharePage() {
     setIsSaving(true)
     try {
       const slug = generateSlug(sessionName, photographerName || 'photographer')
-      const locationIds = selectedLocs.filter(l => l.type !== 'secret').map(l => String(l.id))
-      const secretIds   = selectedLocs.filter(l => l.type === 'secret').map(l => String(l.id))
+      const portfolioLocationIds = selectedLocs.map(l => String(l.id))
       let expiresAt: string | null = null
       if (expiry !== '0') {
         const d = new Date()
@@ -233,15 +180,16 @@ export default function SharePage() {
         expiresAt = d.toISOString()
       }
       const { error } = await supabase.from('share_links').insert({
-        user_id:           userId,
+        user_id:                userId,
         slug,
-        session_name:      sessionName.trim(),
-        message:           message.trim() || null,
-        photographer_name: photographerName.trim() || null,
-        my_photos_only:    myPhotosOnly,
-        location_ids:      locationIds,
-        secret_ids:        secretIds,
-        expires_at:        expiresAt,
+        session_name:           sessionName.trim(),
+        message:                message.trim() || null,
+        photographer_name:      photographerName.trim() || null,
+        my_photos_only:         myPhotosOnly,
+        portfolio_location_ids: portfolioLocationIds,
+        location_ids:           [],
+        secret_ids:             [],
+        expires_at:             expiresAt,
       })
       if (error) throw error
       setGeneratedSlug(slug); setStep(4); setToast('🔗 Share link created!')
@@ -401,36 +349,39 @@ export default function SharePage() {
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
                 {pin ? `Pin placed — ${pin.lat.toFixed(4)}°N, ${Math.abs(pin.lng).toFixed(4)}°W` : 'No pin placed yet'}
               </div>
-              {dbFavorites.length > 0 ? (
+              {portfolio.length > 0 ? (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your saved favorites ({dbFavorites.length})</div>
-                  {dbFavorites.slice(0,5).map((f, idx) => (
-                    <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 9, borderRadius: 4, background: 'var(--cream)', marginBottom: 5 }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your portfolio ({portfolio.length})</div>
+                  {portfolio.slice(0,5).map((p, idx) => (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 9, borderRadius: 4, background: 'var(--cream)', marginBottom: 5 }}>
                       <div className={`bg-${(idx%6)+1}`} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{f.locations?.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {f.locations?.city}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{p.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? '')}</div>
                       </div>
                     </div>
                   ))}
-                  {dbFavorites.length > 5 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '4px 0' }}>+{dbFavorites.length - 5} more in Step 2</div>}
+                  {portfolio.length > 5 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '4px 0' }}>+{portfolio.length - 5} more in Step 2</div>}
                 </>
               ) : (
-                <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center' }}>No favorites saved yet — you can browse all locations in Step 2.</div>
+                <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', textAlign: 'center' }}>
+                  <div style={{ fontStyle: 'italic', marginBottom: 8 }}>Your portfolio is empty.</div>
+                  <Link href="/explore" style={{ display: 'inline-block', padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>Add locations from Explore →</Link>
+                </div>
               )}
             </>
           )}
 
-          {/* STEP 2 — flat list, favorites first */}
+          {/* STEP 2 — portfolio locations only */}
           {step === 2 && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
                   {selected.size > 0 ? `${selected.size} selected` : 'Choose locations'}
                 </div>
-                {favsInRange.length > 0 && (
-                  <button onClick={selectAllFavsInRange} style={{ fontSize: 12, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    Select all favorites
+                {portfolioInRange.length > 0 && (
+                  <button onClick={selectAllInRange} style={{ fontSize: 12, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    Select all in range
                   </button>
                 )}
               </div>
@@ -439,74 +390,52 @@ export default function SharePage() {
                 type="text"
                 value={locSearch}
                 onChange={e => setLocSearch(e.target.value)}
-                placeholder="Search by name or city…"
+                placeholder="Search your portfolio by name or city…"
                 style={{ ...inputStyle, marginBottom: '1rem', fontSize: 13 }}
               />
 
-              {/* Favorites in range — at top */}
-              {favsInRange.filter(f => {
-                if (!locSearch.trim()) return true
-                const q = locSearch.toLowerCase()
-                return f.name.toLowerCase().includes(q) || f.city.toLowerCase().includes(q)
-              }).length > 0 && (
-                <>
-                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />
-                    Your favorites near this area
-                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-soft)' }}>within {radius} mi</span>
-                  </div>
-                  {favsInRange
-                    .filter(f => { if (!locSearch.trim()) return true; const q = locSearch.toLowerCase(); return f.name.toLowerCase().includes(q) || f.city.toLowerCase().includes(q) })
-                    .map(f => <LocationRow key={String(f.id)} loc={f} isFav />)
-                  }
-                </>
-              )}
-
-              {/* Secret spots in range */}
-              {secretInRange.filter(s => { if (!locSearch.trim()) return true; const q = locSearch.toLowerCase(); return s.name.toLowerCase().includes(q) || s.city.toLowerCase().includes(q) }).length > 0 && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '1rem 0 6px' }}>
-                    <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
-                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: '#7c5cbf', whiteSpace: 'nowrap' }}>🤫 Your secret spots</div>
-                    <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
-                  </div>
-                  {secretInRange
-                    .filter(s => { if (!locSearch.trim()) return true; const q = locSearch.toLowerCase(); return s.name.toLowerCase().includes(q) || s.city.toLowerCase().includes(q) })
-                    .map(s => <LocationRow key={String(s.id)} loc={s} />)
-                  }
-                </>
-              )}
-
-              {/* All other locations */}
-              {(() => {
-                const filtered = allLocsWithDist.filter(l => {
-                  if (!locSearch.trim()) return true
-                  const q = locSearch.toLowerCase()
-                  return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q)
-                })
+              {portfolio.length === 0 ? (
+                <div style={{ padding: '2rem 1rem', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)', textAlign: 'center' }}>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>📍</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>Your portfolio is empty</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: 14 }}>Browse locations on the Explore page and add them to your portfolio to share with clients.</div>
+                  <Link href="/explore" style={{ display: 'inline-block', padding: '9px 18px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>Browse Explore →</Link>
+                </div>
+              ) : (() => {
+                const inRange = portfolioInRange.filter(l => { if (!locSearch.trim()) return true; const q = locSearch.toLowerCase(); return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q) })
+                const outRange = portfolioOutRange.filter(l => { if (!locSearch.trim()) return true; const q = locSearch.toLowerCase(); return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q) })
                 return (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '1rem 0 6px' }}>
-                      <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
-                      <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
-                        {pin ? 'All locations by distance' : `All locations (${filtered.length})`}
-                      </div>
-                      <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
+                    {inRange.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />
+                          Locations in your portfolio
+                          <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-soft)' }}>within {radius} mi</span>
+                        </div>
+                        {inRange.map(l => <LocationRow key={String(l.id)} loc={l} isFav />)}
+                      </>
+                    )}
+                    {outRange.length > 0 && (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '1rem 0 6px' }}>
+                          <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
+                          <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>Outside {radius} mi radius</div>
+                          <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
+                        </div>
+                        {outRange.map(l => <LocationRow key={String(l.id)} loc={l} />)}
+                      </>
+                    )}
+                    {inRange.length === 0 && outRange.length === 0 && locSearch.trim() && (
+                      <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center', padding: '1rem 0' }}>No portfolio locations match &quot;{locSearch}&quot;</div>
+                    )}
+                    <div style={{ marginTop: '1.25rem', padding: '12px 14px', background: 'var(--cream)', borderRadius: 8, border: '1px solid var(--cream-dark)', textAlign: 'center' }}>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 8 }}>Need more spots?</div>
+                      <Link href="/explore" style={{ display: 'inline-block', padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>+ Add more from Explore</Link>
                     </div>
-                    {filtered.length === 0 && locSearch.trim()
-                      ? <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center', padding: '1rem 0' }}>No locations match &quot;{locSearch}&quot;</div>
-                      : filtered.slice(0, 100).map(loc => <LocationRow key={String(loc.id)} loc={loc} />)
-                    }
-                    {filtered.length > 100 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '8px 0', fontStyle: 'italic' }}>Search to find more</div>}
                   </>
                 )
               })()}
-
-              {favsOutRange.length > 0 && !locSearch.trim() && (
-                <div style={{ marginTop: '1rem', padding: '10px 12px', background: 'var(--cream)', borderRadius: 8, border: '1px solid var(--cream-dark)', fontSize: 12, color: 'var(--ink-soft)' }}>
-                  {favsOutRange.length} favorite{favsOutRange.length !== 1 ? 's' : ''} outside the {radius} mi radius
-                </div>
-              )}
             </>
           )}
 
@@ -562,8 +491,8 @@ export default function SharePage() {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   {selectedLocs.map(l => (
-                    <span key={String(l.id)} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, background: l.type === 'secret' ? 'rgba(124,92,191,.1)' : 'white', color: l.type === 'secret' ? '#7c5cbf' : 'var(--ink-soft)', border: `1px solid ${l.type === 'secret' ? 'rgba(124,92,191,.2)' : 'var(--sand)'}` }}>
-                      {l.type === 'secret' && '🤫 '}{l.name}
+                    <span key={String(l.id)} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--sand)' }}>
+                      {l.name}
                     </span>
                   ))}
                   {selectedLocs.length === 0 && <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No locations selected</span>}
