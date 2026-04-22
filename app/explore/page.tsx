@@ -127,8 +127,8 @@ function AddLocationModal({ onClose, user }: { onClose:()=>void; user:any }) {
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, isFav, onClose, onToggleFavorite, user }: {
-  loc:any; isFav:boolean; onClose:()=>void; onToggleFavorite:(id:any)=>void; user:any
+function DetailPanel({ loc, isFav, isInPortfolio, onClose, onToggleFavorite, onAddToPortfolio, user }: {
+  loc:any; isFav:boolean; isInPortfolio:boolean; onClose:()=>void; onToggleFavorite:(id:any)=>void; onAddToPortfolio:(id:any)=>void; user:any
 }) {
   const router = useRouter()
   const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
@@ -203,10 +203,17 @@ function DetailPanel({ loc, isFav, onClose, onToggleFavorite, user }: {
             {loc.permit_notes&&<div style={{fontSize:12,color:'var(--ink-soft)',lineHeight:1.55,marginTop:8}}>{loc.permit_notes}</div>}
             {loc.permit_website&&<a href={loc.permit_website} target="_blank" rel="noopener noreferrer" style={{display:'block',marginTop:6,fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500}}>View permit info →</a>}
           </div>
+          {user
+            ? <button
+                onClick={()=>!isInPortfolio&&onAddToPortfolio(loc.id)}
+                disabled={isInPortfolio}
+                style={{width:'100%',padding:'12px',borderRadius:4,cursor:isInPortfolio?'default':'pointer',fontFamily:'inherit',fontSize:14,fontWeight:600,marginBottom:10,background:isInPortfolio?'rgba(74,103,65,.1)':'var(--gold)',color:isInPortfolio?'var(--sage)':'var(--ink)',border:isInPortfolio?'1px solid rgba(74,103,65,.3)':'none'}}>
+                {isInPortfolio?'✓ In your portfolio':'+ Add to my portfolio'}
+              </button>
+            : <Link href="/" style={{display:'block',width:'100%',padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:600,textDecoration:'none',textAlign:'center',marginBottom:10}}>Join free to build your portfolio →</Link>}
           <div style={{display:'flex',gap:10,marginBottom:'1rem'}}>
             <button onClick={()=>onToggleFavorite(loc.id)} style={{flex:1,padding:'12px',borderRadius:4,cursor:'pointer',fontFamily:'inherit',fontSize:14,fontWeight:500,background:isFav?'rgba(196,146,42,.1)':'var(--cream)',color:isFav?'var(--gold)':'var(--ink-soft)',border:`1px solid ${isFav?'rgba(196,146,42,.3)':'var(--cream-dark)'}`}}>{isFav?'♥ Saved':'♡ Save to favorites'}</button>
-            {user?<button onClick={shareWithClient} style={{flex:1,padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer'}}>🔗 Share with client</button>
-              :<Link href="/" style={{flex:1,padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:500,textDecoration:'none',display:'flex',alignItems:'center',justifyContent:'center'}}>Join free to save →</Link>}
+            {user&&<button onClick={shareWithClient} style={{flex:1,padding:'12px',borderRadius:4,background:'var(--cream)',color:'var(--ink-soft)',border:'1px solid var(--cream-dark)',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer'}}>🔗 Share with client</button>}
           </div>
           <div style={{padding:'10px 12px',background:'rgba(196,146,42,.04)',border:'1px solid rgba(196,146,42,.15)',borderRadius:6,marginBottom:10}}>
             <div style={{fontSize:10,color:'var(--ink-soft)',lineHeight:1.6,fontWeight:300}}>⚠ <strong style={{fontWeight:500}}>Disclaimer:</strong> Always verify access rights, permit requirements, and safety before your session.</div>
@@ -240,6 +247,7 @@ export default function ExplorePage() {
   const [minRating,      setMinRating]      = useState(0)
   const [sortBy,         setSortBy]         = useState<SortValue>('quality')
   const [photoMap,       setPhotoMap]       = useState<Record<string,string>>({})
+  const [portfolioSources, setPortfolioSources] = useState<Set<string>>(new Set())
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
@@ -298,6 +306,12 @@ export default function ExplorePage() {
   }, [user])
 
   useEffect(() => {
+    if(!user){setPortfolioSources(new Set());return}
+    supabase.from('portfolio_locations').select('source_location_id').eq('user_id',user.id)
+      .then(({data})=>{if(data)setPortfolioSources(new Set(data.map((r:any)=>r.source_location_id).filter(Boolean)))})
+  }, [user])
+
+  useEffect(() => {
     if(!toast)return
     const id=setTimeout(()=>setToast(null),2600)
     return()=>clearTimeout(id)
@@ -333,6 +347,41 @@ export default function ExplorePage() {
     } else {
       setFavorites(prev=>new Set([...prev,locId]));setToast('❤ Saved!')
       await supabase.from('favorites').insert({user_id:user.id,location_id:locId})
+    }
+  }
+
+  async function addToPortfolio(locId:any) {
+    if(!user){setToast('Sign in to build your portfolio');return}
+    if(portfolioSources.has(locId))return
+    setPortfolioSources(prev=>new Set([...prev,locId]))
+    try {
+      const { data: full, error: fetchErr } = await supabase.from('locations')
+        .select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info')
+        .eq('id',locId).single()
+      if(fetchErr||!full)throw fetchErr??new Error('Location not found')
+      const { error } = await supabase.from('portfolio_locations').insert({
+        user_id:            user.id,
+        source_location_id: full.id,
+        name:               full.name,
+        description:        full.description,
+        city:               full.city,
+        state:              full.state,
+        latitude:           full.latitude,
+        longitude:          full.longitude,
+        access_type:        full.access_type,
+        tags:               full.tags,
+        permit_required:    full.permit_required,
+        permit_notes:       full.permit_notes,
+        best_time:          full.best_time,
+        parking_info:       full.parking_info,
+        is_secret:          false,
+      })
+      if(error)throw error
+      setToast('✓ Added to your portfolio! Add your own photos from your dashboard.')
+    } catch(e){
+      console.error(e)
+      setPortfolioSources(prev=>{const n=new Set(prev);n.delete(locId);return n})
+      setToast('⚠ Could not add to portfolio — please try again')
     }
   }
 
@@ -527,7 +576,7 @@ export default function ExplorePage() {
       </button>
 
       {detailLoc&&(
-        <DetailPanel loc={detailLoc} isFav={favorites.has(detailLoc.id)||favorites.has(Number(detailLoc.id))} onClose={()=>setDetailLoc(null)} onToggleFavorite={toggleFavorite} user={user}/>
+        <DetailPanel loc={detailLoc} isFav={favorites.has(detailLoc.id)||favorites.has(Number(detailLoc.id))} isInPortfolio={portfolioSources.has(detailLoc.id)} onClose={()=>setDetailLoc(null)} onToggleFavorite={toggleFavorite} onAddToPortfolio={addToPortfolio} user={user}/>
       )}
       {showAddModal&&<AddLocationModal onClose={()=>setShowAddModal(false)} user={user}/>}
 
