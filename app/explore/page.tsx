@@ -436,7 +436,7 @@ export default function ExplorePage() {
 
       {/* Filter bar */}
       <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',flexShrink:0,zIndex:100}}>
-        <div style={{padding:'8px 1.5rem',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <div className="explore-filter-row" style={{padding:'8px 1.5rem',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setShowFilters(p=>!p)} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${showFilters||activeFilterCount>0?'var(--gold)':'var(--cream-dark)'}`,background:showFilters||activeFilterCount>0?'rgba(196,146,42,.08)':'white',color:showFilters||activeFilterCount>0?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
             ⚙ Filters & Sort
             {activeFilterCount>0&&<span style={{width:16,height:16,borderRadius:'50%',background:'var(--gold)',color:'var(--ink)',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{activeFilterCount}</span>}

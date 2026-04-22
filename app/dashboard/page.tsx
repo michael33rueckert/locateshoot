@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { ADMIN_EMAIL } from '@/lib/admin'
@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
   const [preselectAllPortfolio, setPreselectAllPortfolio] = useState(false)
   const [deleteShareId,       setDeleteShareId]        = useState<string | null>(null)
+  const [editingPortfolioId,  setEditingPortfolioId]   = useState<string | null>(null)
   const [mobileMenuOpen,      setMobileMenuOpen]       = useState(false)
 
   useEffect(() => {
@@ -163,7 +164,7 @@ export default function DashboardPage() {
           <Link href="/explore" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Explore map</Link>
           <Link href="/share"   style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>New share</Link>
           <Link href="/profile" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Profile</Link>
-          {isAdmin && <Link href="/admin" style={{ fontSize: 13, color: 'var(--gold)', textDecoration: 'none', fontWeight: 500 }}>Admin</Link>}
+          {isAdmin && <Link href="/admin" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Admin</Link>}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -255,7 +256,9 @@ export default function DashboardPage() {
                     const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
                     const noPhotos = loc.photo_count === 0
                     return (
-                      <div key={loc.id} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white' }}>
+                      <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
                         <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 90, position: 'relative' }}>
                           <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: noPhotos ? 'rgba(196,146,42,.9)' : 'rgba(74,103,65,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
                             {noPhotos ? '⚠ No photos' : `${loc.photo_count} photo${loc.photo_count !== 1 ? 's' : ''}`}
@@ -263,8 +266,10 @@ export default function DashboardPage() {
                         </div>
                         <div style={{ padding: '10px 12px' }}>
                           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: noPhotos ? 8 : 0 }}>📍 {cityLine || '—'}</div>
-                          {noPhotos && <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 500, lineHeight: 1.4 }}>Add photos to replace Google Photos</div>}
+                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: noPhotos ? 8 : 4 }}>📍 {cityLine || '—'}</div>
+                          {noPhotos
+                            ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 500, lineHeight: 1.4 }}>Add photos to replace Google Photos</div>
+                            : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
                         </div>
                       </div>
                     )
@@ -442,6 +447,17 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* PORTFOLIO EDIT MODAL */}
+      {editingPortfolioId && (
+        <PortfolioEditModal
+          portfolioId={editingPortfolioId}
+          userId={profile?.id ?? ''}
+          onClose={() => setEditingPortfolioId(null)}
+          onSaved={() => { setEditingPortfolioId(null); loadData(); setToast('✓ Portfolio location saved') }}
+          onDeleted={() => { setEditingPortfolioId(null); loadData(); setToast('Portfolio location deleted') }}
+        />
+      )}
+
       {toast && (
         <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', background: 'var(--ink)', color: 'var(--cream)', padding: '10px 18px', borderRadius: 10, fontSize: 13, border: '1px solid rgba(255,255,255,.1)', zIndex: 9999, boxShadow: '0 8px 32px rgba(0,0,0,.3)', animation: 'toast-in .25s ease' }}>
           {toast}
@@ -570,6 +586,197 @@ function CreatePermanentLinkModal({
             </button>
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Portfolio Edit Modal ─────────────────────────────────────────────────────
+
+interface PortfolioRow {
+  id: string; name: string; description: string | null
+  city: string | null; state: string | null
+  is_secret: boolean; source_location_id: string | null
+}
+
+interface PhotoRow { id: string; url: string; storage_path: string; caption: string | null }
+
+function PortfolioEditModal({
+  portfolioId, userId, onClose, onSaved, onDeleted,
+}: {
+  portfolioId: string; userId: string
+  onClose: () => void; onSaved: () => void; onDeleted: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [row,     setRow]     = useState<PortfolioRow | null>(null)
+  const [name,    setName]    = useState('')
+  const [desc,    setDesc]    = useState('')
+  const [isSecret,setIsSecret]= useState(false)
+  const [photos,  setPhotos]  = useState<PhotoRow[]>([])
+  const [saving,  setSaving]  = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [err,     setErr]     = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const [rowRes, photosRes] = await Promise.all([
+        supabase.from('portfolio_locations').select('id,name,description,city,state,is_secret,source_location_id').eq('id', portfolioId).single(),
+        supabase.from('location_photos').select('id,url,storage_path,caption').eq('portfolio_location_id', portfolioId).order('created_at', { ascending: true }),
+      ])
+      if (cancelled) return
+      if (rowRes.data) {
+        setRow(rowRes.data)
+        setName(rowRes.data.name ?? '')
+        setDesc(rowRes.data.description ?? '')
+        setIsSecret(!!rowRes.data.is_secret)
+      }
+      if (photosRes.data) setPhotos(photosRes.data)
+      setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [portfolioId])
+
+  async function save() {
+    if (!name.trim()) { setErr('Name is required.'); return }
+    setSaving(true); setErr('')
+    const { error } = await supabase.from('portfolio_locations').update({
+      name: name.trim(), description: desc.trim() || null, is_secret: isSecret,
+    }).eq('id', portfolioId)
+    setSaving(false)
+    if (error) { setErr(error.message); return }
+    onSaved()
+  }
+
+  async function deletePortfolio() {
+    if (!confirmDelete) { setConfirmDelete(true); return }
+    setSaving(true)
+    // Clean up attached photos from storage (DB cascades via FK)
+    for (const p of photos) {
+      await supabase.storage.from('location-photos').remove([p.storage_path])
+    }
+    const { error } = await supabase.from('portfolio_locations').delete().eq('id', portfolioId)
+    setSaving(false)
+    if (error) { setErr(error.message); return }
+    onDeleted()
+  }
+
+  async function deletePhoto(photo: PhotoRow) {
+    await supabase.storage.from('location-photos').remove([photo.storage_path])
+    await supabase.from('location_photos').delete().eq('id', photo.id)
+    setPhotos(prev => prev.filter(p => p.id !== photo.id))
+  }
+
+  async function handleUpload(files: File[]) {
+    if (!files.length) return
+    setUploading(true)
+    const { data: p } = await supabase.from('profiles').select('full_name').eq('id', userId).single()
+    const uploaded: PhotoRow[] = []
+    for (const f of files) {
+      try {
+        const ext = f.name.split('.').pop()
+        const path = `${userId}/portfolio/${portfolioId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`
+        const { error: ue } = await supabase.storage.from('location-photos').upload(path, f, { contentType: f.type })
+        if (ue) { console.error(ue); continue }
+        const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
+        const { data: inserted, error: ie } = await supabase.from('location_photos').insert({
+          portfolio_location_id: portfolioId,
+          user_id: userId,
+          url: pub.publicUrl,
+          storage_path: path,
+          is_private: false,
+          photographer_name: p?.full_name ?? null,
+        }).select('id,url,storage_path,caption').single()
+        if (ie) { console.error(ie); continue }
+        if (inserted) uploaded.push(inserted)
+      } catch (e) { console.error(e) }
+    }
+    setPhotos(prev => [...prev, ...uploaded])
+    setUploading(false)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
+  const cityLine = row ? [row.city, row.state].filter(Boolean).join(', ') : ''
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+        <div style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem', gap: 12 }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>Edit portfolio location</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>{cityLine || 'Your curated copy — edits don\'t affect the public map.'}</div>
+            </div>
+            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+          </div>
+
+          {loading ? (
+            <div style={{ padding: '2rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)' }}>Loading…</div>
+          ) : (
+            <>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Name *</label>
+                <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Description</label>
+                <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="What's special about this spot?" />
+              </div>
+              <div onClick={() => setIsSecret(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer', background: isSecret ? 'rgba(124,92,191,.05)' : 'var(--cream)', border: `1px solid ${isSecret ? 'rgba(124,92,191,.3)' : 'var(--cream-dark)'}` }}>
+                <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${isSecret ? '#7c5cbf' : 'var(--sand)'}`, background: isSecret ? '#7c5cbf' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{isSecret ? '✓' : ''}</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Hide from Explore when adding to public DB</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Marks this as a private portfolio spot. Still shows on your share links.</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Your photos <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({photos.length})</span></label>
+                  <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ padding: '5px 12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {uploading ? 'Uploading…' : '+ Upload photos'}
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" multiple onChange={e => { handleUpload(Array.from(e.target.files ?? [])) }} style={{ display: 'none' }} />
+                </div>
+                {photos.length === 0 ? (
+                  <div style={{ padding: '1.25rem', textAlign: 'center', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 4, fontWeight: 500 }}>⚠ No photos yet</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Clients will see Google Photos until you add your own.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(90px,1fr))', gap: 6 }}>
+                    {photos.map(p => (
+                      <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}>
+                        <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button onClick={() => deletePhoto(p)} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {err && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{err}</div>}
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <button onClick={deletePortfolio} disabled={saving} style={{ padding: '10px 18px', borderRadius: 4, background: confirmDelete ? 'var(--rust)' : 'rgba(181,75,42,.08)', color: confirmDelete ? 'white' : 'var(--rust)', border: `1px solid rgba(181,75,42,${confirmDelete ? '.4' : '.2'})`, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {confirmDelete ? 'Click again to confirm' : 'Delete from portfolio'}
+                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={onClose} style={{ padding: '10px 18px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                  <button onClick={save} disabled={saving || !name.trim()} style={{ padding: '10px 22px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !name.trim() ? 0.5 : 1 }}>
+                    {saving ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>

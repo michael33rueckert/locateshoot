@@ -372,10 +372,23 @@ export default function AdminPage() {
                   ✓ Scan complete
                   <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(74,103,65,.3)', color: '#c8e8c4', fontWeight: 500 }}>{scanResult.inserted} added</span>
                   {scanResult.errors > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(255,255,255,.05)', color: 'rgba(245,240,232,.35)' }}>{scanResult.errors} skipped</span>}
+                  <span style={{ fontSize: 11, color: 'rgba(245,240,232,.3)' }}>({scanResult.scans} scans run)</span>
                 </div>
-                <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                  {scanResult.locations.map((loc, i) => <div key={i} style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', padding: '2px 0' }}>✓ {loc}</div>)}
-                </div>
+                {scanResult.locations.length > 0 && (
+                  <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: scanResult.errorList.length > 0 ? 8 : 0 }}>
+                    {scanResult.locations.map((loc, i) => <div key={i} style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}><span style={{ color: 'var(--sage)', fontSize: 10, marginTop: 2 }}>✓</span><span>{loc}</span></div>)}
+                  </div>
+                )}
+                {scanResult.errorList.length > 0 && (
+                  <details>
+                    <summary style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', cursor: 'pointer', padding: '6px 0', fontWeight: 500 }}>
+                      Show skipped ({scanResult.errorList.length}) — tap to expand
+                    </summary>
+                    <div style={{ marginTop: 6, maxHeight: 220, overflowY: 'auto', background: 'rgba(0,0,0,.15)', borderRadius: 6, padding: '8px 10px' }}>
+                      {scanResult.errorList.map((e, i) => <div key={i} style={{ fontSize: 10, color: 'rgba(245,240,232,.5)', padding: '3px 0', borderBottom: i < scanResult.errorList.length - 1 ? '1px solid rgba(255,255,255,.04)' : 'none', lineHeight: 1.5, wordBreak: 'break-word' }}>• {e}</div>)}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
           </div>

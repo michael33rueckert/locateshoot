@@ -1196,6 +1196,13 @@ body {
     max-height: 60svh !important; overflow-y: auto !important;
     grid-template-columns: unset !important;
   }
+  .explore-filter-row {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding: 6px 1rem !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .explore-filter-row::-webkit-scrollbar { display: none; }
  
   /* ── Share ── */
   .share-outer   { display: block !important; height: 100svh !important; overflow: hidden !important; }
