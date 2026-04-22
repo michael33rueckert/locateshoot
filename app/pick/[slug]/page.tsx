@@ -195,9 +195,18 @@ export default function ClientPickerPage() {
 
       {/* Header */}
       <div style={{ background: 'var(--ink)', padding: '1.25rem 1.5rem', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-        <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
-        </div>
+        {branding?.remove_ls_branding && branding?.logo_url ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
+            <img src={branding.logo_url} alt={branding.studio_name ?? 'Studio logo'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', background: 'rgba(255,255,255,.08)' }} />
+            {branding.show_studio_name !== false && branding.studio_name && (
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 700, color: 'var(--cream)' }}>{branding.studio_name}</div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
+          </div>
+        )}
         <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: 'var(--cream)', marginBottom: '.4rem' }}>
           Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
         </h1>
