@@ -16,7 +16,7 @@ const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 const ALL_TAGS = [
   'Golden Hour','Sunrise','Sunset','Forest','Urban','Waterfront','Historic',
   'Nature','Gardens','Architecture','Romantic','Dramatic','Editorial',
-  'Meadow','Creek','Bridge','Mural','Rooftop','Cemetery','Barn','Ranch',
+  'Meadow','Creek','Bridge','Mural','Rooftop','Barn','Ranch',
   'Vineyard','Campus','Trail','Industrial','Rustic','Colorful','Wedding','Family',
 ]
 
@@ -30,10 +30,10 @@ const SORT_OPTIONS = [
 
 const RATING_OPTIONS = [
   { value: 0,   label: 'Any rating' },
-  { value: 4.5, label: '★ 4.5+'     },
-  { value: 4.0, label: '★ 4.0+'     },
-  { value: 3.5, label: '★ 3.5+'     },
-  { value: 3.0, label: '★ 3.0+'     },
+  { value: 4.5, label: '★ 4.5+' },
+  { value: 4.0, label: '★ 4.0+' },
+  { value: 3.5, label: '★ 3.5+' },
+  { value: 3.0, label: '★ 3.0+' },
 ]
 
 const PERMIT_CERTAINTY_CONFIG = {
@@ -51,6 +51,8 @@ interface CommunityPhoto {
   created_at: string; user_id: string | null
 }
 
+// ── Custom hooks ──────────────────────────────────────────────────────────────
+
 function useCommunityPhotos(locationId: number | string | null, currentUserId: string | null) {
   const [photos,  setPhotos]  = useState<CommunityPhoto[]>([])
   const [loading, setLoading] = useState(false)
@@ -62,12 +64,14 @@ function useCommunityPhotos(locationId: number | string | null, currentUserId: s
       .eq('location_id', locationId)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
-        const visible = (data ?? []).filter((p: CommunityPhoto) => !p.is_private || p.user_id === currentUserId)
+        const visible = (data ?? []).filter((p: any) => !p.is_private || p.user_id === currentUserId)
         setPhotos(visible); setLoading(false)
       })
   }, [locationId, currentUserId])
   return { photos, loading }
 }
+
+// ── Photo upload ──────────────────────────────────────────────────────────────
 
 function PhotoUploadPanel({ locationId, user, onUpload }: { locationId: number | string, user: any, onUpload: () => void }) {
   const [files,       setFiles]       = useState<File[]>([])
@@ -77,10 +81,10 @@ function PhotoUploadPanel({ locationId, user, onUpload }: { locationId: number |
   const [uploadCount, setUploadCount] = useState(0)
   const [done,        setDone]        = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
   async function upload() {
     if (!user || files.length === 0) return
-    setUploading(true)
-    let count = 0
+    setUploading(true); let count = 0
     const profile = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
     const photographerName = profile.data?.full_name ?? ''
     for (const file of files) {
@@ -96,13 +100,15 @@ function PhotoUploadPanel({ locationId, user, onUpload }: { locationId: number |
     }
     setUploading(false); setDone(true); onUpload()
   }
+
   if (done) return <div style={{ padding: '12px 14px', background: 'rgba(74,103,65,.08)', border: '1px solid rgba(74,103,65,.2)', borderRadius: 8, fontSize: 13, color: 'var(--sage)', textAlign: 'center' }}>✓ {uploadCount} photo{uploadCount !== 1 ? 's' : ''} uploaded!</div>
+
   return (
     <div style={{ border: '1px solid var(--cream-dark)', borderRadius: 10, overflow: 'hidden' }}>
       <div style={{ padding: '10px 14px', background: 'var(--cream)', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>📷 Add your photos</div>
         <button onClick={() => fileRef.current?.click()} style={{ padding: '5px 12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Browse</button>
-        <input ref={fileRef} type="file" accept="image/*" multiple onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? []).filter(f => f.type.startsWith('image/'))].slice(0,10))} style={{ display: 'none' }} />
+        <input ref={fileRef} type="file" accept="image/*" multiple onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])].slice(0,10))} style={{ display: 'none' }} />
       </div>
       <div style={{ padding: '12px 14px' }}>
         {files.length === 0 ? (
@@ -116,7 +122,7 @@ function PhotoUploadPanel({ locationId, user, onUpload }: { locationId: number |
               {files.map((f, i) => (
                 <div key={i} style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}>
                   <img src={URL.createObjectURL(f)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <button onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(26,22,18,.7)', border: 'none', cursor: 'pointer', fontSize: 10, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  <button onClick={() => setFiles(prev => prev.filter((_,idx) => idx !== i))} style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(26,22,18,.7)', border: 'none', cursor: 'pointer', fontSize: 10, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </div>
               ))}
             </div>
@@ -135,6 +141,8 @@ function PhotoUploadPanel({ locationId, user, onUpload }: { locationId: number |
   )
 }
 
+// ── Modals ────────────────────────────────────────────────────────────────────
+
 function ReportModal({ locName, onClose }: { locName: string, onClose: () => void }) {
   const [message, setMessage] = useState('')
   const [sent, setSent] = useState(false)
@@ -146,6 +154,7 @@ function ReportModal({ locName, onClose }: { locName: string, onClose: () => voi
           <div style={{ textAlign: 'center', padding: '1rem 0' }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>✓</div>
             <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>Thanks!</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: '1.25rem' }}>We&apos;ll review the correction for {locName}.</div>
             <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Close</button>
           </div>
         ) : (
@@ -165,30 +174,26 @@ function ReportModal({ locName, onClose }: { locName: string, onClose: () => voi
 }
 
 function AddLocationModal({ onClose, user }: { onClose: () => void, user: any }) {
-  const [name,        setName]        = useState('')
-  const [city,        setCity]        = useState('')
-  const [state,       setState]       = useState('')
-  const [description, setDescription] = useState('')
-  const [accessType,  setAccessType]  = useState('public')
-  const [tags,        setTags]        = useState<string[]>([])
-  const [tagInput,    setTagInput]    = useState('')
-  const [saving,      setSaving]      = useState(false)
-  const [saved,       setSaved]       = useState(false)
-  const [error,       setError]       = useState('')
-  const [pin,         setPin]         = useState<{ lat: number; lng: number; label: string } | null>(null)
-  const [photoFiles,  setPhotoFiles]  = useState<File[]>([])
+  const [name, setName] = useState(''); const [city, setCity] = useState(''); const [state, setState] = useState('')
+  const [description, setDescription] = useState(''); const [accessType, setAccessType] = useState('public')
+  const [tags, setTags] = useState<string[]>([]); const [tagInput, setTagInput] = useState('')
+  const [saving, setSaving] = useState(false); const [saved, setSaved] = useState(false); const [error, setError] = useState('')
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
-  const TAG_SUGGESTIONS = ['Golden Hour','Forest','Urban','Waterfront','Historic','Nature','Gardens','Architecture','Romantic','Dramatic','Editorial','Meadow','Creek','Bridge','Mural']
+  const TAG_SUGGESTIONS = ['Golden Hour','Forest','Urban','Waterfront','Historic','Nature','Romantic','Dramatic','Meadow','Creek','Bridge']
+
   function handleAddressSelect(result: AddressResult) {
-    setPin({ lat: result.lat, lng: result.lng, label: result.label ?? result.shortLabel ?? '' })
+    setPin({ lat: result.lat, lng: result.lng })
     if (!name.trim()) { const p = result.label?.split(',') ?? []; if (p.length > 0) setName(p[0].trim()) }
     if (!city.trim()) { const p = result.label?.split(',') ?? []; if (p.length > 1) setCity(p[1].trim()) }
     if (!state.trim()) { const p = result.label?.split(',') ?? []; if (p.length > 2) { const m = p[p.length-1].trim().match(/^([A-Z]{2})/i); if (m) setState(m[1].toUpperCase()) } }
   }
   function addTag(tag: string) { const t = tag.trim(); if (!t || tags.includes(t) || tags.length >= 8) return; setTags(prev => [...prev, t]); setTagInput('') }
+
   async function submit() {
     if (!name.trim() || !city.trim() || !state.trim()) { setError('Name, city, and state are required.'); return }
-    if (!pin) { setError('Please search for and select the location first.'); return }
+    if (!pin) { setError('Please search for and select the location.'); return }
     setSaving(true); setError('')
     try {
       const { data, error: insertErr } = await supabase.from('locations').insert({ name: name.trim(), city: city.trim(), state: state.trim().slice(0,2).toUpperCase(), latitude: pin.lat, longitude: pin.lng, description: description.trim() || null, access_type: accessType, tags, status: 'pending', source: 'community', added_by: user?.id ?? null }).select('id').single()
@@ -198,8 +203,7 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
         const photographerName = profile?.data?.full_name ?? ''
         for (const file of photoFiles) {
           try {
-            const ext = file.name.split('.').pop()
-            const path = `${user?.id ?? 'guest'}/${data.id}/${Date.now()}.${ext}`
+            const ext = file.name.split('.').pop(), path = `${user?.id ?? 'guest'}/${data.id}/${Date.now()}.${ext}`
             const { error: upErr } = await supabase.storage.from('location-photos').upload(path, file, { contentType: file.type })
             if (upErr) continue
             const { data: urlData } = supabase.storage.from('location-photos').getPublicUrl(path)
@@ -211,8 +215,10 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
     } catch (err: any) { setError('Could not submit — please try again.'); console.error(err) }
     finally { setSaving(false) }
   }
+
   const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans), sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
+
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(4px)', zIndex: 800 }} />
@@ -226,7 +232,7 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
             <div style={{ textAlign: 'center', padding: '2rem 0' }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
               <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 20, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>Thanks!</div>
-              <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: '1.5rem' }}>Your location has been submitted for review.</div>
+              <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1.5rem' }}>Your location has been submitted for review.</div>
               <button onClick={onClose} style={{ padding: '10px 24px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Done</button>
             </div>
           ) : (
@@ -236,7 +242,7 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
                 <AddressSearch onSelect={handleAddressSelect} placeholder="Search by name or address…" />
                 {pin && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', borderRadius: 6, marginTop: 8, background: 'rgba(74,103,65,.08)', border: '1px solid rgba(74,103,65,.2)', fontSize: 13, color: 'var(--sage)' }}><span>📍</span><div style={{ flex: 1 }}><div style={{ fontWeight: 500 }}>Pin placed</div><div style={{ fontSize: 10, color: 'var(--sage)', marginTop: 1 }}>{pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}</div></div><button onClick={() => setPin(null)} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>Clear</button></div>}
               </div>
-              <div style={{ marginBottom: '1rem' }}><label style={labelStyle}>Location name *</label><input value={name} onChange={e => setName(e.target.value)} style={inputStyle} placeholder="e.g. Loose Park Rose Garden" /></div>
+              <div style={{ marginBottom: '1rem' }}><label style={labelStyle}>Location name *</label><input value={name} onChange={e => setName(e.target.value)} style={inputStyle} /></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 10, marginBottom: '1rem' }}>
                 <div><label style={labelStyle}>City *</label><input value={city} onChange={e => setCity(e.target.value)} style={inputStyle} /></div>
                 <div><label style={labelStyle}>State *</label><input value={state} onChange={e => setState(e.target.value.slice(0,2).toUpperCase())} style={inputStyle} placeholder="MO" maxLength={2} /></div>
@@ -244,7 +250,7 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
               <div style={{ marginBottom: '1rem' }}><label style={labelStyle}>Description</label><textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} /></div>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Access</label>
-                <div style={{ display: 'flex', gap: 8 }}>{['public','private'].map(type => <button key={type} onClick={() => setAccessType(type)} style={{ flex: 1, padding: '9px', borderRadius: 4, border: `1.5px solid ${accessType === type ? 'var(--gold)' : 'var(--cream-dark)'}`, background: accessType === type ? 'rgba(196,146,42,.08)' : 'white', color: accessType === type ? 'var(--gold)' : 'var(--ink-soft)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>{type === 'public' ? '● Public' : '🔒 Private'}</button>)}</div>
+                <div style={{ display: 'flex', gap: 8 }}>{['public','private'].map(t => <button key={t} onClick={() => setAccessType(t)} style={{ flex: 1, padding: '9px', borderRadius: 4, border: `1.5px solid ${accessType === t ? 'var(--gold)' : 'var(--cream-dark)'}`, background: accessType === t ? 'rgba(196,146,42,.08)' : 'white', color: accessType === t ? 'var(--gold)' : 'var(--ink-soft)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>{t === 'public' ? '● Public' : '🔒 Private'}</button>)}</div>
               </div>
               <div style={{ marginBottom: '1.25rem' }}>
                 <label style={labelStyle}>Tags (up to 8)</label>
@@ -256,21 +262,15 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <label style={{ ...labelStyle, marginBottom: 0 }}>Photos (optional)</label>
                   <button onClick={() => fileRef.current?.click()} style={{ padding: '6px 12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add photos</button>
-                  <input ref={fileRef} type="file" accept="image/*" multiple onChange={e => setPhotoFiles(prev => [...prev, ...Array.from(e.target.files ?? []).filter(f => f.type.startsWith('image/'))].slice(0,10))} style={{ display: 'none' }} />
+                  <input ref={fileRef} type="file" accept="image/*" multiple onChange={e => setPhotoFiles(prev => [...prev, ...Array.from(e.target.files ?? [])].slice(0,10))} style={{ display: 'none' }} />
                 </div>
                 {photoFiles.length > 0 ? (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 6 }}>
-                    {photoFiles.map((file, idx) => (
-                      <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}>
-                        <img src={URL.createObjectURL(file)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <button onClick={() => setPhotoFiles(prev => prev.filter((_,i) => i !== idx))} style={{ position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: '50%', background: 'rgba(26,22,18,.7)', border: 'none', cursor: 'pointer', fontSize: 12, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                      </div>
-                    ))}
+                    {photoFiles.map((file, idx) => <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}><img src={URL.createObjectURL(file)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /><button onClick={() => setPhotoFiles(prev => prev.filter((_,i) => i !== idx))} style={{ position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: '50%', background: 'rgba(26,22,18,.7)', border: 'none', cursor: 'pointer', fontSize: 12, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button></div>)}
                   </div>
                 ) : (
                   <div onClick={() => fileRef.current?.click()} style={{ border: '2px dashed var(--cream-dark)', borderRadius: 10, padding: '1rem', textAlign: 'center', cursor: 'pointer', background: 'var(--cream)' }}>
-                    <div style={{ fontSize: 24, marginBottom: 4 }}>📷</div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>Tap to add photos</div>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>📷</div><div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>Tap to add photos</div>
                   </div>
                 )}
               </div>
@@ -289,41 +289,54 @@ function AddLocationModal({ onClose, user }: { onClose: () => void, user: any })
   )
 }
 
+// ── Detail panel ──────────────────────────────────────────────────────────────
+
 function DetailPanel({ loc, isFav, onClose, onToggleFavorite, user }: {
-  loc: ExploreLocation & { desc?: string; ratingNum?: number; qualityScore?: number; permit_required?: boolean; permit_notes?: string | null; permit_fee?: number | null; permit_website?: string | null; permit_certainty?: string; permit_scanned_at?: string | null }
-  isFav: boolean; onClose: () => void; onToggleFavorite: (id: number) => void; user: any
+  loc: any; isFav: boolean; onClose: () => void
+  onToggleFavorite: (id: any) => void; user: any
 }) {
   const router = useRouter()
   const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
-  const { photos: communityPhotos, loading: communityLoading } = useCommunityPhotos(loc.id, user?.id ?? null)
+  const { photos: communityPhotos } = useCommunityPhotos(loc.id, user?.id ?? null)
   const [activeGooglePhoto, setActiveGooglePhoto] = useState(0)
-  const [photoTab, setPhotoTab] = useState<'google' | 'community' | 'upload'>('google')
-  const [showReport, setShowReport] = useState(false)
+  const [photoTab,  setPhotoTab]  = useState<'google' | 'community' | 'upload'>('google')
+  const [showReport,setShowReport]= useState(false)
+  const [refreshKey,setRefreshKey]= useState(0)
+
   useEffect(() => { setActiveGooglePhoto(0); setPhotoTab('google') }, [loc.id])
   useEffect(() => { if (!googleLoading && !googlePhotos.length && communityPhotos.length) setPhotoTab('community') }, [googleLoading, googlePhotos.length, communityPhotos.length])
-  const hasGoogle = googlePhotos.length > 0
+
+  const hasGoogle    = googlePhotos.length > 0
   const hasCommunity = communityPhotos.length > 0
-  const permitCfg = PERMIT_CERTAINTY_CONFIG[(loc.permit_certainty as keyof typeof PERMIT_CERTAINTY_CONFIG) ?? 'unknown'] ?? PERMIT_CERTAINTY_CONFIG.unknown
+  const permitCfg    = PERMIT_CERTAINTY_CONFIG[(loc.permit_certainty as keyof typeof PERMIT_CERTAINTY_CONFIG) ?? 'unknown'] ?? PERMIT_CERTAINTY_CONFIG.unknown
+
   function shareWithClient() {
     sessionStorage.setItem('sharePreselectedLocation', JSON.stringify({ id: loc.id, name: loc.name, city: loc.city, lat: loc.lat, lng: loc.lng, access: loc.access, rating: loc.rating, bg: loc.bg, type: 'favorite' }))
     router.push('/share?step=3')
   }
+
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.5)', backdropFilter: 'blur(3px)', zIndex: 400 }} />
       <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 600, background: 'white', borderRadius: '16px 16px 0 0', zIndex: 500, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 -8px 48px rgba(26,22,18,.25)', animation: 'slideUp .28s ease' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--sand)' }} /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--sand)' }} />
+        </div>
         <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: '50%', background: 'rgba(26,22,18,.6)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>✕</button>
+
+        {/* Photo area */}
         <div style={{ position: 'relative', height: 220, background: '#1a1612', overflow: 'hidden' }}>
           {photoTab === 'google' && (googleLoading
             ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className={loc.bg} style={{ position: 'absolute', inset: 0, opacity: 0.4 }} /><div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,.2)', borderTop: '2px solid rgba(255,255,255,.7)', borderRadius: '50%', animation: 'spin .7s linear infinite', zIndex: 1 }} /></div>
             : hasGoogle ? <img src={googlePhotos[activeGooglePhoto].url} alt={loc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <div className={loc.bg} style={{ position: 'absolute', inset: 0 }} />)}
-          {photoTab === 'community' && (hasCommunity ? <img src={communityPhotos[0].url} alt={loc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div className={loc.bg} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}><span style={{ fontSize: 32 }}>📷</span><span style={{ fontSize: 12, color: 'rgba(255,255,255,.6)' }}>No photos yet</span></div>)}
+          {photoTab === 'community' && (hasCommunity ? <img src={communityPhotos[0].url} alt={loc.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div className={loc.bg} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}><span style={{ fontSize: 32 }}>📷</span><span style={{ fontSize: 12, color: 'rgba(255,255,255,.6)' }}>No community photos yet</span></div>)}
           {photoTab === 'upload' && <div className={loc.bg} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 36 }}>📷</span></div>}
           {photoTab !== 'upload' && <div style={{ position: 'absolute', top: 10, left: 10, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: loc.access === 'public' ? '#c8e8c4' : '#ffd0c0', backdropFilter: 'blur(4px)' }}>{loc.access === 'public' ? '● Public' : '🔒 Private'}</div>}
           {photoTab === 'google' && hasGoogle && googlePhotos.length > 1 && <div style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(26,22,18,.7)', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'rgba(255,255,255,.8)' }}>{activeGooglePhoto + 1} / {googlePhotos.length}</div>}
         </div>
+
+        {/* Photo tabs */}
         <div style={{ borderBottom: '1px solid var(--cream-dark)', display: 'flex', overflowX: 'auto' }}>
           {[{ key: 'google', label: `Google${hasGoogle ? ` (${googlePhotos.length})` : ''}` }, { key: 'community', label: `Photographer${hasCommunity ? ` (${communityPhotos.length})` : ''}` }, { key: 'upload', label: user ? '+ Add yours' : '📷 Sign in to add' }].map(tab => (
             <button key={tab.key} onClick={() => { if (tab.key === 'upload' && !user) return; setPhotoTab(tab.key as any) }} style={{ padding: '8px 14px', fontSize: 12, fontWeight: 500, border: 'none', borderBottom: `2px solid ${photoTab === tab.key ? 'var(--gold)' : 'transparent'}`, background: 'white', color: photoTab === tab.key ? 'var(--ink)' : 'var(--ink-soft)', cursor: tab.key === 'upload' && !user ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: tab.key === 'upload' && !user ? 0.5 : 1, flexShrink: 0 }}>{tab.label}</button>
@@ -335,14 +348,16 @@ function DetailPanel({ loc, isFav, onClose, onToggleFavorite, user }: {
           </div>
         )}
         {photoTab === 'google' && <div style={{ padding: '6px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', gap: 6 }}><img src="https://developers.google.com/static/maps/documentation/images/google_on_white.png" alt="Google" style={{ height: 11, opacity: 0.4 }} /><span style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Photos via Google · Not affiliated with LocateShoot</span></div>}
-        {photoTab === 'upload' && user && <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}><PhotoUploadPanel locationId={loc.id} user={user} onUpload={() => setPhotoTab('community')} /></div>}
+        {photoTab === 'upload' && user && <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}><PhotoUploadPanel locationId={loc.id} user={user} onUpload={() => { setRefreshKey(k => k+1); setPhotoTab('community') }} /></div>}
+
+        {/* Details */}
         <div style={{ padding: '1rem 1.25rem 1.5rem' }}>
           <div style={{ fontFamily: 'var(--font-playfair), serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>{loc.name}</div>
           <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: '1rem' }}>📍 {loc.city}</div>
           {(loc.tags ?? []).length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: '1rem' }}>{(loc.tags ?? []).map((t: string) => <span key={t} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 12, background: 'var(--cream-dark)', color: 'var(--ink-soft)', border: '1px solid var(--sand)' }}>{t}</span>)}</div>}
           {loc.desc && <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, marginBottom: '1.25rem' }}>{loc.desc}</p>}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1rem' }}>
-            {[{ icon: '🔒', label: 'Access', value: loc.access === 'public' ? 'Free public access' : 'Private — booking required' }, { icon: '⭐', label: 'Rating', value: loc.rating !== '—' ? `${loc.rating} out of 5` : 'Not yet rated' }, { icon: '❤', label: 'Saves', value: (loc.saves ?? 0) > 0 ? `${loc.saves}` : 'Be the first!' }, { icon: '📷', label: 'Photos', value: `${hasGoogle ? googlePhotos.length : 0} Google · ${hasCommunity ? communityPhotos.length : 0} community` }].map(item => (
+            {[{ icon: '🔒', label: 'Access', value: loc.access === 'public' ? 'Free public access' : 'Private — booking required' }, { icon: '⭐', label: 'Rating', value: loc.rating !== '—' ? `${loc.rating} out of 5` : 'Not yet rated' }, { icon: '❤', label: 'Saves', value: (loc.saves ?? 0) > 0 ? `${loc.saves} photographers` : 'Be the first!' }, { icon: '📷', label: 'Photos', value: `${hasGoogle ? googlePhotos.length + ' Google' : '0 Google'} · ${hasCommunity ? communityPhotos.length + ' community' : '0 community'}` }].map(item => (
               <div key={item.label} style={{ background: 'var(--cream)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--cream-dark)' }}>
                 <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--ink-soft)', marginBottom: 4 }}>{item.icon} {item.label}</div>
                 <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.4 }}>{item.value}</div>
@@ -362,7 +377,7 @@ function DetailPanel({ loc, isFav, onClose, onToggleFavorite, user }: {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, marginBottom: '1rem' }}>
-            <button onClick={() => onToggleFavorite(loc.id as number)} style={{ flex: 1, padding: '12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, background: isFav ? 'rgba(196,146,42,.1)' : 'var(--cream)', color: isFav ? 'var(--gold)' : 'var(--ink-soft)', border: `1px solid ${isFav ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}` }}>{isFav ? '♥ Saved' : '♡ Save to favorites'}</button>
+            <button onClick={() => onToggleFavorite(loc.id)} style={{ flex: 1, padding: '12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, background: isFav ? 'rgba(196,146,42,.1)' : 'var(--cream)', color: isFav ? 'var(--gold)' : 'var(--ink-soft)', border: `1px solid ${isFav ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}`, transition: 'all .18s' }}>{isFav ? '♥ Saved' : '♡ Save to favorites'}</button>
             {user ? <button onClick={shareWithClient} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>🔗 Share with client</button>
               : <Link href="/" style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Join free to save →</Link>}
           </div>
@@ -373,7 +388,10 @@ function DetailPanel({ loc, isFav, onClose, onToggleFavorite, user }: {
         </div>
       </div>
       {showReport && <ReportModal locName={loc.name} onClose={() => setShowReport(false)} />}
-      <style>{`@keyframes slideUp { from { transform: translateX(-50%) translateY(40px); opacity:0; } to { transform: translateX(-50%) translateY(0); opacity:1; } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes slideUp { from { transform: translateX(-50%) translateY(40px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+      `}</style>
     </>
   )
 }
@@ -386,7 +404,7 @@ export default function ExplorePage() {
   const [locGranted,     setLocGranted]     = useState(false)
   const [locLoading,     setLocLoading]     = useState(false)
   const [activeId,       setActiveId]       = useState<number | null>(null)
-  const [detailLoc,      setDetailLoc]      = useState<ExploreLocation | null>(null)
+  const [detailLoc,      setDetailLoc]      = useState<any>(null)
   const [favorites,      setFavorites]      = useState<Set<number>>(new Set())
   const [user,           setUser]           = useState<any>(null)
   const [toast,          setToast]          = useState<string | null>(null)
@@ -398,20 +416,13 @@ export default function ExplorePage() {
   const [minRating,      setMinRating]      = useState(0)
   const [sortBy,         setSortBy]         = useState<SortValue>('quality')
   const [photoMap,       setPhotoMap]       = useState<Record<string, string>>({})
-
-  // Mobile
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
+  const [searchPin,        setSearchPin]        = useState<{ lat: number; lng: number; label: string } | null>(null)
+  const [showPinSearch,    setShowPinSearch]    = useState(false)
 
-  // Pin drop for "find near" on explore
-  const [searchPin, setSearchPin] = useState<{ lat: number; lng: number; label: string } | null>(null)
-  const [showPinSearch, setShowPinSearch] = useState(false)
-
-  // Trigger Leaflet resize when map becomes visible on mobile
   useEffect(() => {
-    if (mobileMapVisible) {
-      setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
-    }
+    if (mobileMapVisible) setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
   }, [mobileMapVisible])
 
   useEffect(() => { supabase.auth.getUser().then(({ data: { user } }) => setUser(user)) }, [])
@@ -427,7 +438,7 @@ export default function ExplorePage() {
           .not('latitude', 'is', null)
           .not('longitude', 'is', null)
           .limit(500)
-        setLocations((data ?? []).map((loc, idx) => ({
+        setLocations((data ?? []).map((loc: any, idx: number) => ({
           id: loc.id, name: loc.name,
           city: loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? ''),
           lat: loc.latitude, lng: loc.longitude,
@@ -450,7 +461,7 @@ export default function ExplorePage() {
 
   useEffect(() => {
     if (locations.length === 0) return
-    const ids = locations.slice(0, 200).map(l => l.id)
+    const ids = locations.slice(0, 200).map((l: any) => l.id)
     supabase.from('location_photos').select('location_id,url').in('location_id', ids).eq('is_private', false).limit(300)
       .then(({ data }) => {
         if (!data) return
@@ -481,37 +492,33 @@ export default function ExplorePage() {
   }, [])
 
   function requestLocation() {
-    if (!navigator.geolocation) return
-    setLocLoading(true)
+    if (!navigator.geolocation) return; setLocLoading(true)
     navigator.geolocation.getCurrentPosition(
       pos => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocGranted(true); setLocLoading(false); setToast('📍 Showing locations near you!') },
-      () => { setLocLoading(false); setToast('⚠ Could not get location') },
-      { timeout: 10000 }
+      () => { setLocLoading(false) }, { timeout: 10000 }
     )
   }
 
   function handlePinSearch(result: AddressResult) {
     setSearchPin({ lat: result.lat, lng: result.lng, label: result.label ?? result.shortLabel ?? '' })
     setUserLocation({ lat: result.lat, lng: result.lng })
-    setShowPinSearch(false)
-    setToast(`📍 Showing locations near ${result.shortLabel}`)
+    setShowPinSearch(false); setToast(`📍 Showing locations near ${result.shortLabel}`)
   }
 
   const handleMarkerClick = useCallback((id: number) => {
-    const loc = locations.find(l => l.id === id)
+    const loc = locations.find((l: any) => String(l.id) === String(id))
     if (loc) { setDetailLoc(loc); setActiveId(id); setMobileMapVisible(false) }
   }, [locations])
 
-  async function toggleFavorite(locId: number, e?: React.MouseEvent) {
+  async function toggleFavorite(locId: any, e?: React.MouseEvent) {
     e?.stopPropagation()
     if (!user) { setToast('Sign in to save favorites'); return }
-    if (favorites.has(locId)) {
-      setFavorites(prev => { const n = new Set(prev); n.delete(locId); return n })
-      setToast('Removed from favorites')
+    const numId = Number(locId)
+    if (favorites.has(numId)) {
+      setFavorites(prev => { const n = new Set(prev); n.delete(numId); return n }); setToast('Removed from favorites')
       await supabase.from('favorites').delete().eq('user_id', user.id).eq('location_id', locId)
     } else {
-      setFavorites(prev => new Set([...prev, locId]))
-      setToast('❤ Saved to favorites!')
+      setFavorites(prev => new Set([...prev, numId])); setToast('❤ Saved to favorites!')
       await supabase.from('favorites').insert({ user_id: user.id, location_id: locId })
     }
   }
@@ -520,20 +527,20 @@ export default function ExplorePage() {
   function clearAllFilters() { setAccessFilter('All'); setSelectedTags([]); setMinRating(0); setSortBy('quality') }
 
   const filtered = useMemo(() => {
-    let result = locations.filter(loc => {
-      const matchesAccess = accessFilter === 'All' ? true : accessFilter === 'Public' ? loc.access === 'public' : accessFilter === 'Private' ? loc.access === 'private' : accessFilter === 'My Locations' ? (loc as any).addedBy === user?.id : true
+    let result = locations.filter((loc: any) => {
+      const matchesAccess = accessFilter === 'All' ? true : accessFilter === 'Public' ? loc.access === 'public' : accessFilter === 'Private' ? loc.access === 'private' : accessFilter === 'My Locations' ? loc.addedBy === user?.id : true
       const matchesTags = selectedTags.length === 0 || selectedTags.some(t => (loc.tags ?? []).some((lt: string) => lt.toLowerCase().includes(t.toLowerCase())))
       const q = searchQuery.toLowerCase().trim()
       const matchesSearch = q === '' || loc.name.toLowerCase().includes(q) || loc.city.toLowerCase().includes(q) || (loc.tags ?? []).some((t: string) => t.toLowerCase().includes(q))
-      const matchesRating = minRating === 0 || ((loc as any).ratingNum ?? 0) >= minRating
+      const matchesRating = minRating === 0 || (loc.ratingNum ?? 0) >= minRating
       return matchesAccess && matchesTags && matchesSearch && matchesRating
     })
-    return [...result].sort((a, b) => {
+    return [...result].sort((a: any, b: any) => {
       switch (sortBy) {
-        case 'quality':    return ((b as any).qualityScore ?? 0) - ((a as any).qualityScore ?? 0)
-        case 'rating_asc': return ((a as any).ratingNum ?? 0) - ((b as any).ratingNum ?? 0)
+        case 'quality':    return (b.qualityScore ?? 0) - (a.qualityScore ?? 0)
+        case 'rating_asc': return (a.ratingNum ?? 0) - (b.ratingNum ?? 0)
         case 'name':       return a.name.localeCompare(b.name)
-        case 'newest':     return new Date((b as any).createdAt ?? 0).getTime() - new Date((a as any).createdAt ?? 0).getTime()
+        case 'newest':     return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
         case 'saves':      return (b.saves ?? 0) - (a.saves ?? 0)
         default:           return 0
       }
@@ -543,29 +550,23 @@ export default function ExplorePage() {
   const activeFilterCount = (accessFilter !== 'All' ? 1 : 0) + selectedTags.length + (minRating > 0 ? 1 : 0) + (sortBy !== 'quality' ? 1 : 0)
 
   return (
-    <div style={{ height: '100svh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'white' }}>
+    <div style={{ height: '100svh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f9f6f1' }}>
 
       {/* NAV */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 56, background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', flexShrink: 0, zIndex: 200 }}>
         <Link href="/" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 900, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
         </Link>
-
-        {/* Desktop nav search */}
         <div className="nav-links" style={{ flex: 1, maxWidth: 400, margin: '0 1.5rem', position: 'relative' }}>
           <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search locations, tags, cities…" style={{ width: '100%', padding: '7px 14px 7px 34px', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 6, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'rgba(245,240,232,.4)' }}>🔍</span>
         </div>
-
         <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 4, background: 'rgba(196,146,42,.15)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Add location</button>
           {user ? <Link href="/dashboard" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Dashboard</Link>
             : <Link href="/" style={{ padding: '5px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>Join Free</Link>}
         </div>
-
-        <button className="hamburger-btn" onClick={() => setMobileMenuOpen(p => !p)} aria-label="Menu">
-          {mobileMenuOpen ? '✕' : '☰'}
-        </button>
+        <button className="hamburger-btn" onClick={() => setMobileMenuOpen(p => !p)} aria-label="Menu">{mobileMenuOpen ? '✕' : '☰'}</button>
       </nav>
 
       {mobileMenuOpen && (
@@ -579,7 +580,7 @@ export default function ExplorePage() {
       {/* Location banner */}
       {!locGranted && (
         <div style={{ background: 'rgba(61,110,140,.08)', borderBottom: '1px solid rgba(61,110,140,.18)', padding: '8px 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12 }}>
-          <div style={{ fontSize: 13, color: 'var(--sky)', display: 'flex', alignItems: 'center', gap: 8 }}><span>📍</span>Allow location access to see spots near you</div>
+          <div style={{ fontSize: 13, color: 'var(--sky)' }}>📍 Allow location access to see spots near you</div>
           <button onClick={requestLocation} disabled={locLoading} style={{ padding: '5px 16px', borderRadius: 4, background: 'var(--sky)', color: 'white', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: locLoading ? 0.6 : 1 }}>
             {locLoading ? 'Getting…' : 'Use my location'}
           </button>
@@ -589,29 +590,19 @@ export default function ExplorePage() {
       {/* Filter bar */}
       <div style={{ background: 'white', borderBottom: '1px solid var(--cream-dark)', flexShrink: 0, zIndex: 100 }}>
         <div style={{ padding: '8px 1.5rem', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setShowFilters(p => !p)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${showFilters || activeFilterCount > 0 ? 'var(--gold)' : 'var(--cream-dark)'}`, background: showFilters || activeFilterCount > 0 ? 'rgba(196,146,42,.08)' : 'white', color: showFilters || activeFilterCount > 0 ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}
-          >
+          <button onClick={() => setShowFilters(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${showFilters || activeFilterCount > 0 ? 'var(--gold)' : 'var(--cream-dark)'}`, background: showFilters || activeFilterCount > 0 ? 'rgba(196,146,42,.08)' : 'white', color: showFilters || activeFilterCount > 0 ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
             ⚙ Filters & Sort
             {activeFilterCount > 0 && <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--gold)', color: 'var(--ink)', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{activeFilterCount}</span>}
           </button>
-
-          {/* Pin search button */}
-          <button
-            onClick={() => setShowPinSearch(p => !p)}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${searchPin ? 'var(--sky)' : 'var(--cream-dark)'}`, background: searchPin ? 'rgba(61,110,140,.08)' : 'white', color: searchPin ? 'var(--sky)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}
-          >
+          <button onClick={() => setShowPinSearch(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${searchPin ? 'var(--sky)' : 'var(--cream-dark)'}`, background: searchPin ? 'rgba(61,110,140,.08)' : 'white', color: searchPin ? 'var(--sky)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
             📍 {searchPin ? searchPin.label.split(',')[0] : 'Find near…'}
-            {searchPin && <span onClick={e => { e.stopPropagation(); setSearchPin(null); setUserLocation(null) }} style={{ marginLeft: 2, fontSize: 13 }}>✕</span>}
+            {searchPin && <span onClick={e => { e.stopPropagation(); setSearchPin(null); setUserLocation(null) }} style={{ marginLeft: 2 }}>✕</span>}
           </button>
-
           {accessFilter !== 'All' && <span onClick={() => setAccessFilter('All')} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, background: 'var(--ink)', color: 'var(--cream)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>{accessFilter} ✕</span>}
           {selectedTags.map(t => <span key={t} onClick={() => toggleTag(t)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, background: 'var(--ink)', color: 'var(--cream)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>{t} ✕</span>)}
-          {activeFilterCount > 0 && <button onClick={clearAllFilters} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 500, whiteSpace: 'nowrap' }}>Clear all</button>}
+          {activeFilterCount > 0 && <button onClick={clearAllFilters} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, fontWeight: 500 }}>Clear all</button>}
         </div>
 
-        {/* Pin search dropdown */}
         {showPinSearch && (
           <div style={{ padding: '0 1.5rem 1rem', borderTop: '1px solid var(--cream-dark)' }}>
             <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6, paddingTop: 10 }}>Search for a city or address to find nearby locations:</div>
@@ -619,53 +610,37 @@ export default function ExplorePage() {
           </div>
         )}
 
-        {/* Filter panel — uses explore-filter-panel class for mobile responsive */}
         {showFilters && (
           <div className="explore-filter-panel">
-            {/* Access */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Access</div>
               <div className="explore-filter-section">
                 {(['All','Public','Private','My Locations'] as AccessFilter[]).map(opt => (
-                  <button key={opt} onClick={() => setAccessFilter(opt)} style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${accessFilter === opt ? 'var(--gold)' : 'var(--cream-dark)'}`, background: accessFilter === opt ? 'rgba(196,146,42,.12)' : 'white', color: accessFilter === opt ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    {opt}
-                  </button>
+                  <button key={opt} onClick={() => setAccessFilter(opt)} style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${accessFilter === opt ? 'var(--gold)' : 'var(--cream-dark)'}`, background: accessFilter === opt ? 'rgba(196,146,42,.12)' : 'white', color: accessFilter === opt ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{opt}</button>
                 ))}
               </div>
             </div>
-
-            {/* Location type */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Location type</div>
               <div className="explore-filter-section">
                 {ALL_TAGS.map(tag => (
-                  <button key={tag} onClick={() => toggleTag(tag)} style={{ padding: '5px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500, border: `1px solid ${selectedTags.includes(tag) ? 'var(--gold)' : 'var(--cream-dark)'}`, background: selectedTags.includes(tag) ? 'rgba(196,146,42,.12)' : 'white', color: selectedTags.includes(tag) ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    {tag}
-                  </button>
+                  <button key={tag} onClick={() => toggleTag(tag)} style={{ padding: '5px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500, border: `1px solid ${selectedTags.includes(tag) ? 'var(--gold)' : 'var(--cream-dark)'}`, background: selectedTags.includes(tag) ? 'rgba(196,146,42,.12)' : 'white', color: selectedTags.includes(tag) ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{tag}</button>
                 ))}
               </div>
             </div>
-
-            {/* Min rating */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Min rating</div>
               <div className="explore-filter-section">
                 {RATING_OPTIONS.map(opt => (
-                  <button key={opt.value} onClick={() => setMinRating(opt.value)} style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${minRating === opt.value ? 'var(--gold)' : 'var(--cream-dark)'}`, background: minRating === opt.value ? 'rgba(196,146,42,.12)' : 'white', color: minRating === opt.value ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    {opt.label}
-                  </button>
+                  <button key={opt.value} onClick={() => setMinRating(opt.value)} style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${minRating === opt.value ? 'var(--gold)' : 'var(--cream-dark)'}`, background: minRating === opt.value ? 'rgba(196,146,42,.12)' : 'white', color: minRating === opt.value ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{opt.label}</button>
                 ))}
               </div>
             </div>
-
-            {/* Sort */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Sort by</div>
               <div className="explore-filter-section">
                 {SORT_OPTIONS.map(opt => (
-                  <button key={opt.value} onClick={() => setSortBy(opt.value as SortValue)} style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${sortBy === opt.value ? 'var(--gold)' : 'var(--cream-dark)'}`, background: sortBy === opt.value ? 'rgba(196,146,42,.12)' : 'white', color: sortBy === opt.value ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    {opt.label}
-                  </button>
+                  <button key={opt.value} onClick={() => setSortBy(opt.value as SortValue)} style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1px solid ${sortBy === opt.value ? 'var(--gold)' : 'var(--cream-dark)'}`, background: sortBy === opt.value ? 'rgba(196,146,42,.12)' : 'white', color: sortBy === opt.value ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>{opt.label}</button>
                 ))}
               </div>
             </div>
@@ -676,11 +651,15 @@ export default function ExplorePage() {
       {/* Body */}
       <div className="explore-body">
 
-        {/* Sidebar */}
+        {/* ── SIDEBAR ──
+            KEY FIX: No nested wrapper div with flex:1 / minHeight:0.
+            The sidebar itself is the scroll container (overflow-y: auto via CSS class).
+            Search and count use position:sticky so they stay visible while scrolling.
+            This ensures click events register on all location cards. */}
         <div className={`explore-sidebar${mobileMapVisible ? ' mobile-hidden' : ''}`}>
 
-          {/* Search — visible on mobile at top of list */}
-          <div style={{ padding: '10px 1.25rem', borderBottom: '1px solid var(--cream-dark)', background: 'white' }}>
+          {/* Sticky search */}
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'white', borderBottom: '1px solid var(--cream-dark)', padding: '10px 1.25rem' }}>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
@@ -696,8 +675,8 @@ export default function ExplorePage() {
             </div>
           </div>
 
-          {/* Count + sort info */}
-          <div style={{ padding: '8px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderBottom: '1px solid var(--cream-dark)', flexShrink: 0 }}>
+          {/* Sticky count */}
+          <div style={{ position: 'sticky', top: 49, zIndex: 9, background: '#f9f6f1', borderBottom: '1px solid var(--cream-dark)', padding: '7px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
               {dbLoading ? <span style={{ color: 'var(--ink-soft)', fontWeight: 300 }}>Loading…</span>
                 : <>{filtered.length}<span style={{ fontWeight: 300, color: 'var(--ink-soft)', fontSize: 11 }}> of {locations.length}</span></>}
@@ -705,52 +684,51 @@ export default function ExplorePage() {
             <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{SORT_OPTIONS.find(s => s.value === sortBy)?.label}</div>
           </div>
 
-          {/* Scrollable list */}
-          <div className="explore-sidebar-content" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {dbLoading ? (
-              <div style={{ padding: '3rem', textAlign: 'center' }}>
-                <div style={{ width: 28, height: 28, border: '2px solid var(--cream-dark)', borderTop: '2px solid var(--gold)', borderRadius: '50%', animation: 'spin .7s linear infinite', margin: '0 auto 12px' }} />
-                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Loading locations…</div>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center' }}>
-                <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>{locations.length === 0 ? 'No locations yet' : 'No matches'}</div>
-                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>{locations.length === 0 ? 'Run the AI scanner from your dashboard.' : 'Try adjusting your filters.'}</div>
-                {activeFilterCount > 0 && <button onClick={clearAllFilters} style={{ marginTop: 12, padding: '6px 16px', borderRadius: 20, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Clear filters</button>}
-              </div>
-            ) : filtered.map(loc => {
-              const isActive = activeId === loc.id
-              const isFav    = favorites.has(loc.id as number)
-              const thumb    = photoMap[loc.id]
-              return (
-                <div
-                  key={loc.id}
-                  onClick={() => { setDetailLoc(loc); setActiveId(loc.id as number) }}
-                  style={{ display: 'flex', gap: 10, padding: '10px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isActive ? 'var(--gold)' : 'transparent'}` }}
-                >
-                  <div className={loc.bg} style={{ width: 56, height: 56, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-                    {thumb && <img src={thumb} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-                    {loc.rating !== '—' && <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(26,22,18,.75)', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600, color: 'var(--gold)', zIndex: 1 }}>★{loc.rating}</div>}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 4 }}>📍 {loc.city}</div>
-                    <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
-                      {loc.access === 'public' ? '● Public' : '🔒 Private'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={e => toggleFavorite(loc.id as number, e)}
-                    style={{ width: 28, height: 28, borderRadius: '50%', border: `1px solid ${isFav ? 'rgba(196,146,42,.4)' : 'var(--cream-dark)'}`, background: isFav ? 'rgba(196,146,42,.1)' : 'white', cursor: 'pointer', fontSize: 14, color: isFav ? 'var(--gold)' : 'var(--ink-soft)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    {isFav ? '♥' : '♡'}
-                  </button>
+          {/* Location list — direct children of sidebar, no wrapper */}
+          {dbLoading ? (
+            <div style={{ padding: '3rem', textAlign: 'center' }}>
+              <div style={{ width: 28, height: 28, border: '2px solid var(--cream-dark)', borderTop: '2px solid var(--gold)', borderRadius: '50%', animation: 'spin .7s linear infinite', margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Loading locations…</div>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>{locations.length === 0 ? 'No locations yet' : 'No matches'}</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>{locations.length === 0 ? 'Run the AI scanner from your dashboard.' : 'Try adjusting your filters.'}</div>
+              {activeFilterCount > 0 && <button onClick={clearAllFilters} style={{ marginTop: 12, padding: '6px 16px', borderRadius: 20, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Clear filters</button>}
+            </div>
+          ) : filtered.map((loc: any) => {
+            const isActive = activeId === loc.id || String(activeId) === String(loc.id)
+            const isFav    = favorites.has(Number(loc.id))
+            const thumb    = photoMap[loc.id]
+            return (
+              <div
+                key={loc.id}
+                onClick={() => { setDetailLoc(loc); setActiveId(loc.id) }}
+                style={{ display: 'flex', gap: 10, padding: '10px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isActive ? 'var(--gold)' : 'transparent'}`, transition: 'background .12s' }}
+              >
+                <div className={loc.bg} style={{ width: 56, height: 56, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+                  {thumb && <img src={thumb} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  {loc.rating !== '—' && <div style={{ position: 'absolute', bottom: 3, right: 3, background: 'rgba(26,22,18,.75)', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 600, color: 'var(--gold)', zIndex: 1 }}>★{loc.rating}</div>}
                 </div>
-              )
-            })}
-            <div style={{ height: 80 }} />
-          </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 4 }}>📍 {loc.city}</div>
+                  <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
+                    {loc.access === 'public' ? '● Public' : '🔒 Private'}
+                  </span>
+                </div>
+                <button
+                  onClick={e => toggleFavorite(loc.id, e)}
+                  style={{ width: 28, height: 28, borderRadius: '50%', border: `1px solid ${isFav ? 'rgba(196,146,42,.4)' : 'var(--cream-dark)'}`, background: isFav ? 'rgba(196,146,42,.1)' : 'white', cursor: 'pointer', fontSize: 14, color: isFav ? 'var(--gold)' : 'var(--ink-soft)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s' }}
+                >
+                  {isFav ? '♥' : '♡'}
+                </button>
+              </div>
+            )
+          })}
+
+          <div style={{ height: 80 }} />
         </div>
 
         {/* Map */}
@@ -771,13 +749,21 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* Mobile map/list toggle */}
+      {/* Mobile toggle */}
       <button className="explore-mobile-toggle" onClick={() => setMobileMapVisible(p => !p)}>
         {mobileMapVisible ? '☰ View List' : '🗺 View Map'}
         {!mobileMapVisible && filtered.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, background: 'rgba(255,255,255,.15)', fontSize: 11 }}>{filtered.length}</span>}
       </button>
 
-      {detailLoc && <DetailPanel loc={detailLoc as any} isFav={favorites.has(detailLoc.id as number)} onClose={() => setDetailLoc(null)} onToggleFavorite={toggleFavorite} user={user} />}
+      {detailLoc && (
+        <DetailPanel
+          loc={detailLoc}
+          isFav={favorites.has(Number(detailLoc.id))}
+          onClose={() => setDetailLoc(null)}
+          onToggleFavorite={toggleFavorite}
+          user={user}
+        />
+      )}
       {showAddModal && <AddLocationModal onClose={() => setShowAddModal(false)} user={user} />}
 
       {toast && (
