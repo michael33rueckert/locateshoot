@@ -461,7 +461,8 @@ export default function ExplorePage() {
             <div style={{fontSize:11,color:'var(--ink-soft)'}}>{SORT_OPTIONS.find(s=>s.value===sortBy)?.label}</div>
           </div>
 
-          {/* Location list — direct children, no wrapper */}
+          {/* Location list — scroll wrapper keeps search/count pinned at top */}
+          <div style={{flex:1,minHeight:0,overflowY:'auto'}}>
           {dbLoading?(
             <div style={{padding:'3rem',textAlign:'center'}}>
               <div style={{width:28,height:28,border:'2px solid var(--cream-dark)',borderTop:'2px solid var(--gold)',borderRadius:'50%',animation:'spin .7s linear infinite',margin:'0 auto 12px'}}/>
@@ -499,6 +500,7 @@ export default function ExplorePage() {
           })}
 
           <div style={{height:80}}/>
+          </div>
         </div>
 
         {/* Map */}

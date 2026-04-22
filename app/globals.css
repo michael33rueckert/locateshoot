@@ -1073,6 +1073,7 @@ body {
 .explore-body {
   flex: 1;
   min-height: 0;
+  height: 0;
   display: grid;
   grid-template-columns: 360px 1fr;
   grid-template-rows: minmax(0, 1fr);
@@ -1080,8 +1081,8 @@ body {
   background: #f9f6f1;
 }
 .explore-sidebar {
-  height: 100%;          /* Fill the full grid row */
-  overflow-y: auto;
+  height: 100%;
+  overflow: hidden;
   background: #f9f6f1;
   border-right: 1px solid var(--cream-dark);
   display: flex;
@@ -1160,19 +1161,19 @@ body {
     min-height: 0 !important;
     border-right: none !important;
     border-bottom: 1px solid var(--cream-dark) !important;
-    overflow-y: auto !important;
   }
   .explore-sidebar.mobile-hidden { display: none !important; }
   .explore-map-col { display: none !important; height: auto !important; }
   .explore-map-col.mobile-visible {
     display: block !important;
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 300 !important;
-    height: 100svh !important;
+    flex: 1 !important;
+    position: relative !important;
+    height: 100% !important;
+    inset: auto !important;
+    z-index: auto !important;
   }
   .explore-map-col.mobile-visible .leaflet-container {
-    height: 100svh !important; width: 100% !important;
+    height: 100% !important; width: 100% !important;
   }
   .explore-mobile-toggle {
     display: flex !important;
