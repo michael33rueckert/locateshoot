@@ -13,13 +13,13 @@ interface DBFavorite {
   id: number; location_id: number | string
   locations: { id: number | string; name: string; city: string; latitude: number; longitude: number; access_type: string; rating: number | null }
 }
-interface DBSecret  { id: string; name: string; area: string; description: string | null; tags: string[]; bg: string; lat: number | null; lng: number | null }
-interface DBTemplate{ id: string; name: string; body: string }
+interface DBSecret   { id: string; name: string; area: string; description: string | null; tags: string[]; bg: string; lat: number | null; lng: number | null }
+interface DBTemplate { id: string; name: string; body: string }
 
 function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
   const R = 3958.8, dLa = (la2-la1)*Math.PI/180, dLo = (lo2-lo1)*Math.PI/180
   const a = Math.sin(dLa/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
 }
 
 function generateSlug(sessionName: string, photographerName: string) {
@@ -31,13 +31,13 @@ const BG_CYCLE    = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 const STEP_LABELS = ['Drop pin','Select','Message','Share']
 
 export default function SharePage() {
-  const [userId,       setUserId]       = useState<string | null>(null)
-  const [dbFavorites,  setDbFavorites]  = useState<DBFavorite[]>([])
-  const [dbSecrets,    setDbSecrets]    = useState<DBSecret[]>([])
-  const [dbTemplates,  setDbTemplates]  = useState<DBTemplate[]>([])
-  const [dataLoading,  setDataLoading]  = useState(true)
-  const [allDbLocs,    setAllDbLocs]    = useState<MapLocation[]>([])
-  const [locSearch,    setLocSearch]    = useState('')
+  const [userId,           setUserId]           = useState<string | null>(null)
+  const [dbFavorites,      setDbFavorites]      = useState<DBFavorite[]>([])
+  const [dbSecrets,        setDbSecrets]        = useState<DBSecret[]>([])
+  const [dbTemplates,      setDbTemplates]      = useState<DBTemplate[]>([])
+  const [dataLoading,      setDataLoading]      = useState(true)
+  const [allDbLocs,        setAllDbLocs]        = useState<MapLocation[]>([])
+  const [locSearch,        setLocSearch]        = useState('')
   const [step,             setStep]             = useState(1)
   const [pin,              setPin]              = useState<{ lat: number; lng: number } | null>(null)
   const [radius,           setRadius]           = useState(15)
@@ -53,9 +53,8 @@ export default function SharePage() {
   const [isSaving,         setIsSaving]         = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
 
-  // Handle ?step=3 from explore page
-  (() => {
-    if (typeof window === 'undefined') return
+  // Handle ?step=3 from explore page — only jump to step 3 when a location is stored
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('step') === '3') {
       const stored = sessionStorage.getItem('sharePreselectedLocation')
@@ -63,10 +62,11 @@ export default function SharePage() {
         try {
           const loc = JSON.parse(stored)
           setSelected(new Set([String(loc.id)]))
-          sessionStorage.removeItem('sharePreselectedLocation')
+          setStep(3)
         } catch {}
+        sessionStorage.removeItem('sharePreselectedLocation')
       }
-      setStep(3)
+      // No stored location = stay on step 1
     }
   }, [])
 
@@ -94,20 +94,25 @@ export default function SharePage() {
 
   // Load all published locations
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('step') === '3') {
-      const stored = sessionStorage.getItem('sharePreselectedLocation')
-      if (stored) {
-        // Only jump to step 3 when we actually have a preselected location
-        try {
-          const loc = JSON.parse(stored)
-          setSelected(new Set([String(loc.id)]))
-          setStep(3)
-        } catch {}
-        sessionStorage.removeItem('sharePreselectedLocation')
-      }
-      // If no stored location, ignore the ?step=3 param and stay on step 1
-    }
+    supabase.from('locations')
+      .select('id,name,city,state,latitude,longitude,access_type,rating,save_count')
+      .eq('status','published').not('latitude','is',null).not('longitude','is',null)
+      .order('save_count',{ascending:false}).limit(500)
+      .then(({ data }) => {
+        if (!data) return
+        setAllDbLocs(data.map((loc: any, idx: number) => ({
+          id:     loc.id,
+          name:   loc.name,
+          city:   loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? ''),
+          lat:    loc.latitude,
+          lng:    loc.longitude,
+          access: loc.access_type ?? 'public',
+          rating: loc.rating ? String(parseFloat(loc.rating).toFixed(1)) : '—',
+          bg:     BG_CYCLE[idx % BG_CYCLE.length],
+          type:   'favorite' as const,
+          d:      null,
+        })))
+      })
   }, [])
 
   useEffect(() => {
@@ -116,9 +121,8 @@ export default function SharePage() {
     return () => clearTimeout(id)
   }, [toast])
 
-  // Build MapLocation lists with distances
   const favorites: MapLocation[] = useMemo(() =>
-    dbFavorites.filter(f => f.locations?.latitude && f.locations?.longitude).map((f,idx) => ({
+    dbFavorites.filter(f => f.locations?.latitude && f.locations?.longitude).map((f, idx) => ({
       id:     f.location_id,
       name:   f.locations.name,
       city:   f.locations.city,
@@ -126,10 +130,10 @@ export default function SharePage() {
       lng:    f.locations.longitude,
       access: f.locations.access_type ?? 'public',
       rating: f.locations.rating?.toString() ?? '—',
-      bg:     `bg-${(idx%6)+1}`,
+      bg:     `bg-${(idx % 6) + 1}`,
       type:   'favorite' as const,
       d:      pin ? calcDist(pin.lat, pin.lng, f.locations.latitude, f.locations.longitude) : null,
-    })).sort((a,b) => (a.d??999)-(b.d??999)),
+    })).sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
   [dbFavorites, pin])
 
   const secretLocs: MapLocation[] = useMemo(() =>
@@ -144,44 +148,46 @@ export default function SharePage() {
       bg:     s.bg,
       type:   'secret' as const,
       d:      pin ? calcDist(pin.lat, pin.lng, s.lat!, s.lng!) : null,
-    })).sort((a,b) => (a.d??999)-(b.d??999)),
+    })).sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
   [dbSecrets, pin])
 
-  // All locations with distances, non-favorites only (to avoid duplicates in list)
   const favIdSet = useMemo(() => new Set(favorites.map(f => String(f.id))), [favorites])
 
   const allLocsWithDist: MapLocation[] = useMemo(() =>
     allDbLocs
-      .filter(l => !favIdSet.has(String(l.id))) // exclude already-shown favorites
+      .filter(l => !favIdSet.has(String(l.id)))
       .map(l => ({ ...l, d: pin ? calcDist(pin.lat, pin.lng, l.lat, l.lng) : null }))
-      .sort((a,b) => (a.d??999)-(b.d??999)),
+      .sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
   [allDbLocs, favIdSet, pin])
 
-  // For map display only
   const allMapLocations = useMemo(() => [...favorites, ...secretLocs], [favorites, secretLocs])
 
   const favsInRange   = favorites.filter(f => f.d !== null && f.d <= radius)
   const favsOutRange  = favorites.filter(f => f.d === null || f.d > radius)
   const secretInRange = secretLocs.filter(s => s.d !== null && s.d <= radius)
 
-  // All selected locations (for step 3 summary and generate)
   const allSelectableLocs = useMemo(() => {
     const seen = new Set<string>()
     return [...favorites, ...secretLocs, ...allDbLocs].filter(l => {
       const key = String(l.id)
       if (seen.has(key)) return false
-      seen.add(key)useEffect
+      seen.add(key)
       return true
     })
   }, [favorites, secretLocs, allDbLocs])
 
   const selectedLocs = allSelectableLocs.filter(l => selected.has(String(l.id)))
 
-  // ── Handlers ────────────────────────────────────────────────────────────
-  function handleAddressSelect(result: AddressResult) { setPin({ lat: result.lat, lng: result.lng }); setToast('📍 Pin dropped!') }
+  function handleAddressSelect(result: AddressResult) {
+    setPin({ lat: result.lat, lng: result.lng })
+    setToast('📍 Pin dropped!')
+  }
   function handlePinDrop(lat: number, lng: number) { setPin({ lat, lng }) }
-  function applyTemplate(id: string) { const t = dbTemplates.find(t => t.id === id); if (!t) return; setSelectedTemplate(id); setMessage(t.body) }
-
+  function applyTemplate(id: string) {
+    const t = dbTemplates.find(t => t.id === id)
+    if (!t) return
+    setSelectedTemplate(id); setMessage(t.body)
+  }
   function toggleSelect(id: number | string) {
     const key = String(id)
     setSelected(prev => {
@@ -190,7 +196,6 @@ export default function SharePage() {
       return next
     })
   }
-
   function selectAllFavsInRange() {
     setSelected(prev => {
       const next = new Set(prev)
@@ -198,19 +203,16 @@ export default function SharePage() {
       return next
     })
   }
-
   function goToStep(n: number) {
     if (n === 2 && !pin) return
     if (n === 3 && selected.size === 0) return
     if (n <= step || n === step + 1) setStep(n)
   }
-
   function nextStep() {
     if (step === 1 && !pin) { setToast('📍 Search or click the map to drop a pin first'); return }
     if (step === 2 && selected.size === 0) { setToast('Select at least one location'); return }
     if (step < 4) setStep(s => s + 1)
   }
-
   function prevStep() { if (step > 1) setStep(s => s - 1) }
 
   async function generateLink() {
@@ -222,14 +224,14 @@ export default function SharePage() {
     setIsSaving(true)
     try {
       const slug = generateSlug(sessionName, photographerName || 'photographer')
-
-      // FIX: use type !== 'secret' (not typeof === 'number') and convert to Number for DB
       const locationIds = selectedLocs.filter(l => l.type !== 'secret').map(l => Number(l.id))
       const secretIds   = selectedLocs.filter(l => l.type === 'secret').map(l => String(l.id))
-
       let expiresAt: string | null = null
-      if (expiry !== '0') { const d = new Date(); d.setDate(d.getDate() + parseInt(expiry)); expiresAt = d.toISOString() }
-
+      if (expiry !== '0') {
+        const d = new Date()
+        d.setDate(d.getDate() + parseInt(expiry))
+        expiresAt = d.toISOString()
+      }
       const { error } = await supabase.from('share_links').insert({
         user_id:           userId,
         slug,
@@ -241,7 +243,7 @@ export default function SharePage() {
         secret_ids:        secretIds,
         expires_at:        expiresAt,
       })
-      if (error) { console.error('Supabase error:', error); throw error }
+      if (error) throw error
       setGeneratedSlug(slug); setStep(4); setToast('🔗 Share link created!')
     } catch (err: any) {
       console.error('generateLink error:', err)
@@ -260,7 +262,6 @@ export default function SharePage() {
     setGeneratedSlug(null); setSessionName(''); setMessage(''); setSelectedTemplate('')
   }
 
-  // ── Styles ────────────────────────────────────────────────────────────────
   const rowStyle = (sel: boolean, isSecret = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: 9, padding: 9, borderRadius: 4, cursor: 'pointer',
     border: `1.5px solid ${sel ? 'rgba(196,146,42,.35)' : isSecret ? 'rgba(124,92,191,.2)' : 'transparent'}`,
@@ -310,7 +311,6 @@ export default function SharePage() {
     )
   }
 
-  // ── Loading ──────────────────────────────────────────────────────────────
   if (dataLoading) {
     return (
       <div style={{ height: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--cream)' }}>
@@ -322,10 +322,10 @@ export default function SharePage() {
   return (
     <div className="share-outer">
 
-      {/* SIDEBAR — flex column so footer stays pinned at bottom */}
+      {/* SIDEBAR */}
       <div className="share-sidebar" style={{ background: 'white', borderRight: '1px solid var(--cream-dark)', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
-        {/* ── Header (fixed) ── */}
+        {/* Header */}
         <div style={{ padding: '1.25rem 1.5rem 0', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <Link href="/" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 900, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
@@ -360,7 +360,7 @@ export default function SharePage() {
           {/* Step tabs */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--cream-dark)', margin: '0 -1.5rem', padding: '0 1.5rem', overflowX: 'auto' }}>
             {STEP_LABELS.map((label, i) => {
-              const n = i+1, active = step === n, done = step > n
+              const n = i + 1, active = step === n, done = step > n
               return (
                 <div key={n} onClick={() => goToStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 0', marginRight: 14, fontSize: 12, fontWeight: 500, cursor: 'pointer', color: active ? 'var(--ink)' : done ? 'var(--sage)' : 'var(--ink-soft)', borderBottom: `2px solid ${active ? 'var(--gold)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0 }}>
                   <span style={{ width: 17, height: 17, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, background: active ? 'var(--gold)' : done ? 'var(--sage)' : 'var(--cream-dark)', color: active ? 'var(--ink)' : done ? 'white' : 'var(--ink-soft)' }}>
@@ -373,7 +373,7 @@ export default function SharePage() {
           </div>
         </div>
 
-        {/* ── Scrollable step content ── */}
+        {/* Scrollable step content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
 
           {/* STEP 1 */}
@@ -403,29 +403,27 @@ export default function SharePage() {
               </div>
               {dbFavorites.length > 0 ? (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>
-                    Your saved favorites ({dbFavorites.length})
-                  </div>
-                  {dbFavorites.slice(0,5).map((f,idx) => (
+                  <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your saved favorites ({dbFavorites.length})</div>
+                  {dbFavorites.slice(0,5).map((f, idx) => (
                     <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 9, borderRadius: 4, background: 'var(--cream)', marginBottom: 5 }}>
                       <div className={`bg-${(idx%6)+1}`} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{f.locations?.name}</div><div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {f.locations?.city}</div></div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{f.locations?.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {f.locations?.city}</div>
+                      </div>
                     </div>
                   ))}
                   {dbFavorites.length > 5 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '4px 0' }}>+{dbFavorites.length - 5} more in Step 2</div>}
                 </>
               ) : (
-                <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center' }}>
-                  No favorites saved yet — you can browse all locations in Step 2.
-                </div>
+                <div style={{ padding: '1rem', background: 'var(--cream)', borderRadius: 8, fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center' }}>No favorites saved yet — you can browse all locations in Step 2.</div>
               )}
             </>
           )}
 
-          {/* STEP 2 — single flat list, favorites first */}
+          {/* STEP 2 — flat list, favorites first */}
           {step === 2 && (
             <>
-              {/* Search + selection summary */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
                   {selected.size > 0 ? `${selected.size} selected` : 'Choose locations'}
@@ -445,7 +443,7 @@ export default function SharePage() {
                 style={{ ...inputStyle, marginBottom: '1rem', fontSize: 13 }}
               />
 
-              {/* Favorites in range — always at top */}
+              {/* Favorites in range — at top */}
               {favsInRange.filter(f => {
                 if (!locSearch.trim()) return true
                 const q = locSearch.toLowerCase()
@@ -455,7 +453,7 @@ export default function SharePage() {
                   <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />
                     Your favorites near this area
-                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-soft)', marginLeft: 2 }}>within {radius} mi</span>
+                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-soft)' }}>within {radius} mi</span>
                   </div>
                   {favsInRange
                     .filter(f => { if (!locSearch.trim()) return true; const q = locSearch.toLowerCase(); return f.name.toLowerCase().includes(q) || f.city.toLowerCase().includes(q) })
@@ -479,16 +477,13 @@ export default function SharePage() {
                 </>
               )}
 
-              {/* All other published locations */}
+              {/* All other locations */}
               {(() => {
                 const filtered = allLocsWithDist.filter(l => {
                   if (!locSearch.trim()) return true
                   const q = locSearch.toLowerCase()
                   return l.name.toLowerCase().includes(q) || l.city.toLowerCase().includes(q)
                 })
-                if (filtered.length === 0 && locSearch.trim()) {
-                  return <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center', padding: '1rem 0' }}>No locations match &quot;{locSearch}&quot;</div>
-                }
                 return (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '1rem 0 6px' }}>
@@ -498,13 +493,15 @@ export default function SharePage() {
                       </div>
                       <div style={{ flex: 1, height: 1, background: 'var(--cream-dark)' }} />
                     </div>
-                    {filtered.slice(0, 100).map(loc => <LocationRow key={String(loc.id)} loc={loc} />)}
-                    {filtered.length > 100 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '8px 0', fontStyle: 'italic' }}>Search to find more locations</div>}
+                    {filtered.length === 0 && locSearch.trim()
+                      ? <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic', textAlign: 'center', padding: '1rem 0' }}>No locations match &quot;{locSearch}&quot;</div>
+                      : filtered.slice(0, 100).map(loc => <LocationRow key={String(loc.id)} loc={loc} />)
+                    }
+                    {filtered.length > 100 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '8px 0', fontStyle: 'italic' }}>Search to find more</div>}
                   </>
                 )
               })()}
 
-              {/* Favorites out of range — collapsed */}
               {favsOutRange.length > 0 && !locSearch.trim() && (
                 <div style={{ marginTop: '1rem', padding: '10px 12px', background: 'var(--cream)', borderRadius: 8, border: '1px solid var(--cream-dark)', fontSize: 12, color: 'var(--ink-soft)' }}>
                   {favsOutRange.length} favorite{favsOutRange.length !== 1 ? 's' : ''} outside the {radius} mi radius
@@ -520,7 +517,6 @@ export default function SharePage() {
                 <label style={labelStyle}>Session name *</label>
                 <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. Smith Family Fall Photos" />
               </div>
-
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Message to your client</label>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -535,27 +531,31 @@ export default function SharePage() {
                 </div>
                 <textarea value={message} onChange={e => { setMessage(e.target.value); setSelectedTemplate('') }} rows={5} placeholder="Write a message to your client…" style={{ ...inputStyle, resize: 'vertical' }} />
               </div>
-
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Your name / studio</label>
                 <input value={photographerName} onChange={e => setPhotographerName(e.target.value)} style={inputStyle} />
               </div>
-
               <div style={{ marginBottom: '1.25rem' }}>
                 <label style={labelStyle}>Link expires after</label>
                 <select value={expiry} onChange={e => setExpiry(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', appearance: 'none' }}>
-                  <option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="0">Never</option>
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="0">Never</option>
                 </select>
               </div>
-
-              <div onClick={() => setMyPhotosOnly(p => !p)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: myPhotosOnly ? 'rgba(196,146,42,.06)' : 'var(--cream)', border: `1px solid ${myPhotosOnly ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}`, borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer' }}>
-                <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${myPhotosOnly ? 'var(--gold)' : 'var(--sand)'}`, background: myPhotosOnly ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>{myPhotosOnly ? '✓' : ''}</div>
+              <div
+                onClick={() => setMyPhotosOnly(prev => !prev)}
+                style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: myPhotosOnly ? 'rgba(196,146,42,.06)' : 'var(--cream)', border: `1px solid ${myPhotosOnly ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}`, borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer' }}
+              >
+                <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${myPhotosOnly ? 'var(--gold)' : 'var(--sand)'}`, background: myPhotosOnly ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>
+                  {myPhotosOnly ? '✓' : ''}
+                </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>Only show photos I uploaded</div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Client will only see your personal photos.</div>
                 </div>
               </div>
-
               <div style={{ padding: '12px 14px', background: 'var(--cream-dark)', borderRadius: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>
                   {selectedLocs.length} location{selectedLocs.length !== 1 ? 's' : ''} in this share
@@ -580,7 +580,6 @@ export default function SharePage() {
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Link is ready!</div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>Send this to your client and they&apos;ll pick their favorite spot.</div>
               </div>
-
               <label style={labelStyle}>Client link</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--cream)', border: '1px solid var(--sand)', borderRadius: 4, padding: '7px 7px 7px 12px', marginBottom: '1.25rem' }}>
                 <span style={{ fontSize: 11, color: 'var(--sky)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
@@ -588,14 +587,12 @@ export default function SharePage() {
                 </span>
                 <button onClick={copyLink} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '5px 12px', borderRadius: 4, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Copy</button>
               </div>
-
               {[{ icon: '💬', label: 'Text message' }, { icon: '📧', label: 'Email' }, { icon: '🔗', label: 'Copy link' }].map(opt => (
                 <div key={opt.label} onClick={() => opt.label === 'Copy link' ? copyLink() : setToast(`Opening ${opt.label}…`)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', marginBottom: 7 }}>
                   <span style={{ fontSize: 17 }}>{opt.icon}</span>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{opt.label}</div>
                 </div>
               ))}
-
               <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1rem 1.1rem', display: 'flex', gap: 10, marginTop: '1rem' }}>
                 <span style={{ fontSize: 18, flexShrink: 0 }}>🔔</span>
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,.65)', lineHeight: 1.55, fontWeight: 300 }}><strong style={{ color: 'var(--cream)', fontWeight: 500 }}>You&apos;ll be notified</strong> the moment your client picks a location.</div>
@@ -606,7 +603,7 @@ export default function SharePage() {
           )}
         </div>
 
-        {/* ── Footer nav (always visible, never scrolls away) ── */}
+        {/* Footer — always visible, never scrolls */}
         <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--cream-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: 'white' }}>
           <button
             onClick={prevStep}
@@ -614,19 +611,14 @@ export default function SharePage() {
           >
             ← Back
           </button>
-
           <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
             {step === 1 && (pin ? '✓ Pin placed' : 'Step 1 of 4')}
             {step === 2 && (selected.size > 0 ? `${selected.size} selected` : 'Select at least one')}
             {step === 3 && 'Step 3 of 4'}
             {step === 4 && '✓ Done!'}
           </span>
-
           {step < 3 && (
-            <button
-              onClick={nextStep}
-              style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '8px 18px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: (step === 1 && !pin) || (step === 2 && selected.size === 0) ? 0.4 : 1 }}
-            >
+            <button onClick={nextStep} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '8px 18px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: (step === 1 && !pin) || (step === 2 && selected.size === 0) ? 0.4 : 1 }}>
               Next →
             </button>
           )}
@@ -642,12 +634,18 @@ export default function SharePage() {
         </div>
       </div>
 
-      {/* MAP — hidden on mobile via CSS */}
+      {/* MAP */}
       <div className="share-map-col">
         <ShareMap locations={allMapLocations} selectedIds={selected} radius={radius} pinLocation={pin} onPinDrop={handlePinDrop} />
         <div className="share-legend" style={{ background: 'white', borderRadius: 10, padding: '.9rem 1rem', border: '1px solid var(--cream-dark)', boxShadow: '0 4px 20px rgba(26,22,18,.1)', minWidth: 180 }}>
           <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Legend</div>
-          {[{ color: '#c4922a', label: 'Client pin' },{ color: '#4a6741', label: 'Selected' },{ color: '#7c5cbf', label: '🤫 Secret' },{ color: '#d4c9b0', label: 'Favorite' },{ color: '#3d352c', label: 'Out of range', dim: true }].map(item => (
+          {[
+            { color: '#c4922a', label: 'Client pin' },
+            { color: '#4a6741', label: 'Selected'   },
+            { color: '#7c5cbf', label: '🤫 Secret'  },
+            { color: '#d4c9b0', label: 'Favorite'   },
+            { color: '#3d352c', label: 'Out of range', dim: true },
+          ].map(item => (
             <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink)', marginBottom: 4, opacity: (item as any).dim ? 0.4 : 1 }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: item.color, border: '2px solid white', flexShrink: 0 }} />{item.label}
             </div>
