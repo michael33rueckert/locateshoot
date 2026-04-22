@@ -18,6 +18,7 @@ export default function ClientPickerPage() {
 
   const [shareData,        setShareData]        = useState<any>(null)
   const [branding,         setBranding]         = useState<any>(null)
+  const [logoIsLight,      setLogoIsLight]      = useState<boolean | null>(null)
   const [locations,        setLocations]        = useState<FullLocation[]>([])
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState<string | null>(null)
@@ -97,6 +98,44 @@ export default function ClientPickerPage() {
   useEffect(() => {
     if (showEmailPrompt) setTimeout(() => emailRef.current?.focus(), 100)
   }, [showEmailPrompt])
+
+  // Detect whether the photographer's logo is visually light or dark so we
+  // can flip the header background + text colors for contrast.
+  useEffect(() => {
+    const url = branding?.logo_url
+    if (!branding?.remove_ls_branding || !url) { setLogoIsLight(null); return }
+    let cancelled = false
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      if (cancelled) return
+      try {
+        const w = Math.min(img.naturalWidth  || 100, 100)
+        const h = Math.min(img.naturalHeight || 100, 100)
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.drawImage(img, 0, 0, w, h)
+        const { data } = ctx.getImageData(0, 0, w, h)
+        let totalL = 0, totalA = 0
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3] / 255
+          if (a < 0.1) continue
+          const l = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+          totalL += l * a
+          totalA += a
+        }
+        if (totalA > 0) setLogoIsLight((totalL / totalA) > 140)
+      } catch {
+        // Canvas was tainted by CORS or similar — fall back to default dark header.
+        setLogoIsLight(null)
+      }
+    }
+    img.onerror = () => { if (!cancelled) setLogoIsLight(null) }
+    img.src = url
+    return () => { cancelled = true }
+  }, [branding?.logo_url, branding?.remove_ls_branding])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -194,58 +233,66 @@ export default function ClientPickerPage() {
     <div style={{ height: '100svh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ink)' }}>
 
       {/* Header */}
-      <div style={{ background: 'var(--ink)', padding: '1.25rem 1.5rem', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-        {(() => {
-          const whiteLabel = branding?.remove_ls_branding && branding?.logo_url
-          const studioName = branding?.show_studio_name !== false ? branding?.studio_name : null
-          const instagramRaw = branding?.instagram ? String(branding.instagram).trim() : ''
-          const instagramHandle = instagramRaw.replace(/^@+/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '')
-          const instagramUrl = instagramHandle ? `https://instagram.com/${instagramHandle}` : null
-          const websiteRaw = branding?.website ? String(branding.website).trim() : ''
-          const websiteUrl = websiteRaw ? (websiteRaw.startsWith('http') ? websiteRaw : `https://${websiteRaw}`) : null
-          const websiteLabel = websiteRaw.replace(/^https?:\/\//, '').replace(/\/$/, '')
-          const meta = [
-            shareData?.photographer_name ? { key: 'name', icon: '📷', label: shareData.photographer_name, href: null as string | null } : null,
-            instagramHandle ? { key: 'ig', icon: '◎', label: `@${instagramHandle}`, href: instagramUrl } : null,
-            websiteLabel ? { key: 'web', icon: '🌐', label: websiteLabel, href: websiteUrl } : null,
-            shareData?.session_name ? { key: 'session', icon: '🗒', label: shareData.session_name, href: null } : null,
-          ].filter(Boolean) as { key: string; icon: string; label: string; href: string | null }[]
+      {(() => {
+        const whiteLabel    = branding?.remove_ls_branding && branding?.logo_url
+        // When the logo is visually dark (text/marks on transparent or light
+        // bg), flip the header to a cream background so the logo stays legible.
+        const lightHeader   = whiteLabel && logoIsLight === false
+        const headerBg      = lightHeader ? '#f9f6f1' : 'var(--ink)'
+        const headerBorder  = lightHeader ? '1px solid var(--cream-dark)' : '1px solid rgba(255,255,255,.08)'
+        const primaryText   = lightHeader ? 'var(--ink)' : 'var(--cream)'
+        const secondaryText = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.55)'
+        const mutedText     = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.4)'
+        const studioNameCol = lightHeader ? 'rgba(26,22,18,.75)' : 'rgba(245,240,232,.7)'
 
-          return (
-            <>
-              {whiteLabel ? (
-                <div style={{ marginBottom: '1rem' }}>
-                  <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: 56, maxWidth: 260, width: 'auto', height: 'auto', objectFit: 'contain' }} />
-                  {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: 'rgba(245,240,232,.7)', marginTop: 6 }}>{studioName}</div>}
-                </div>
-              ) : (
-                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
-                </div>
-              )}
+        const studioName = branding?.show_studio_name !== false ? branding?.studio_name : null
+        const instagramRaw = branding?.instagram ? String(branding.instagram).trim() : ''
+        const instagramHandle = instagramRaw.replace(/^@+/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '')
+        const instagramUrl = instagramHandle ? `https://instagram.com/${instagramHandle}` : null
+        const websiteRaw = branding?.website ? String(branding.website).trim() : ''
+        const websiteUrl = websiteRaw ? (websiteRaw.startsWith('http') ? websiteRaw : `https://${websiteRaw}`) : null
+        const websiteLabel = websiteRaw.replace(/^https?:\/\//, '').replace(/\/$/, '')
+        const meta = [
+          shareData?.photographer_name ? { key: 'name', icon: '📷', label: shareData.photographer_name, href: null as string | null } : null,
+          instagramHandle ? { key: 'ig', icon: '◎', label: `@${instagramHandle}`, href: instagramUrl } : null,
+          websiteLabel ? { key: 'web', icon: '🌐', label: websiteLabel, href: websiteUrl } : null,
+          shareData?.session_name ? { key: 'session', icon: '🗒', label: shareData.session_name, href: null } : null,
+        ].filter(Boolean) as { key: string; icon: string; label: string; href: string | null }[]
 
-              <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: 'var(--cream)', marginBottom: '.4rem' }}>
-                Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
-              </h1>
-              {shareData?.message && <p style={{ fontSize: 14, fontWeight: 300, color: 'rgba(245,240,232,.55)', lineHeight: 1.6, maxWidth: 560, marginBottom: '.75rem' }}>{shareData.message}</p>}
-              {meta.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11, color: 'rgba(245,240,232,.4)' }}>
-                  {meta.map((m, i) => {
-                    const content = <><span style={{ marginRight: 4 }}>{m.icon}</span>{m.label}</>
-                    return (
-                      <span key={m.key} style={{ display: 'inline-flex', alignItems: 'center', gap: i === 0 ? 0 : 0 }}>
-                        {m.href
-                          ? <a href={m.href} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>{content}</a>
-                          : <span>{content}</span>}
-                      </span>
-                    )
-                  })}
-                </div>
-              )}
-            </>
-          )
-        })()}
-      </div>
+        return (
+          <div style={{ background: headerBg, padding: '1.25rem 1.5rem', flexShrink: 0, borderBottom: headerBorder, transition: 'background .2s' }}>
+            {whiteLabel ? (
+              <div style={{ marginBottom: '1rem' }}>
+                <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: 56, maxWidth: 260, width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: studioNameCol, marginTop: 6 }}>{studioName}</div>}
+              </div>
+            ) : (
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
+              </div>
+            )}
+
+            <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: primaryText, marginBottom: '.4rem' }}>
+              Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
+            </h1>
+            {shareData?.message && <p style={{ fontSize: 14, fontWeight: 300, color: secondaryText, lineHeight: 1.6, maxWidth: 560, marginBottom: '.75rem' }}>{shareData.message}</p>}
+            {meta.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11, color: mutedText }}>
+                {meta.map(m => {
+                  const content = <><span style={{ marginRight: 4 }}>{m.icon}</span>{m.label}</>
+                  return (
+                    <span key={m.key} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      {m.href
+                        ? <a href={m.href} target="_blank" rel="noopener noreferrer" style={{ color: mutedText, textDecoration: 'none' }}>{content}</a>
+                        : <span>{content}</span>}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Progress bar */}
       <div style={{ height: 2, background: 'rgba(255,255,255,.08)', flexShrink: 0 }}>
