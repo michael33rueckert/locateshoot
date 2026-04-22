@@ -15,12 +15,23 @@ async function authUser(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Fail fast if server env vars aren't wired up so we don't bubble
+  // Vercel's cryptic "Not authorized" out as a user-facing error.
+  const missing = ['VERCEL_API_TOKEN', 'VERCEL_PROJECT_ID']
+    .filter(k => !process.env[k])
+  if (missing.length > 0) {
+    return NextResponse.json({
+      error: 'server_misconfigured',
+      message: `Server missing env vars: ${missing.join(', ')}. Contact support.`,
+    }, { status: 500 })
+  }
+
   const user = await authUser(request)
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!user) return NextResponse.json({ error: 'unauthorized', message: 'Sign in expired — refresh the page and try again.' }, { status: 401 })
 
   const db = admin()
   const { data: profile } = await db.from('profiles').select('plan,custom_domain').eq('id', user.id).single()
-  if (!profile) return NextResponse.json({ error: 'profile_not_found' }, { status: 404 })
+  if (!profile) return NextResponse.json({ error: 'profile_not_found', message: 'Profile record not found.' }, { status: 404 })
   if (profile.plan !== 'pro' && profile.plan !== 'Pro') {
     return NextResponse.json({ error: 'pro_required', message: 'Custom domains are a Pro-plan feature.' }, { status: 403 })
   }
@@ -43,7 +54,13 @@ export async function POST(request: Request) {
   if (!add.ok && add.code === 'domain_already_in_use') {
     return NextResponse.json({ error: 'domain_taken', message: 'That domain is already registered to another LocateShoot account or project. Contact support.' }, { status: 409 })
   }
-  if (!add.ok) return NextResponse.json({ error: 'vercel_error', message: add.error }, { status: 502 })
+  if (!add.ok) {
+    console.error('[custom-domain] Vercel add failed', { status: add.status, code: add.code, error: add.error })
+    const hint = add.error?.toLowerCase().includes('not authorized')
+      ? 'Vercel API rejected the token. Check VERCEL_API_TOKEN in Vercel → Settings → Environment Variables (Production), redeploy, and try again.'
+      : add.error
+    return NextResponse.json({ error: 'vercel_error', message: hint }, { status: 502 })
+  }
 
   const status = await checkDomainStatus(domain)
   const verified = status.state === 'verified'
