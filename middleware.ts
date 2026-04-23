@@ -47,7 +47,12 @@ export function middleware(request: NextRequest) {
   // `/api/pick-data/*`, and framework/static assets are allowed. Everything
   // else bounces back to the main apex.
   if (!isPrimaryHost(host)) {
-    const isPickRoute   = pathname.startsWith('/pick/') || pathname.startsWith('/api/pick-data/')
+    // Anything the client pick flow needs must be served on the custom domain
+    // directly — redirecting cross-origin breaks POST fetches via CORS preflight.
+    const isPickRoute =
+         pathname.startsWith('/pick/')
+      || pathname.startsWith('/api/pick-data/')
+      || pathname === '/api/submit-pick'
     const isStaticAsset = pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname === '/robots.txt' || pathname === '/sitemap.xml'
     if (!isPickRoute && !isStaticAsset) {
       const redirect = new URL(pathname + (request.nextUrl.search ?? ''), `https://${APEX_DOMAIN}`)
