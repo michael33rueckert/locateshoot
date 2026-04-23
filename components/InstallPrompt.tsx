@@ -11,7 +11,15 @@ type DeferredPrompt = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-const LS_DISMISSED = 'locateshoot_install_dismissed_v1'
+// Window-level handle to the captured beforeinstallprompt, so the nav menu's
+// "Install app" item can fire it on demand even after our banner is dismissed.
+declare global {
+  interface Window {
+    __lsDeferredInstall?: DeferredPrompt | null
+  }
+}
+
+const LS_DISMISSED = 'locateshoot_install_dismissed_v2'
 
 function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -32,27 +40,39 @@ export default function InstallPrompt() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (isStandalone()) return
-    if (localStorage.getItem(LS_DISMISSED)) return
 
-    // Only nudge signed-in users. Reading directly from Supabase here would pull the
-    // whole client into the bundle; instead we look at the Supabase auth cookie name
-    // prefix that the client library sets. If none is present, stay silent.
-    const hasAuthCookie = document.cookie.split(';').some(c => c.trim().startsWith('sb-') && c.includes('-auth-token'))
-    if (!hasAuthCookie) return
-
+    // Always attach the listener — Chrome decides when to fire based on its own
+    // engagement heuristics (valid manifest + SW + interaction). If we never listen,
+    // the event's default UI is suppressed and nothing surfaces.
     const onBip = (e: Event) => {
       e.preventDefault()
-      setDeferred(e as DeferredPrompt)
-      setVisible(true)
+      const d = e as DeferredPrompt
+      window.__lsDeferredInstall = d
+      setDeferred(d)
+      if (!localStorage.getItem(LS_DISMISSED)) setVisible(true)
     }
     window.addEventListener('beforeinstallprompt', onBip)
 
-    // iOS: show the manual instructions after a short delay on first visit
-    if (isIOS()) {
-      const t = setTimeout(() => { setShowIOS(true); setVisible(true) }, 4000)
-      return () => { clearTimeout(t); window.removeEventListener('beforeinstallprompt', onBip) }
+    const onInstalled = () => {
+      window.__lsDeferredInstall = null
+      setDeferred(null)
+      setVisible(false)
+      localStorage.setItem(LS_DISMISSED, '1')
     }
-    return () => window.removeEventListener('beforeinstallprompt', onBip)
+    window.addEventListener('appinstalled', onInstalled)
+
+    // iOS never fires beforeinstallprompt. Show the manual instructions after a short
+    // delay so it doesn't intrude on first paint.
+    let iosTimer: any = null
+    if (isIOS() && !localStorage.getItem(LS_DISMISSED)) {
+      iosTimer = setTimeout(() => { setShowIOS(true); setVisible(true) }, 4000)
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBip)
+      window.removeEventListener('appinstalled', onInstalled)
+      if (iosTimer) clearTimeout(iosTimer)
+    }
   }, [])
 
   function dismiss() {
@@ -64,11 +84,13 @@ export default function InstallPrompt() {
     if (!deferred) return
     await deferred.prompt()
     const { outcome } = await deferred.userChoice
-    if (outcome === 'accepted' || outcome === 'dismissed') {
-      localStorage.setItem(LS_DISMISSED, '1')
+    if (outcome === 'accepted') {
+      window.__lsDeferredInstall = null
       setDeferred(null)
-      setVisible(false)
     }
+    // Either way, hide for this session.
+    localStorage.setItem(LS_DISMISSED, '1')
+    setVisible(false)
   }
 
   if (!visible) return null
@@ -95,9 +117,8 @@ export default function InstallPrompt() {
 
   return (
     <div style={pill}>
-      <span style={{ width: 28, height: 28, borderRadius: 8, background: '#1a1612', border: '1px solid rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-        <span style={{ position: 'absolute', top: 4, left: 7, width: 5, height: 5, borderRadius: '50%', background: 'var(--gold)' }} />
-        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 900, fontSize: 11, color: 'var(--cream)' }}>LS</span>
+      <span style={{ width: 28, height: 28, borderRadius: 8, background: '#1a1612', border: '1px solid rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--gold)' }} />
       </span>
       <div style={{ flex: 1, lineHeight: 1.35 }}>
         {showIOS

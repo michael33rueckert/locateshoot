@@ -15,9 +15,11 @@ import { ADMIN_EMAIL } from '@/lib/admin'
  */
 export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode }) {
   const pathname = usePathname() ?? ''
-  const [open,   setOpen]   = useState(false)
-  const [email,  setEmail]  = useState<string | null>(null)
-  const [loaded, setLoaded] = useState(false)
+  const [open,    setOpen]    = useState(false)
+  const [email,   setEmail]   = useState<string | null>(null)
+  const [loaded,  setLoaded]  = useState(false)
+  const [canInstall, setCanInstall] = useState<'deferred' | 'ios' | null>(null)
+  const [iosHint, setIosHint] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -25,6 +27,45 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
       setLoaded(true)
     })
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    // Hide when already installed.
+    const standalone = window.matchMedia?.('(display-mode: standalone)').matches
+      || (navigator as any).standalone === true
+    if (standalone) return
+
+    const refresh = () => {
+      if ((window as any).__lsDeferredInstall) setCanInstall('deferred')
+      else if (/iPhone|iPad|iPod/.test(navigator.userAgent)) setCanInstall('ios')
+      else setCanInstall(null)
+    }
+    refresh()
+    const onBip = () => refresh()
+    const onInstalled = () => setCanInstall(null)
+    window.addEventListener('beforeinstallprompt', onBip)
+    window.addEventListener('appinstalled', onInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBip)
+      window.removeEventListener('appinstalled', onInstalled)
+    }
+  }, [])
+
+  async function installApp() {
+    if (canInstall === 'deferred') {
+      const d = (window as any).__lsDeferredInstall
+      if (!d) return
+      try {
+        await d.prompt()
+        const { outcome } = await d.userChoice
+        if (outcome === 'accepted') { (window as any).__lsDeferredInstall = null; setCanInstall(null) }
+      } catch {
+        // Some browsers throw if prompt() was already consumed.
+      }
+    } else if (canInstall === 'ios') {
+      setIosHint(true)
+    }
+  }
 
   const isAdmin = email === ADMIN_EMAIL
   const signedIn = !!email
@@ -94,12 +135,35 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
                   {isActive(l.href) ? '• ' : ''}{l.label}
                 </Link>
               ))}
+              {canInstall && (
+                <button
+                  onClick={e => { e.stopPropagation(); installApp() }}
+                  style={{ fontSize: 15, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}
+                >
+                  📲 Install app
+                </button>
+              )}
               <button onClick={signOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
             </>
           ) : loaded ? (
             <Link href="/">Sign in</Link>
           ) : null}
         </div>
+      )}
+
+      {iosHint && (
+        <>
+          <div onClick={() => setIosHint(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.7)', backdropFilter: 'blur(4px)', zIndex: 9999 }} />
+          <div style={{ position: 'fixed', left: '50%', bottom: 'calc(env(safe-area-inset-bottom, 0) + 20px)', transform: 'translateX(-50%)', zIndex: 10000, maxWidth: 'min(94vw, 420px)', background: 'rgba(26,22,18,.98)', color: 'var(--cream)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, padding: '16px 18px', boxShadow: '0 16px 48px rgba(0,0,0,.4)', fontSize: 14, lineHeight: 1.5 }}>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Install LocateShoot</div>
+            <div style={{ color: 'rgba(245,240,232,.75)' }}>
+              Tap <strong style={{ color: 'var(--gold)' }}>Share ↑</strong> at the bottom of Safari, then <strong>Add to Home Screen</strong>.
+            </div>
+            <button onClick={() => setIosHint(false)} style={{ marginTop: 14, width: '100%', padding: '9px', borderRadius: 8, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              Got it
+            </button>
+          </div>
+        </>
       )}
     </>
   )
