@@ -64,7 +64,6 @@ function PricingToggle({ onSignup }: { onSignup: () => void }) {
         <li>Share analytics — views &amp; time spent</li>
         <li>🎨 <strong>White-label share pages</strong> — your logo, not ours</li>
         <li>Custom message &amp; branding</li>
-        <li>Pro badge on your profile</li>
       </ul>
       <button className="btn btn-gold" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={onSignup}>
         Start 14-day free trial
