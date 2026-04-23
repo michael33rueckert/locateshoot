@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [toast,               setToast]                = useState<string | null>(null)
   const [copiedId,            setCopiedId]             = useState<string | null>(null)
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
+  const [showMultiLocModal,     setShowMultiLocModal]     = useState(false)
   const [preselectAllPortfolio, setPreselectAllPortfolio] = useState(false)
   const [deleteShareId,       setDeleteShareId]        = useState<string | null>(null)
   const [editingPortfolioId,  setEditingPortfolioId]   = useState<string | null>(null)
@@ -169,8 +170,10 @@ export default function DashboardPage() {
 
   async function shareFullPortfolio() {
     if (!profile?.id) return
-    // Reuse existing full-portfolio link if one exists, otherwise create one.
-    let link = permanentLinks.find(l => l.is_full_portfolio)
+    // Reuse existing single-pick full-portfolio link if one exists, otherwise create one.
+    let link = permanentLinks.find(l => l.is_full_portfolio && (l as any).max_picks !== undefined && ((l as any).max_picks ?? 1) <= 1)
+    // Fallback: also accept legacy links that predate max_picks being selected.
+    if (!link) link = permanentLinks.find(l => l.is_full_portfolio)
     if (!link) {
       const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)
       const slug  = `${clean(profile.full_name || 'photographer')}-portfolio-${Date.now().toString(36)}`
@@ -186,6 +189,7 @@ export default function DashboardPage() {
         expires_at:             null,
         is_permanent:           true,
         is_full_portfolio:      true,
+        max_picks:              1,
       }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
       if (error || !data) { setToast('⚠ Could not create portfolio link'); return }
       link = { ...data, picks: [], expanded: false }
@@ -194,6 +198,34 @@ export default function DashboardPage() {
     const url = buildShareUrl(link.slug, { customDomain: profile.custom_domain, customDomainVerified: profile.custom_domain_verified })
     navigator.clipboard?.writeText(url).catch(() => {})
     setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
+  }
+
+  async function createMultiLocationLink({ maxPicks, maxMiles }: { maxPicks: number; maxMiles: number | null }) {
+    if (!profile?.id) return
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)
+    const slug  = `${clean(profile.full_name || 'photographer')}-portfolio-${maxPicks}loc-${Date.now().toString(36)}`
+    const sessionName = `My portfolio — ${maxPicks}-location session`
+    const { data, error } = await supabase.from('share_links').insert({
+      user_id:                   profile.id,
+      slug,
+      session_name:              sessionName,
+      message:                   null,
+      photographer_name:         profile.full_name ?? null,
+      portfolio_location_ids:    null,
+      location_ids:              [],
+      secret_ids:                [],
+      expires_at:                null,
+      is_permanent:              true,
+      is_full_portfolio:         true,
+      max_picks:                 maxPicks,
+      max_pick_distance_miles:   maxMiles,
+    }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
+    if (error || !data) { setToast('⚠ Could not create multi-location link'); return }
+    const link = { ...data, picks: [], expanded: false }
+    setPermanentLinks(prev => [link, ...prev])
+    const url = buildShareUrl(link.slug, { customDomain: profile.custom_domain, customDomainVerified: profile.custom_domain_verified })
+    navigator.clipboard?.writeText(url).catch(() => {})
+    setToast(`🔗 ${maxPicks}-location link copied`)
   }
 
   function togglePermLinkExpanded(id: string) {
@@ -288,9 +320,10 @@ export default function DashboardPage() {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => setShowAddPortfolio(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Add new location</button>
                   <Link href="/explore" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>+ Add from Explore</Link>
-                  {portfolioLocs.length > 0 && (
+                  {portfolioLocs.length > 0 && <>
                     <button onClick={shareFullPortfolio} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>🔗 Share entire portfolio</button>
-                  )}
+                    <button onClick={() => setShowMultiLocModal(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>🧭 Multi-location link</button>
+                  </>}
                 </div>
               </div>
               {portfolioLocs.length === 0 ? (
@@ -500,6 +533,17 @@ export default function DashboardPage() {
           onCreated={(link) => {
             setPermanentLinks(prev => [{ ...link, picks: [], expanded: false }, ...prev])
             setToast('📌 Permanent link created!')
+          }}
+        />
+      )}
+
+      {/* MULTI-LOCATION LINK MODAL */}
+      {showMultiLocModal && (
+        <MultiLocationModal
+          onClose={() => setShowMultiLocModal(false)}
+          onCreate={async ({ maxPicks, maxMiles }) => {
+            await createMultiLocationLink({ maxPicks, maxMiles })
+            setShowMultiLocModal(false)
           }}
         />
       )}
@@ -1116,6 +1160,84 @@ function AddPortfolioLocationModal({
             </button>
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Multi-Location Link Modal ─────────────────────────────────────────────────
+// Configures max_picks + max_pick_distance_miles, then creates a new
+// auto-syncing full-portfolio link so the photographer can send a single URL
+// whenever they run, say, a 2-location proximity session.
+function MultiLocationModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void
+  onCreate: (settings: { maxPicks: number; maxMiles: number | null }) => Promise<void>
+}) {
+  const [maxPicks, setMaxPicks] = useState(2)
+  const [maxMiles, setMaxMiles] = useState<string>('5')
+  const [saving, setSaving]     = useState(false)
+
+  async function submit() {
+    const mi = parseFloat(maxMiles)
+    const parsedMiles = Number.isFinite(mi) && mi > 0 ? mi : null
+    setSaving(true)
+    try { await onCreate({ maxPicks, maxMiles: parsedMiles }) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(6px)', zIndex: 1000 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 460, maxWidth: '94vw', padding: '1.75rem', zIndex: 1001, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+        <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>🧭 Multi-location link</div>
+        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, marginBottom: '1.25rem' }}>
+          Auto-syncs with your full portfolio. Lets clients pick more than one location — enforce a max distance between picks so they stay within your session window.
+        </div>
+
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+            Client can pick up to
+          </label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[2, 3, 4, 5].map(n => (
+              <button key={n} onClick={() => setMaxPicks(n)}
+                style={{ padding: '8px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', border: `1.5px solid ${maxPicks === n ? 'var(--gold)' : 'var(--cream-dark)'}`, background: maxPicks === n ? 'rgba(196,146,42,.12)' : 'white', color: maxPicks === n ? 'var(--gold)' : 'var(--ink-soft)' }}>
+                {n} locations
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '1.25rem' }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+            Max distance between picks (miles)
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={maxMiles}
+              onChange={e => setMaxMiles(e.target.value)}
+              placeholder="e.g. 5"
+              style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--cream-dark)', borderRadius: 6, fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)', outline: 'none' }}
+            />
+            <button onClick={() => setMaxMiles('')} style={{ padding: '9px 12px', borderRadius: 6, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, color: 'var(--ink-soft)', fontFamily: 'inherit', cursor: 'pointer' }}>No limit</button>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontStyle: 'italic' }}>
+            Leave blank for no cap. For a 1-hour session, 3–5 miles is typical.
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={submit} disabled={saving} style={{ flex: 1, padding: '12px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Creating…' : `Create & copy ${maxPicks}-location link`}
+          </button>
+          <button onClick={onClose} disabled={saving} style={{ padding: '12px 18px', borderRadius: 6, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
         </div>
       </div>
     </>

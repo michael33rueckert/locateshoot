@@ -34,16 +34,20 @@ export interface ClientLocation {
 interface ClientMapProps {
   locations: ClientLocation[]
   activeId: number | null
-  chosenId: number | null
+  chosenIds: Array<number | string>
+  disabledIds?: Array<number | string>
   onMarkerClick: (id: number) => void
 }
 
 export default function ClientMap({
   locations,
   activeId,
-  chosenId,
+  chosenIds,
+  disabledIds = [],
   onMarkerClick,
 }: ClientMapProps) {
+  const chosenSet   = new Set(chosenIds.map(String))
+  const disabledSet = new Set(disabledIds.map(String))
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<any>(null)
   const markersRef   = useRef<Record<number, any>>({})
@@ -105,9 +109,10 @@ export default function ClientMap({
 
       locations.forEach((loc, i) => {
         if (!isFiniteLatLng(loc.lat, loc.lng)) return
-        const isActive = activeId === loc.id
-        const isChosen = chosenId === loc.id
-        const isRec    = loc.type === 'recommended'
+        const isActive   = activeId === loc.id
+        const isChosen   = chosenSet.has(String(loc.id))
+        const isDisabled = !isChosen && disabledSet.has(String(loc.id))
+        const isRec      = loc.type === 'recommended'
 
         let bg     = isRec ? 'rgba(61,110,140,0.95)' : 'rgba(245,240,232,0.95)'
         let color  = isRec ? 'white' : '#1a1612'
@@ -118,20 +123,23 @@ export default function ClientMap({
           bg = '#4a6741'; color = 'white'; size = 32; border = '3px solid white'
         } else if (isActive) {
           bg = '#c4922a'; color = '#1a1612'; size = 32; border = '3px solid white'
+        } else if (isDisabled) {
+          bg = 'rgba(180,175,165,.7)'; color = '#6b5f52'; border = '2px solid rgba(255,255,255,.6)'
         }
 
         // Name label sits to the right of the numbered dot so clients can scan
         // the map without having to tap every marker. Icon anchor keeps the dot
         // centered on the actual coordinate.
         const labelText = escapeHtml(loc.name)
-        const labelBg   = isChosen ? '#4a6741' : isActive ? '#c4922a' : 'rgba(26,22,18,.88)'
+        const labelBg   = isChosen ? '#4a6741' : isActive ? '#c4922a' : isDisabled ? 'rgba(26,22,18,.35)' : 'rgba(26,22,18,.88)'
         const labelFg   = isActive && !isChosen ? '#1a1612' : 'white'
         const totalW    = size + 8 + 180   // dot + gap + max label width
+        const dotOpacity = isDisabled ? 0.55 : 1
 
         const marker = L.marker([loc.lat, loc.lng], {
           icon: L.divIcon({
             className: '',
-            html: `<div style="display:flex;align-items:center;gap:6px;transition:all .25s;">
+            html: `<div style="display:flex;align-items:center;gap:6px;transition:all .25s;opacity:${dotOpacity};">
               <div style="
                 width:${size}px; height:${size}px; border-radius:50%;
                 background:${bg}; border:${border};
@@ -168,7 +176,7 @@ export default function ClientMap({
         markersRef.current[loc.id] = marker
       })
     })
-  }, [locations, activeId, chosenId, onMarkerClick])
+  }, [locations, activeId, chosenIds, disabledIds, onMarkerClick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fly to active location ─────────────────────────────────────────────────
   useEffect(() => {

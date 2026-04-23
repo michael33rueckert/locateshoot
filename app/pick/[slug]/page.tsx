@@ -11,6 +11,18 @@ const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false }
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
+// Haversine distance in miles. Used to enforce the photographer's
+// max_pick_distance_miles setting on multi-location share links.
+function distMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return Infinity
+  const R = 3958.7613
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
 type FullLocation = ClientLocation & {
   tags: string[]
   desc: string
@@ -37,7 +49,7 @@ export default function ClientPickerPage() {
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState<string | null>(null)
   const [activeId,         setActiveId]         = useState<any>(null)
-  const [chosenId,         setChosenId]         = useState<any>(null)
+  const [chosenIds,        setChosenIds]        = useState<string[]>([])
   const [detailLoc,        setDetailLoc]        = useState<FullLocation | null>(null)
   const [confirmed,        setConfirmed]        = useState(false)
   const [showEmailPrompt,  setShowEmailPrompt]  = useState(false)
@@ -187,13 +199,46 @@ export default function ClientPickerPage() {
     if (loc) { setDetailLoc(loc); setActiveId(id); setMobileMapVisible(false) }
   }, [locations])
 
+  const maxPicks         = Math.max(1, shareData?.max_picks ?? 1)
+  const maxDistanceMiles = typeof shareData?.max_pick_distance_miles === 'number'
+    ? shareData.max_pick_distance_miles
+    : (shareData?.max_pick_distance_miles != null ? parseFloat(shareData.max_pick_distance_miles) : null)
+
+  const chosenSet = new Set(chosenIds)
+  const chosenLocs = chosenIds
+    .map(id => locations.find(l => String(l.id) === String(id)))
+    .filter((l): l is FullLocation => !!l)
+
+  // Disable tiles that are too far from a location already picked, so the
+  // client can't build an out-of-range set.
+  const disabledIds: string[] = (() => {
+    if (!maxDistanceMiles || chosenLocs.length === 0) return []
+    return locations
+      .filter(l => !chosenSet.has(String(l.id)))
+      .filter(l => chosenLocs.some(c => distMiles(c.lat, c.lng, l.lat, l.lng) > maxDistanceMiles!))
+      .map(l => String(l.id))
+  })()
+  const disabledSet = new Set(disabledIds)
+
+  function toggleChoice(id: any) {
+    const key = String(id)
+    if (chosenSet.has(key)) {
+      setChosenIds(prev => prev.filter(x => x !== key))
+      return
+    }
+    if (disabledSet.has(key)) return
+    if (chosenIds.length >= maxPicks) {
+      // Replace the earliest pick if they're at the limit for a single-pick link.
+      if (maxPicks === 1) setChosenIds([key])
+      return
+    }
+    setChosenIds(prev => [...prev, key])
+  }
+
   async function savePick(first: string | null, last: string | null, email: string | null) {
-    if (!shareData || !chosenId) return
+    if (!shareData || chosenLocs.length === 0) return
     setSubmitting(true)
-    const chosen = locations.find(l => String(l.id) === String(chosenId))
     try {
-      // Server-side insert + photographer email, done in one call. RLS blocks
-      // anonymous client_picks writes, so we can't insert from the browser.
       const res = await fetch('/api/submit-pick', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,7 +247,7 @@ export default function ClientPickerPage() {
           firstName:    first ?? '',
           lastName:     last  ?? '',
           email:        email ?? '',
-          locationName: chosen?.name ?? '',
+          picks:        chosenLocs.map(l => ({ id: String(l.id), name: l.name })),
         }),
       })
       if (!res.ok) {
@@ -214,9 +259,7 @@ export default function ClientPickerPage() {
   }
 
   function confirmChoice() {
-    if (!chosenId) return
-    // Ask every client for name + email so the photographer always has a
-    // reply-to address, regardless of whether the link is permanent.
+    if (chosenIds.length === 0) return
     setShowEmailPrompt(true)
   }
 
@@ -229,7 +272,8 @@ export default function ClientPickerPage() {
     setEmailError(''); savePick(first, last, email)
   }
 
-  const chosenLoc = locations.find(l => String(l.id) === String(chosenId)) ?? null
+  // Kept for callers expecting a single primary selection (progress bar, etc.).
+  const chosenLoc = chosenLocs[0] ?? null
   const isGoldAccent = !branding?.brand_accent
   const accentColor  = branding?.brand_accent ?? 'var(--gold)'
 
@@ -351,7 +395,7 @@ export default function ClientPickerPage() {
 
       {/* Progress bar */}
       <div style={{ height: 2, background: 'rgba(255,255,255,.08)', flexShrink: 0 }}>
-        <div style={{ height: '100%', background: isGoldAccent ? 'var(--gold)' : accentColor, width: chosenId ? '100%' : '0%', transition: 'width .5s ease' }} />
+        <div style={{ height: '100%', background: isGoldAccent ? 'var(--gold)' : accentColor, width: chosenIds.length > 0 ? `${Math.min(100, (chosenIds.length / maxPicks) * 100)}%` : '0%', transition: 'width .5s ease' }} />
       </div>
 
       {/* Body */}
@@ -376,11 +420,12 @@ export default function ClientPickerPage() {
                 </div>
               </div>
             ) : locations.map((loc, i) => {
-              const isChosen = String(chosenId) === String(loc.id)
-              const isActive = String(activeId) === String(loc.id)
+              const isChosen   = chosenSet.has(String(loc.id))
+              const isActive   = String(activeId) === String(loc.id)
+              const isDisabled = !isChosen && disabledSet.has(String(loc.id))
               return (
                 <div key={String(loc.id)} onClick={() => { setDetailLoc(loc); setActiveId(loc.id) }}
-                  style={{ display: 'flex', gap: 12, padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`, transition: 'all .15s' }}>
+                  style={{ display: 'flex', gap: 12, padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`, transition: 'all .15s', opacity: isDisabled ? 0.45 : 1 }}>
                   <div className={loc.bg} style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
                     {loc.photoUrl && <img src={loc.photoUrl} alt="" onClick={e => { e.stopPropagation(); setLightboxSrc(loc.photoUrl) }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
                     <div style={{ position: 'absolute', top: 4, left: 4, width: 22, height: 22, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.9)' : 'rgba(26,22,18,.6)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
@@ -390,10 +435,11 @@ export default function ClientPickerPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
                     <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 4 }}>📍 {loc.city}</div>
-                    <div style={{ display: 'flex', gap: 5 }}>
+                    <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
                         {loc.access === 'public' ? '● Public' : '🔒 Private'}
                       </span>
+                      {isDisabled && <span style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic' }}>Too far from your other pick</span>}
                     </div>
                   </div>
                   <div style={{ fontSize: 11, color: isChosen ? 'var(--sage)' : 'var(--sky)', flexShrink: 0, alignSelf: 'center' }}>
@@ -413,7 +459,7 @@ export default function ClientPickerPage() {
               ← List
             </button>
           )}
-          <ClientMap locations={locations} activeId={activeId} chosenId={chosenId} onMarkerClick={handleMarkerClick} />
+          <ClientMap locations={locations} activeId={activeId} chosenIds={chosenIds} disabledIds={disabledIds} onMarkerClick={handleMarkerClick} />
         </div>
       </div>
 
@@ -424,16 +470,23 @@ export default function ClientPickerPage() {
 
       {/* Confirm bar */}
       <div style={{ background: 'var(--ink)', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', borderTop: '1px solid rgba(255,255,255,.08)', flexShrink: 0 }}>
-        <div>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em', color: 'rgba(245,240,232,.35)', marginBottom: 3 }}>Your selection</div>
-          {chosenLoc
-            ? <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--cream)' }}>{chosenLoc.name}</div>
-            : <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 14, color: 'rgba(245,240,232,.25)', fontStyle: 'italic' }}>Tap a location above</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em', color: 'rgba(245,240,232,.35)', marginBottom: 3 }}>
+            Your selection{maxPicks > 1 ? ` (${chosenLocs.length} of ${maxPicks})` : ''}
+            {maxDistanceMiles ? <span style={{ marginLeft: 8, color: 'rgba(245,240,232,.25)' }}>· ≤ {maxDistanceMiles} mi apart</span> : null}
+          </div>
+          {chosenLocs.length > 0
+            ? <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 700, color: 'var(--cream)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {chosenLocs.map(l => l.name).join(' · ')}
+              </div>
+            : <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 14, color: 'rgba(245,240,232,.25)', fontStyle: 'italic' }}>
+                {maxPicks > 1 ? `Tap up to ${maxPicks} locations` : 'Tap a location above'}
+              </div>
           }
         </div>
-        <button onClick={confirmChoice} disabled={!chosenId || submitting}
-          style={{ padding: '12px 24px', borderRadius: 4, border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: chosenId ? 'pointer' : 'default', background: isGoldAccent ? 'var(--gold)' : accentColor, color: isGoldAccent ? 'var(--ink)' : 'white', opacity: chosenId ? 1 : 0.35, flexShrink: 0, whiteSpace: 'nowrap' }}>
-          {submitting ? 'Sending…' : 'Send my choice →'}
+        <button onClick={confirmChoice} disabled={chosenLocs.length === 0 || submitting}
+          style={{ padding: '12px 24px', borderRadius: 4, border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: chosenLocs.length > 0 ? 'pointer' : 'default', background: isGoldAccent ? 'var(--gold)' : accentColor, color: isGoldAccent ? 'var(--ink)' : 'white', opacity: chosenLocs.length > 0 ? 1 : 0.35, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {submitting ? 'Sending…' : maxPicks > 1 ? 'Send my picks →' : 'Send my choice →'}
         </button>
       </div>
 
@@ -502,10 +555,34 @@ export default function ClientPickerPage() {
               </div>
               <div style={{ display: 'flex', gap: 10, paddingBottom: '1rem' }}>
                 <button onClick={() => setDetailLoc(null)} style={{ flex: 1, padding: '12px', borderRadius: 4, border: '1px solid var(--sand)', background: 'transparent', color: 'var(--ink-soft)', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Back</button>
-                <button onClick={() => { setChosenId(detailLoc.id); setDetailLoc(null) }}
-                  style={{ flex: 2, padding: '12px', borderRadius: 4, border: 'none', background: String(chosenId) === String(detailLoc.id) ? 'var(--sage)' : isGoldAccent ? 'var(--gold)' : accentColor, color: String(chosenId) === String(detailLoc.id) ? 'white' : isGoldAccent ? 'var(--ink)' : 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  {String(chosenId) === String(detailLoc.id) ? '✓ This is my choice' : 'Choose this spot →'}
-                </button>
+                {(() => {
+                  const isSelected = chosenSet.has(String(detailLoc.id))
+                  const isBlocked  = !isSelected && disabledSet.has(String(detailLoc.id))
+                  const atLimit    = !isSelected && chosenIds.length >= maxPicks && maxPicks > 1
+                  const disabled   = isBlocked || atLimit
+                  const label = isSelected
+                    ? (maxPicks > 1 ? '✓ Selected — tap to remove' : '✓ This is my choice')
+                    : isBlocked ? 'Too far from your other pick'
+                    : atLimit   ? `Max ${maxPicks} locations reached`
+                    : maxPicks > 1 ? '+ Add to my picks' : 'Choose this spot →'
+                  return (
+                    <button
+                      disabled={disabled}
+                      onClick={() => { toggleChoice(detailLoc.id); setDetailLoc(null) }}
+                      style={{
+                        flex: 2, padding: '12px', borderRadius: 4, border: 'none',
+                        background: isSelected ? 'var(--sage)' : disabled ? 'rgba(26,22,18,.25)' : isGoldAccent ? 'var(--gold)' : accentColor,
+                        color: isSelected ? 'white' : disabled ? 'white' : isGoldAccent ? 'var(--ink)' : 'white',
+                        fontSize: 14, fontWeight: 600,
+                        cursor: disabled ? 'default' : 'pointer',
+                        opacity: disabled ? 0.75 : 1,
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })()}
               </div>
             </div>
           </div>

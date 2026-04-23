@@ -11,7 +11,7 @@ export async function GET(request: Request, context: any) {
 
   const { data: share, error: shareErr } = await admin
     .from('share_links')
-    .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio')
+    .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio,max_picks,max_pick_distance_miles')
     .eq('slug', slug)
     .single()
 
