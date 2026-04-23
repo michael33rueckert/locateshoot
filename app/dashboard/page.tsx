@@ -7,7 +7,7 @@ import { ADMIN_EMAIL } from '@/lib/admin'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import { buildShareUrl } from '@/lib/custom-domain'
 
-interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean }
+interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
 interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
@@ -64,10 +64,20 @@ export default function DashboardPage() {
       if (!user) { window.location.href = '/'; return }
 
       const [profileRes, sharesRes, portfolioRes] = await Promise.all([
-        supabase.from('profiles').select('id,full_name,email,custom_domain,custom_domain_verified').eq('id', user.id).single(),
+        supabase.from('profiles').select('id,full_name,email,custom_domain,custom_domain_verified,preferences').eq('id', user.id).single(),
         supabase.from('share_links').select('id,session_name,created_at,expires_at,location_ids,secret_ids,portfolio_location_ids,slug').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10),
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,is_secret,created_at').eq('user_id', user.id).order('created_at', { ascending: false }),
       ])
+
+      // Send first-time users to onboarding before the dashboard loads.
+      if (profileRes.data) {
+        const prefs = (profileRes.data as any).preferences ?? {}
+        const needsOnboarding = !prefs.onboarded_at && (!portfolioRes.data || portfolioRes.data.length === 0)
+        if (needsOnboarding) {
+          window.location.href = '/onboarding'
+          return
+        }
+      }
 
       if (profileRes.data)            setProfile(profileRes.data)
       if (sharesRes.data)             setShareLinks(sharesRes.data)
