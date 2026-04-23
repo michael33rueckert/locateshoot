@@ -8,10 +8,14 @@ import { usePathname } from 'next/navigation'
 // screen map / share screens where a footer would never be reached below
 // overflow-hidden content.
 
+// Home ("/") has its own dedicated marketing footer, so we skip the compact
+// one there to avoid two footers stacking.
 const HIDE_FOOTER_PREFIXES = ['/pick', '/explore', '/share']
+const HIDE_FOOTER_EXACT = ['/']
 
 export default function SiteFooter() {
   const pathname = usePathname() ?? ''
+  if (HIDE_FOOTER_EXACT.includes(pathname)) return null
   if (HIDE_FOOTER_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))) return null
 
   const year = new Date().getFullYear()

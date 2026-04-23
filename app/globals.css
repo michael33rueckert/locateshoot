@@ -808,8 +808,15 @@ body {
 
 .footer-links { list-style: none; }
 .footer-links li { margin-bottom: 8px; }
-.footer-links a { color: rgba(245,240,232,0.5); text-decoration: none; font-size: 14px; font-weight: 300; transition: color 0.15s; }
-.footer-links a:hover { color: var(--cream); }
+.footer-links a,
+.footer-links .footer-link-btn {
+  color: rgba(245,240,232,0.5); text-decoration: none;
+  font-size: 14px; font-weight: 300; transition: color 0.15s;
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-family: inherit; text-align: left;
+}
+.footer-links a:hover,
+.footer-links .footer-link-btn:hover { color: var(--cream); }
 
 .footer-bottom {
   border-top: 1px solid rgba(255,255,255,0.06);

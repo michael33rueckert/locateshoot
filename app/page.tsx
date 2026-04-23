@@ -80,13 +80,18 @@ export default function HomePage() {
   const [trendingLocs,  setTrendingLocs]  = useState<TrendingLocation[]>([])
   const [statsLoading,  setStatsLoading]  = useState(true)
 
-  // Auth
+  // Auth. Signed-in users visiting home get sent to their dashboard — home is
+  // a marketing surface and has no value for them.
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
+      if (session?.user) { window.location.replace('/dashboard'); return }
+      setUser(null)
       setAuthLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (s?.user) { window.location.replace('/dashboard'); return }
+      setUser(null)
+    })
     return () => subscription.unsubscribe()
   }, [])
 
@@ -390,30 +395,18 @@ export default function HomePage() {
             <p className="footer-tagline">A community map of the best photoshoot locations. Built by photographers, for photographers.</p>
           </div>
           <div>
-            <div className="footer-heading">Explore</div>
+            <div className="footer-heading">Product</div>
             <ul className="footer-links">
-              <li><button onClick={handleViewLocations} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Browse Locations</button></li>
-              <li><button onClick={handleViewLocations} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Map View</button></li>
+              <li><a href="#how" onClick={e => { e.preventDefault(); scrollTo('how') }}>How it works</a></li>
+              <li><a href="#pricing" onClick={e => { e.preventDefault(); scrollTo('pricing') }}>Pricing</a></li>
+              <li><Link href="/onboarding/how-it-works">Getting Started</Link></li>
             </ul>
           </div>
           <div>
-            <div className="footer-heading">For Photographers</div>
+            <div className="footer-heading">Get started</div>
             <ul className="footer-links">
-              <li><button onClick={() => openModal('signup')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Add a Location</button></li>
-              <li>
-                {user
-                  ? <Link href="/share">Client Share Links</Link>
-                  : <button onClick={() => openModal('signup')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Client Share Links</button>
-                }
-              </li>
-              <li><a href="#pricing" onClick={e => { e.preventDefault(); scrollTo('pricing') }}>Pro Plan</a></li>
-            </ul>
-          </div>
-          <div>
-            <div className="footer-heading">Legal</div>
-            <ul className="footer-links">
-              <li><a href="#">Privacy Policy</a></li>
-              <li><a href="#">Terms of Service</a></li>
+              <li><button onClick={() => openModal('signup')} className="footer-link-btn">Create free account</button></li>
+              <li><button onClick={() => openModal('login')}  className="footer-link-btn">Sign in</button></li>
             </ul>
           </div>
         </div>
