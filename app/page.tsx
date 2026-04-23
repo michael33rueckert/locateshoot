@@ -25,10 +25,16 @@ interface TrendingLocation {
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
 const HOW_STEPS = [
-  { num:'01', icon:'👤', title:'Create your free account',  desc:'Sign up in seconds. No credit card needed. Start discovering and saving locations immediately.' },
-  { num:'02', icon:'🗺', title:'Search & explore',          desc:'Browse the map by location or tag. Filter by public access, tags, or rating.' },
-  { num:'03', icon:'🔗', title:'Share with your client',    desc:'Pick favorites from the map and send a link for them to choose their spot.',        pro:true },
-  { num:'04', icon:'🔔', title:'Get notified instantly',    desc:'The moment your client picks a location you get an email. No back-and-forth needed.', pro:true },
+  { num:'01', icon:'📍', title:'Curate your portfolio once', desc:'Browse the community map, save your favorite shoot spots, and upload your own photos so clients see your work.' },
+  { num:'02', icon:'🔗', title:'Send one link — any client', desc:'Drop it in your HoneyBook or Dubsado workflow, or text it directly. Works for every session, every client.',           pro:true },
+  { num:'03', icon:'🎯', title:'Client picks their spot',     desc:'They see your curated list, tap the one they want, enter their name and email, and you\'re done — no 20-message chain.', pro:true },
+  { num:'04', icon:'🔔', title:'You get notified instantly',  desc:'Email and in-app notification the moment a client picks. Show up to the shoot already aligned on location.',          pro:true },
+]
+
+const SHARE_STEPS = [
+  { icon: '🔗', headline: 'You send one link',         body: 'Paste it into your HoneyBook proposal, Dubsado workflow, Calendly confirmation, or just text it. The same link works for every client.' },
+  { icon: '🎯', headline: 'Client picks in 30 seconds', body: 'They see your curated locations with real photos, ratings, and parking info. One tap + name + email. No "can you send me some options?" email chains.' },
+  { icon: '✉️', headline: 'You get the confirmation',   body: 'Instant email with their pick and contact info, plus an in-app notification. Every client who books, in one place.' },
 ]
 
 // ── Pricing toggle ────────────────────────────────────────────────────────────
@@ -75,8 +81,6 @@ export default function HomePage() {
   const [showModal,     setShowModal]     = useState(false)
   const [modalMode,     setModalMode]     = useState<'login' | 'signup'>('login')
   const [toast,         setToast]         = useState<string | null>(null)
-  const [locationCount, setLocationCount] = useState<number | null>(null)
-  const [cityCount,     setCityCount]     = useState<number | null>(null)
   const [trendingLocs,  setTrendingLocs]  = useState<TrendingLocation[]>([])
   const [statsLoading,  setStatsLoading]  = useState(true)
 
@@ -95,26 +99,17 @@ export default function HomePage() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Real stats + trending
+  // Trending locations (count queries removed — hero uses static value-prop stats)
   useEffect(() => {
     async function load() {
       try {
-        const [countRes, citiesRes, trendRes] = await Promise.all([
-          supabase.from('locations').select('id', { count: 'exact', head: true }).eq('status', 'published'),
-          supabase.from('locations').select('city', { count: 'exact' }).eq('status', 'published'),
-          supabase.from('locations')
-            .select('id,name,city,state,rating,save_count,tags,access_type,quality_score')
-            .eq('status', 'published')
-            .eq('source', 'curated')
-            .not('latitude', 'is', null)
-            .order('quality_score', { ascending: false })
-            .limit(6),
-        ])
-        if (countRes.count !== null) setLocationCount(countRes.count)
-        if (citiesRes.data) {
-          const unique = new Set(citiesRes.data.map((r: any) => r.city?.toLowerCase()).filter(Boolean))
-          setCityCount(unique.size)
-        }
+        const trendRes = await supabase.from('locations')
+          .select('id,name,city,state,rating,save_count,tags,access_type,quality_score')
+          .eq('status', 'published')
+          .eq('source', 'curated')
+          .not('latitude', 'is', null)
+          .order('quality_score', { ascending: false })
+          .limit(6)
         if (trendRes.data && trendRes.data.length > 0) {
           const ids = trendRes.data.map((r: any) => r.id)
           const { data: photos } = await supabase.from('location_photos')
@@ -149,12 +144,6 @@ export default function HomePage() {
   function handleViewLocations() {
     if (user) window.location.href = '/explore'
     else openModal('signup')
-  }
-
-  function fmtCount(n: number | null) {
-    if (n === null) return '—'
-    if (n >= 1000) return `${(n / 1000).toFixed(1)}k+`
-    return `${n}+`
   }
 
   return (
@@ -195,12 +184,13 @@ export default function HomePage() {
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, zIndex: 1, background: 'linear-gradient(to top, #1a1612, transparent)' }} />
 
         {/* Text content */}
-        <div style={{ position: 'relative', zIndex: 2, maxWidth: 660, padding: 'clamp(5rem,10vw,7rem) clamp(1.5rem,8vw,8rem) 4rem' }}>
-          <div className="hero-eyebrow">The Photographer&apos;s Community</div>
-          <h1 className="hero-title">Find your <em>perfect</em> location</h1>
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: 680, padding: 'clamp(5rem,10vw,7rem) clamp(1.5rem,8vw,8rem) 4rem' }}>
+          <div className="hero-eyebrow">Built for working photographers</div>
+          <h1 className="hero-title">Stop the back-and-forth. Let clients <em>pick the spot.</em></h1>
           <p className="hero-sub">
-            A community-powered map of stunning photoshoot locations. Discover hidden gems,
-            save favorites, and send clients a beautiful link to pick their spot.
+            One link — drop it in your HoneyBook, Dubsado, or text thread. Your client sees your
+            curated locations with real photos, taps their favorite, and you get notified instantly.
+            No more 20-message email chains before every session.
           </p>
           <div className="hero-actions">
             {user ? (
@@ -210,19 +200,19 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <button className="btn btn-gold btn-lg"  onClick={() => openModal('signup')}>Join Free — Start Exploring</button>
+                <button className="btn btn-gold btn-lg"  onClick={() => openModal('signup')}>Join Free — Set Up Your Share Link</button>
                 <button className="btn btn-ghost btn-lg" onClick={() => openModal('login')}>Sign In</button>
               </>
             )}
           </div>
           <div className="hero-stats">
             <div>
-              <div className="hero-stat-num">{statsLoading ? '…' : fmtCount(locationCount)}</div>
-              <div className="hero-stat-label">Locations mapped</div>
+              <div className="hero-stat-num">1</div>
+              <div className="hero-stat-label">Reusable link per photographer</div>
             </div>
             <div>
-              <div className="hero-stat-num">{statsLoading ? '…' : cityCount !== null ? `${cityCount}+` : '—'}</div>
-              <div className="hero-stat-label">Cities covered</div>
+              <div className="hero-stat-num">30s</div>
+              <div className="hero-stat-label">Client picks a location</div>
             </div>
             <div>
               <div className="hero-stat-num">Free</div>
@@ -232,13 +222,49 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── TRENDING LOCATIONS — real data, gated ── */}
+      {/* ── CLIENT SHARE WORKFLOW — the headline feature ── */}
+      <section className="section share-section" style={{ background: 'var(--cream)', padding: 'clamp(3rem,7vw,5rem) clamp(1.25rem,6vw,4rem)' }}>
+        <div className="how-center" style={{ textAlign: 'center', maxWidth: 720, margin: '0 auto 2.5rem' }}>
+          <div className="section-eyebrow" style={{ justifyContent: 'center' }}>The time-saver</div>
+          <h2 className="section-title">Booking a session? <em>Send one link.</em></h2>
+          <p className="section-sub" style={{ margin: '0 auto' }}>
+            Every photographer we know has the same bottleneck: deciding where to shoot. Instead of
+            paragraphs of suggestions and a week of email replies, let your clients do the choosing —
+            inside a beautiful picker built specifically for photography sessions.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, maxWidth: 1100, margin: '0 auto' }}>
+          {SHARE_STEPS.map((s, i) => (
+            <div key={i} style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 14, padding: '1.5rem 1.5rem 1.75rem', boxShadow: '0 2px 10px rgba(26,22,18,.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontFamily: 'var(--font-playfair),serif', fontWeight: 900, fontSize: 13, color: 'var(--gold)' }}>{String(i + 1).padStart(2, '0')}</span>
+                <span style={{ fontSize: 22 }}>{s.icon}</span>
+              </div>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 19, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.25, marginBottom: 10 }}>{s.headline}</div>
+              <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, margin: 0 }}>{s.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
+          {user
+            ? <Link href="/share" className="btn btn-gold btn-lg">🔗 Create your first share link →</Link>
+            : <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>See how it works — Join free →</button>
+          }
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 10 }}>
+            Works on HoneyBook, Dubsado, Calendly, Acuity, or any tool where you can paste a URL.
+          </div>
+        </div>
+      </section>
+
+      {/* ── TRENDING LOCATIONS — secondary to the share workflow above ── */}
       <section className="section featured-section">
         <div className="featured-header">
           <div>
-            <div className="section-eyebrow">Community Picks</div>
-            <h2 className="section-title">Trending <em>locations</em></h2>
-            <p className="section-sub">Top-rated spots loved by photographers right now.</p>
+            <div className="section-eyebrow">Also included</div>
+            <h2 className="section-title" style={{ fontSize: 'clamp(22px,3.5vw,30px)' }}>A growing community map of <em>shoot locations</em></h2>
+            <p className="section-sub">Hundreds of hand-curated spots with photos, ratings, and permit info. Use it to build out your portfolio — or discover somewhere new.</p>
           </div>
           <button className="btn btn-dark" onClick={handleViewLocations}>
             {user ? 'View All Locations →' : 'Sign Up to See All →'}
