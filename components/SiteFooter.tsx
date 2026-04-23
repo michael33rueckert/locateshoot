@@ -1,20 +1,28 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
-// Sitewide footer. Hidden on the client-facing /pick/* share pages (those are
-// for the photographer's clients, not for LocateShoot users) and on the full-
-// screen map / share screens where a footer would never be reached below
-// overflow-hidden content.
+// Compact footer shown on signed-in internal pages. Anonymous visitors see
+// the dedicated marketing footer on / instead; client-facing /pick/* links
+// don't show either. Full-screen working screens (explore/share) skip it too.
 
-// Home ("/") has its own dedicated marketing footer, so we skip the compact
-// one there to avoid two footers stacking.
 const HIDE_FOOTER_PREFIXES = ['/pick', '/explore', '/share']
 const HIDE_FOOTER_EXACT = ['/']
 
 export default function SiteFooter() {
   const pathname = usePathname() ?? ''
+  const [signedIn, setSignedIn] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSignedIn(!!data.session?.user))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSignedIn(!!s?.user))
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (signedIn !== true) return null
   if (HIDE_FOOTER_EXACT.includes(pathname)) return null
   if (HIDE_FOOTER_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))) return null
 
@@ -23,7 +31,7 @@ export default function SiteFooter() {
   return (
     <footer style={{
       marginTop: 'auto',
-      padding: '1.5rem 1.5rem calc(env(safe-area-inset-bottom, 0) + 1.5rem)',
+      padding: '1.25rem 1.5rem calc(env(safe-area-inset-bottom, 0) + 1.25rem)',
       borderTop: '1px solid var(--cream-dark)',
       background: 'var(--cream)',
     }}>
@@ -44,7 +52,7 @@ export default function SiteFooter() {
           <span style={{ marginLeft: 6 }}>© {year}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-          <Link href="/onboarding/how-it-works" style={{ color: 'var(--gold)', textDecoration: 'none', fontWeight: 500 }}>
+          <Link href="/onboarding/how-it-works" style={{ color: 'var(--ink-soft)', textDecoration: 'none' }}>
             Getting Started
           </Link>
         </div>

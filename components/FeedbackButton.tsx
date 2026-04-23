@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -10,15 +10,23 @@ import { supabase } from '@/lib/supabase'
 
 export default function FeedbackButton() {
   const pathname = usePathname() ?? ''
-  const [open,    setOpen]    = useState(false)
-  const [msg,     setMsg]     = useState('')
-  const [sending, setSending] = useState(false)
-  const [sent,    setSent]    = useState(false)
-  const [err,     setErr]     = useState('')
+  const [open,      setOpen]      = useState(false)
+  const [msg,       setMsg]       = useState('')
+  const [sending,   setSending]   = useState(false)
+  const [sent,      setSent]      = useState(false)
+  const [err,       setErr]       = useState('')
+  const [signedIn,  setSignedIn]  = useState<boolean | null>(null)
 
-  // Hide on client-facing share pages — the feedback pill is for photographers
-  // and admins, not for the clients viewing a pick link.
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSignedIn(!!data.session?.user))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSignedIn(!!s?.user))
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // Only photographers/admins can send feedback — hide for anonymous visitors
+  // (including the landing page and the client-facing /pick/* share links).
   if (pathname.startsWith('/pick')) return null
+  if (signedIn !== true) return null
 
   async function submit() {
     if (!msg.trim()) return
