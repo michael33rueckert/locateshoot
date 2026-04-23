@@ -1,5 +1,5 @@
-const CACHE = 'locateshoot-v1'
-const PRECACHE = ['/dashboard', '/explore', '/share', '/profile', '/icon-192.png', '/icon-512.png']
+const CACHE = 'locateshoot-v2'
+const PRECACHE = ['/dashboard', '/explore', '/share', '/profile', '/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png']
 
 // Install — precache core pages
 self.addEventListener('install', e => {

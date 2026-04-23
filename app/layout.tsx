@@ -3,6 +3,7 @@ import { Playfair_Display, DM_Sans } from 'next/font/google'
 import './globals.css'
 import 'leaflet/dist/leaflet.css'
 import MfaGate from '@/components/MfaGate'
+import InstallPrompt from '@/components/InstallPrompt'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -39,11 +40,12 @@ export default function RootLayout({
     <html lang="en" className={`${playfair.variable} ${dmSans.variable}`}>
       <head>
         <meta name="theme-color" content="#c4922a" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
       </head>
       <body>
         {children}
         <MfaGate />
+        <InstallPrompt />
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
