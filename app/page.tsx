@@ -25,16 +25,16 @@ interface TrendingLocation {
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
 const HOW_STEPS = [
-  { num:'01', icon:'📍', title:'Curate your portfolio once', desc:'Browse the community map, save your favorite shoot spots, and upload your own photos so clients see your work.' },
-  { num:'02', icon:'🔗', title:'Send one link — any client', desc:'Drop it in your HoneyBook or Dubsado workflow, or text it directly. Works for every session, every client.',           pro:true },
-  { num:'03', icon:'🎯', title:'Client picks their spot',     desc:'They see your curated list, tap the one they want, enter their name and email, and you\'re done — no 20-message chain.', pro:true },
-  { num:'04', icon:'🔔', title:'You get notified instantly',  desc:'Email and in-app notification the moment a client picks. Show up to the shoot already aligned on location.',          pro:true },
+  { num:'01', icon:'📍', title:'Curate your portfolio',        desc:'Save your go-to shoot spots. Upload your own photos.' },
+  { num:'02', icon:'🔗', title:'Drop one link in your workflow', desc:'HoneyBook, Dubsado, text — anywhere a URL fits.',       pro:true },
+  { num:'03', icon:'🎯', title:'Client picks their spot',       desc:'One tap, name and email. Done.',                         pro:true },
+  { num:'04', icon:'🔔', title:'You get notified instantly',    desc:'Email + in-app the moment they pick.',                   pro:true },
 ]
 
 const SHARE_STEPS = [
-  { icon: '🔗', headline: 'You send one link',         body: 'Paste it into your HoneyBook proposal, Dubsado workflow, Calendly confirmation, or just text it. The same link works for every client.' },
-  { icon: '🎯', headline: 'Client picks in 30 seconds', body: 'They see your curated locations with real photos, ratings, and parking info. One tap + name + email. No "can you send me some options?" email chains.' },
-  { icon: '✉️', headline: 'You get the confirmation',   body: 'Instant email with their pick and contact info, plus an in-app notification. Every client who books, in one place.' },
+  { icon: '🔗', headline: 'You send one link',         body: 'Works in HoneyBook, Dubsado, Calendly, or a text message.' },
+  { icon: '🎯', headline: 'Client picks in 30 seconds', body: 'Your curated locations, one tap, done.' },
+  { icon: '✉️', headline: 'You get the confirmation',   body: 'Email the moment they pick. No email chains.' },
 ]
 
 // ── Pricing toggle ────────────────────────────────────────────────────────────
@@ -186,11 +186,9 @@ export default function HomePage() {
         {/* Text content */}
         <div style={{ position: 'relative', zIndex: 2, maxWidth: 680, padding: 'clamp(5rem,10vw,7rem) clamp(1.5rem,8vw,8rem) 4rem' }}>
           <div className="hero-eyebrow">Built for working photographers</div>
-          <h1 className="hero-title">Stop the back-and-forth. Let clients <em>pick the spot.</em></h1>
+          <h1 className="hero-title">Let clients <em>pick the spot</em> in one tap.</h1>
           <p className="hero-sub">
-            One link — drop it in your HoneyBook, Dubsado, or text thread. Your client sees your
-            curated locations with real photos, taps their favorite, and you get notified instantly.
-            No more 20-message email chains before every session.
+            Send one link. They pick a location. You get the email. No more 20-message chains.
           </p>
           <div className="hero-actions">
             {user ? (
@@ -224,13 +222,11 @@ export default function HomePage() {
 
       {/* ── CLIENT SHARE WORKFLOW — the headline feature ── */}
       <section className="section share-section" style={{ background: 'var(--cream)', padding: 'clamp(3rem,7vw,5rem) clamp(1.25rem,6vw,4rem)' }}>
-        <div className="how-center" style={{ textAlign: 'center', maxWidth: 720, margin: '0 auto 2.5rem' }}>
+        <div className="how-center" style={{ textAlign: 'center', maxWidth: 640, margin: '0 auto 2.5rem' }}>
           <div className="section-eyebrow" style={{ justifyContent: 'center' }}>The time-saver</div>
           <h2 className="section-title">Booking a session? <em>Send one link.</em></h2>
           <p className="section-sub" style={{ margin: '0 auto' }}>
-            Every photographer we know has the same bottleneck: deciding where to shoot. Instead of
-            paragraphs of suggestions and a week of email replies, let your clients do the choosing —
-            inside a beautiful picker built specifically for photography sessions.
+            Let your client choose the location. You focus on the shoot.
           </p>
         </div>
 
@@ -253,7 +249,7 @@ export default function HomePage() {
             : <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>See how it works — Join free →</button>
           }
           <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 10 }}>
-            Works on HoneyBook, Dubsado, Calendly, Acuity, or any tool where you can paste a URL.
+            Works anywhere you can paste a URL.
           </div>
         </div>
       </section>
@@ -263,8 +259,8 @@ export default function HomePage() {
         <div className="featured-header">
           <div>
             <div className="section-eyebrow">Also included</div>
-            <h2 className="section-title" style={{ fontSize: 'clamp(22px,3.5vw,30px)' }}>A growing community map of <em>shoot locations</em></h2>
-            <p className="section-sub">Hundreds of hand-curated spots with photos, ratings, and permit info. Use it to build out your portfolio — or discover somewhere new.</p>
+            <h2 className="section-title" style={{ fontSize: 'clamp(22px,3.5vw,30px)' }}>A community map of <em>shoot locations</em></h2>
+            <p className="section-sub">Hand-curated spots with photos, ratings, and permit info — a head start for your portfolio.</p>
           </div>
           <button className="btn btn-dark" onClick={handleViewLocations}>
             {user ? 'View All Locations →' : 'Sign Up to See All →'}
