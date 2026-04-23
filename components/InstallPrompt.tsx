@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 
 // Chrome/Edge/Android fire a `beforeinstallprompt` event we can defer and fire later.
 // iOS Safari does not — the only way in is Share → Add to Home Screen, so we show
@@ -33,9 +34,14 @@ function isStandalone(): boolean {
 }
 
 export default function InstallPrompt() {
+  const pathname = usePathname() ?? ''
   const [deferred, setDeferred] = useState<DeferredPrompt | null>(null)
   const [showIOS,  setShowIOS]  = useState(false)
   const [visible,  setVisible]  = useState(false)
+
+  // Never nag clients viewing a share pick link — those pages are for the
+  // photographer's client and have nothing to do with PWA install.
+  const onPickPage = pathname.startsWith('/pick')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -93,7 +99,7 @@ export default function InstallPrompt() {
     setVisible(false)
   }
 
-  if (!visible) return null
+  if (onPickPage || !visible) return null
 
   const pill: React.CSSProperties = {
     position: 'fixed',

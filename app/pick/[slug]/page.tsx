@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import ImageLightbox from '@/components/ImageLightbox'
+import { usePlacePhotos } from '@/hooks/usePlacePhotos'
 import type { ClientLocation } from '@/components/ClientMap'
 
 const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false })
@@ -497,9 +498,18 @@ function DetailPhotoGallery({
   loc: FullLocation
   onOpenLightbox: (imgs: string[], start: number) => void
 }) {
-  const photos = loc.photoUrls.length > 0
-    ? loc.photoUrls
-    : (loc.photoUrl ? [loc.photoUrl] : [])
+  // Live Google Places photos (up to 10) — higher quality than the single seeded
+  // thumbnail. Merge: Google first (for variety), then any seeded/community
+  // photos that aren't already duplicates.
+  const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
+  const seeded = loc.photoUrls.length > 0 ? loc.photoUrls : (loc.photoUrl ? [loc.photoUrl] : [])
+  const photos = (() => {
+    if (googlePhotos.length === 0) return seeded
+    const g = googlePhotos.map((p: { url: string }) => p.url)
+    const seen = new Set(g)
+    const extra = seeded.filter(u => !seen.has(u))
+    return [...g, ...extra]
+  })()
   const [idx, setIdx] = useState(0)
 
   useEffect(() => { setIdx(0) }, [loc.id])
@@ -511,14 +521,18 @@ function DetailPhotoGallery({
   return (
     <>
       <div className={hasPhotos ? undefined : loc.bg} style={{ height: 220, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
-        {hasPhotos && (
+        {hasPhotos ? (
           <img
             src={current}
             alt={loc.name}
             onClick={() => onOpenLightbox(photos, idx)}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
           />
-        )}
+        ) : googleLoading ? (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,.2)', borderTop: '2px solid rgba(255,255,255,.7)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+          </div>
+        ) : null}
         <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: loc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1 }}>
           {loc.access === 'public' ? '● Public' : '🔒 Private'}
         </div>

@@ -61,8 +61,15 @@ export function middleware(request: NextRequest) {
   const isPublicPath = PUBLIC_PATHS.some(p => pathname.startsWith(p))
   const isStaticFile = pathname.startsWith('/_next') || pathname.startsWith('/favicon')
   const isPwaPath    = PWA_PATHS.has(pathname) || pathname.startsWith('/icon.')
+  // Client-facing share flow — real clients receiving a pick link don't have
+  // the preview cookie, so the entire pick path (view + data + notify) must
+  // bypass the pre-launch gate.
+  const isClientPickPath =
+       pathname.startsWith('/pick/')
+    || pathname.startsWith('/api/pick-data/')
+    || pathname === '/api/notify-pick'
 
-  if (isPublicPath || isStaticFile || isPwaPath) {
+  if (isPublicPath || isStaticFile || isPwaPath || isClientPickPath) {
     return NextResponse.next()
   }
 
