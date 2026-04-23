@@ -35,6 +35,7 @@ const STEP_LABELS = ['Drop pin','Select','Message','Share']
 export default function SharePage() {
   const [userId,           setUserId]           = useState<string | null>(null)
   const [portfolio,        setPortfolio]        = useState<DBPortfolio[]>([])
+  const [photoMap,         setPhotoMap]         = useState<Record<string, string>>({})
   const [dbTemplates,      setDbTemplates]      = useState<DBTemplate[]>([])
   const [dataLoading,      setDataLoading]      = useState(true)
   const [locSearch,        setLocSearch]        = useState('')
@@ -89,7 +90,29 @@ export default function SharePage() {
         supabase.from('message_templates').select('id,name,body').eq('user_id', user.id).order('created_at', { ascending: true }),
         supabase.from('profiles').select('full_name,custom_domain,custom_domain_verified').eq('id', user.id).single(),
       ])
-      if (portfolioRes.data) setPortfolio(portfolioRes.data)
+      if (portfolioRes.data) {
+        setPortfolio(portfolioRes.data)
+        // Fetch thumbnails for the portfolio rows in parallel. Prefer a photo attached to
+        // the portfolio copy; fall back to a photo on the source public location.
+        const portfolioIds = portfolioRes.data.map((p: any) => p.id)
+        const sourceIds    = portfolioRes.data.map((p: any) => p.source_location_id).filter(Boolean) as string[]
+        const [{ data: ownPhotos }, { data: sourcePhotos }] = await Promise.all([
+          supabase.from('location_photos').select('portfolio_location_id,url').in('portfolio_location_id', portfolioIds).eq('is_private', false),
+          sourceIds.length > 0
+            ? supabase.from('location_photos').select('location_id,url').in('location_id', sourceIds).eq('is_private', false)
+            : Promise.resolve({ data: [] as any[] }),
+        ])
+        const ownMap: Record<string, string> = {}
+        ;(ownPhotos ?? []).forEach((p: any) => { if (!ownMap[p.portfolio_location_id]) ownMap[p.portfolio_location_id] = p.url })
+        const srcMap: Record<string, string> = {}
+        ;(sourcePhotos ?? []).forEach((p: any) => { if (!srcMap[p.location_id]) srcMap[p.location_id] = p.url })
+        const map: Record<string, string> = {}
+        portfolioRes.data.forEach((p: any) => {
+          const url = ownMap[p.id] ?? (p.source_location_id ? srcMap[p.source_location_id] : null)
+          if (url) map[p.id] = url
+        })
+        setPhotoMap(map)
+      }
       if (templatesRes.data) setDbTemplates(templatesRes.data)
       if (profileRes.data?.full_name) setPhotographerName(profileRes.data.full_name)
       if (profileRes.data) {
@@ -112,19 +135,20 @@ export default function SharePage() {
     portfolio
       .filter(p => p.latitude != null && p.longitude != null)
       .map((p, idx) => ({
-        id:     p.id,
-        name:   p.name,
-        city:   p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
-        lat:    p.latitude!,
-        lng:    p.longitude!,
-        access: p.access_type ?? 'public',
-        rating: '—',
-        bg:     BG_CYCLE[idx % BG_CYCLE.length],
-        type:   'favorite' as const,
-        d:      pin ? calcDist(pin.lat, pin.lng, p.latitude!, p.longitude!) : null,
+        id:       p.id,
+        name:     p.name,
+        city:     p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
+        lat:      p.latitude!,
+        lng:      p.longitude!,
+        access:   p.access_type ?? 'public',
+        rating:   '—',
+        bg:       BG_CYCLE[idx % BG_CYCLE.length],
+        type:     'favorite' as const,
+        d:        pin ? calcDist(pin.lat, pin.lng, p.latitude!, p.longitude!) : null,
+        photoUrl: photoMap[p.id] ?? null,
       }))
       .sort((a, b) => (a.d ?? 999) - (b.d ?? 999)),
-  [portfolio, pin])
+  [portfolio, pin, photoMap])
 
   const allMapLocations = portfolioMapLocs
 
@@ -245,8 +269,9 @@ export default function SharePage() {
     return (
       <div onClick={() => toggleSelect(loc.id)} style={rowStyle(sel, isSecret)}>
         <div style={checkStyle(sel)}>{sel ? '✓' : ''}</div>
-        <div className={loc.bg} style={{ width: 42, height: 42, borderRadius: 6, flexShrink: 0, position: 'relative' }}>
-          {isSecret && <div style={{ position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: '50%', background: 'rgba(124,92,191,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>🤫</div>}
+        <div className={loc.photoUrl ? undefined : loc.bg} style={{ width: 42, height: 42, borderRadius: 6, flexShrink: 0, position: 'relative', overflow: 'hidden', background: loc.photoUrl ? 'var(--cream-dark)' : undefined }}>
+          {loc.photoUrl && <img src={loc.photoUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          {isSecret && <div style={{ position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: '50%', background: 'rgba(124,92,191,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, zIndex: 1 }}>🤫</div>}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>
@@ -344,15 +369,20 @@ export default function SharePage() {
               {portfolio.length > 0 ? (
                 <>
                   <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your portfolio ({portfolio.length})</div>
-                  {portfolio.slice(0,5).map((p, idx) => (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 9, borderRadius: 4, background: 'var(--cream)', marginBottom: 5 }}>
-                      <div className={`bg-${(idx%6)+1}`} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{p.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? '')}</div>
+                  {portfolio.slice(0,5).map((p, idx) => {
+                    const thumb = photoMap[p.id]
+                    return (
+                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 9, borderRadius: 4, background: 'var(--cream)', marginBottom: 5 }}>
+                        <div className={thumb ? undefined : `bg-${(idx%6)+1}`} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0, overflow: 'hidden', position: 'relative', background: thumb ? 'var(--cream-dark)' : undefined }}>
+                          {thumb && <img src={thumb} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{p.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? '')}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   {portfolio.length > 5 && <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', padding: '4px 0' }}>+{portfolio.length - 5} more in Step 2</div>}
                 </>
               ) : (

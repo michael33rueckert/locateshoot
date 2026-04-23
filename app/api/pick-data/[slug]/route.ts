@@ -93,31 +93,35 @@ export async function GET(request: Request, context: any) {
       sourcePhotos = data ?? []
     }
 
-    const ownMap: Record<string, string> = {}
+    const ownMap: Record<string, string[]> = {}
     ;(portfolioPhotos ?? []).forEach((p: any) => {
-      if (!ownMap[p.portfolio_location_id]) ownMap[p.portfolio_location_id] = p.url
+      (ownMap[p.portfolio_location_id] ??= []).push(p.url)
     })
-    const sourceMap: Record<string, string> = {}
+    const sourceMap: Record<string, string[]> = {}
     ;(sourcePhotos ?? []).forEach((p: any) => {
-      if (!sourceMap[p.location_id]) sourceMap[p.location_id] = p.url
+      (sourceMap[p.location_id] ??= []).push(p.url)
     })
 
-    locations = (portfolioRows ?? []).map((p: any) => ({
-      id:               p.id,
-      name:             p.name,
-      description:      p.description,
-      city:             p.city,
-      state:            p.state,
-      latitude:         p.latitude,
-      longitude:        p.longitude,
-      access_type:      p.access_type,
-      tags:             p.tags,
-      permit_required:  p.permit_required,
-      permit_notes:     p.permit_notes,
-      quality_score:    null,
-      save_count:       0,
-      photo_url:        ownMap[p.id] ?? (p.source_location_id ? sourceMap[p.source_location_id] : null) ?? null,
-    }))
+    locations = (portfolioRows ?? []).map((p: any) => {
+      const urls = ownMap[p.id] ?? (p.source_location_id ? sourceMap[p.source_location_id] : null) ?? []
+      return {
+        id:               p.id,
+        name:             p.name,
+        description:      p.description,
+        city:             p.city,
+        state:            p.state,
+        latitude:         p.latitude,
+        longitude:        p.longitude,
+        access_type:      p.access_type,
+        tags:             p.tags,
+        permit_required:  p.permit_required,
+        permit_notes:     p.permit_notes,
+        quality_score:    null,
+        save_count:       0,
+        photo_url:        urls[0] ?? null,
+        photo_urls:       urls,
+      }
+    })
   } else {
     // Legacy path — old share links still reference public locations + secrets directly
     const locIds: any[] = (share.location_ids ?? []).filter((id: any) => id != null)
@@ -135,11 +139,14 @@ export async function GET(request: Request, context: any) {
         .in('location_id', locIds)
         .eq('is_private', false)
         .order('created_at', { ascending: true })
-      const photoMap: Record<string, string> = {}
+      const photoMap: Record<string, string[]> = {}
       ;(photoData ?? []).forEach((p: any) => {
-        if (!photoMap[p.location_id]) photoMap[p.location_id] = p.url
+        (photoMap[p.location_id] ??= []).push(p.url)
       })
-      locations = locations.map((l: any) => ({ ...l, photo_url: photoMap[l.id] ?? null }))
+      locations = locations.map((l: any) => {
+        const urls = photoMap[l.id] ?? []
+        return { ...l, photo_url: urls[0] ?? null, photo_urls: urls }
+      })
     }
 
     const secIds: any[] = (share.secret_ids ?? []).filter((id: any) => id != null && id !== '')

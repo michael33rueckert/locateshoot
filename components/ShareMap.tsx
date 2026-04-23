@@ -13,6 +13,7 @@ export interface MapLocation {
   rating: string
   bg: string
   type: 'favorite' | 'recommended' | 'secret'
+  photoUrl?: string | null
 }
 
 interface ShareMapProps {

@@ -11,7 +11,7 @@ const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false }
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
-type FullLocation = ClientLocation & { tags: string[]; desc: string; permit: string | null; saves: number; photoUrl: string | null }
+type FullLocation = ClientLocation & { tags: string[]; desc: string; permit: string | null; saves: number; photoUrl: string | null; photoUrls: string[] }
 
 export default function ClientPickerPage() {
   const params = useParams()
@@ -20,7 +20,8 @@ export default function ClientPickerPage() {
   const [shareData,        setShareData]        = useState<any>(null)
   const [branding,         setBranding]         = useState<any>(null)
   const [logoIsLight,      setLogoIsLight]      = useState<boolean | null>(null)
-  const [lightboxSrc,      setLightboxSrc]      = useState<string | null>(null)
+  const [lightboxSrc,      setLightboxSrc]      = useState<string | string[] | null>(null)
+  const [lightboxStart,    setLightboxStart]    = useState(0)
   const [locations,        setLocations]        = useState<FullLocation[]>([])
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState<string | null>(null)
@@ -72,6 +73,7 @@ export default function ClientPickerPage() {
             permit: loc.permit_required ? `Permit required${loc.permit_notes ? ' — ' + loc.permit_notes : ''}` : 'No permit required',
             saves:  loc.save_count ?? 0,
             photoUrl: loc.photo_url ?? null,
+            photoUrls: loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : []),
           })
         })
 
@@ -85,6 +87,7 @@ export default function ClientPickerPage() {
             desc: s.description ?? '',
             permit: null, saves: 0,
             photoUrl: null,
+            photoUrls: [],
           })
         })
 
@@ -191,7 +194,7 @@ export default function ClientPickerPage() {
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, color: 'rgba(245,240,232,.6)' }}>Loading…</div>
         </div>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-        <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+        <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={() => setLightboxSrc(null)} />
       </div>
     )
   }
@@ -228,7 +231,7 @@ export default function ClientPickerPage() {
           </div>
         </div>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-        <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+        <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={() => setLightboxSrc(null)} />
       </div>
     )
   }
@@ -395,12 +398,10 @@ export default function ClientPickerPage() {
               <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--sand)' }} />
             </div>
             <button onClick={() => setDetailLoc(null)} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: '50%', background: 'rgba(26,22,18,.6)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>✕</button>
-            <div className={detailLoc.bg} style={{ height: 200, position: 'relative', overflow: 'hidden' }}>
-              {detailLoc.photoUrl && <img src={detailLoc.photoUrl} alt="" onClick={() => setLightboxSrc(detailLoc.photoUrl)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
-              <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: detailLoc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: detailLoc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1 }}>
-                {detailLoc.access === 'public' ? '● Public' : '🔒 Private'}
-              </div>
-            </div>
+            <DetailPhotoGallery
+              loc={detailLoc}
+              onOpenLightbox={(imgs, start) => { setLightboxSrc(imgs); setLightboxStart(start) }}
+            />
             <div style={{ padding: '1.25rem' }}>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>{detailLoc.name}</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: '1rem' }}>📍 {detailLoc.city}</div>
@@ -473,7 +474,77 @@ export default function ClientPickerPage() {
           .pick-mobile-toggle { display: flex !important; position: fixed !important; bottom: 80px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 400 !important; align-items: center !important; gap: 8px !important; padding: 10px 22px !important; border-radius: 50px !important; border: none !important; font-family: var(--font-dm-sans), sans-serif !important; font-size: 13px !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 4px 20px rgba(0,0,0,.35) !important; white-space: nowrap !important; background: var(--ink) !important; color: var(--cream) !important; }
         }
       `}</style>
-      <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={() => setLightboxSrc(null)} />
     </div>
+  )
+}
+
+// Photo hero + thumbnail strip for the pick-page detail panel. Shows the full gallery
+// returned by /api/pick-data (portfolio uploads preferred, source-location photos as fallback).
+// Tapping the hero opens the shared multi-image lightbox at the current index.
+function DetailPhotoGallery({
+  loc,
+  onOpenLightbox,
+}: {
+  loc: FullLocation
+  onOpenLightbox: (imgs: string[], start: number) => void
+}) {
+  const photos = loc.photoUrls.length > 0
+    ? loc.photoUrls
+    : (loc.photoUrl ? [loc.photoUrl] : [])
+  const [idx, setIdx] = useState(0)
+
+  useEffect(() => { setIdx(0) }, [loc.id])
+
+  const hasPhotos = photos.length > 0
+  const hasMultiple = photos.length > 1
+  const current = photos[idx]
+
+  return (
+    <>
+      <div className={hasPhotos ? undefined : loc.bg} style={{ height: 220, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
+        {hasPhotos && (
+          <img
+            src={current}
+            alt={loc.name}
+            onClick={() => onOpenLightbox(photos, idx)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
+          />
+        )}
+        <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: loc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1 }}>
+          {loc.access === 'public' ? '● Public' : '🔒 Private'}
+        </div>
+        {hasMultiple && (
+          <>
+            <button
+              onClick={e => { e.stopPropagation(); setIdx(i => (i - 1 + photos.length) % photos.length) }}
+              aria-label="Previous photo"
+              style={{ position: 'absolute', top: '50%', left: 10, transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', zIndex: 2 }}
+            >‹</button>
+            <button
+              onClick={e => { e.stopPropagation(); setIdx(i => (i + 1) % photos.length) }}
+              aria-label="Next photo"
+              style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', zIndex: 2 }}
+            >›</button>
+            <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(26,22,18,.7)', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'rgba(255,255,255,.85)', fontVariantNumeric: 'tabular-nums', zIndex: 2 }}>
+              {idx + 1} / {photos.length}
+            </div>
+          </>
+        )}
+      </div>
+      {hasMultiple && (
+        <div style={{ display: 'flex', gap: 5, padding: '8px 1.25rem', overflowX: 'auto', borderBottom: '1px solid var(--cream-dark)' }}>
+          {photos.map((url, i) => (
+            <div
+              key={i}
+              onClick={() => setIdx(i)}
+              style={{ width: 56, height: 56, borderRadius: 6, flexShrink: 0, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${idx === i ? 'var(--gold)' : 'transparent'}` }}
+            >
+              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   )
 }
