@@ -1,4 +1,4 @@
-const CACHE = 'locateshoot-v2'
+const CACHE = 'locateshoot-v3'
 const PRECACHE = ['/dashboard', '/explore', '/share', '/profile', '/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png']
 
 // Install — precache core pages
