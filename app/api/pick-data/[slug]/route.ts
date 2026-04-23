@@ -11,7 +11,7 @@ export async function GET(request: Request, context: any) {
 
   const { data: share, error: shareErr } = await admin
     .from('share_links')
-    .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent')
+    .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio')
     .eq('slug', slug)
     .single()
 
@@ -49,7 +49,17 @@ export async function GET(request: Request, context: any) {
   let locations: any[] = []
   let secrets: any[] = []
 
-  const portfolioIds: any[] = (share.portfolio_location_ids ?? []).filter((id: any) => id != null)
+  // When is_full_portfolio is true, the link auto-syncs with the photographer's
+  // current portfolio rather than a static stored list — so resolve it live.
+  let portfolioIds: any[] = (share.portfolio_location_ids ?? []).filter((id: any) => id != null)
+  if (share.is_full_portfolio && share.user_id) {
+    const { data: livePortfolio } = await admin
+      .from('portfolio_locations')
+      .select('id')
+      .eq('user_id', share.user_id)
+      .order('created_at', { ascending: false })
+    portfolioIds = (livePortfolio ?? []).map((r: any) => r.id)
+  }
 
   if (portfolioIds.length > 0) {
     // New path — share references portfolio copies

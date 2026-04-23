@@ -302,8 +302,8 @@ export default function ExplorePage() {
 
   useEffect(() => {
     if(!locations.length)return
-    const ids=locations.slice(0,200).map((l:any)=>l.id)
-    supabase.from('location_photos').select('location_id,url').in('location_id',ids).eq('is_private',false).limit(300)
+    const ids=locations.map((l:any)=>l.id)
+    supabase.from('location_photos').select('location_id,url').in('location_id',ids).eq('is_private',false).limit(1000)
       .then(({data})=>{if(!data)return;const m:Record<string,string>={};data.forEach((p:any)=>{if(!m[p.location_id])m[p.location_id]=p.url});setPhotoMap(m)})
   }, [locations])
 

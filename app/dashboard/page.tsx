@@ -12,7 +12,7 @@ interface Profile           { id: string; full_name: string | null; email: strin
 interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number; preview_url: string | null }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
-interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; picks: ClientPick[]; expanded: boolean }
+interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; picks: ClientPick[]; expanded: boolean }
 
 function timeAgo(d: string) {
   const diff  = Date.now() - new Date(d).getTime()
@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const [preselectAllPortfolio, setPreselectAllPortfolio] = useState(false)
   const [deleteShareId,       setDeleteShareId]        = useState<string | null>(null)
   const [editingPortfolioId,  setEditingPortfolioId]   = useState<string | null>(null)
+  const [editingPermLink,     setEditingPermLink]      = useState<PermanentLink | null>(null)
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
   const [mobileMenuOpen,      setMobileMenuOpen]       = useState(false)
 
@@ -128,7 +129,7 @@ export default function DashboardPage() {
 
       const { data: permData } = await supabase
         .from('share_links')
-        .select('id,session_name,slug,created_at,location_ids')
+        .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio')
         .eq('user_id', user.id)
         .eq('is_permanent', true)
         .order('created_at', { ascending: false })
@@ -167,6 +168,35 @@ export default function DashboardPage() {
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
   const isAdmin   = profile?.email === ADMIN_EMAIL
+
+  async function shareFullPortfolio() {
+    if (!profile?.id) return
+    // Reuse existing full-portfolio link if one exists, otherwise create one.
+    let link = permanentLinks.find(l => l.is_full_portfolio)
+    if (!link) {
+      const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)
+      const slug  = `${clean(profile.full_name || 'photographer')}-portfolio-${Date.now().toString(36)}`
+      const { data, error } = await supabase.from('share_links').insert({
+        user_id:                profile.id,
+        slug,
+        session_name:           'My portfolio',
+        message:                null,
+        photographer_name:      profile.full_name ?? null,
+        portfolio_location_ids: null,
+        location_ids:           [],
+        secret_ids:             [],
+        expires_at:             null,
+        is_permanent:           true,
+        is_full_portfolio:      true,
+      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
+      if (error || !data) { setToast('⚠ Could not create portfolio link'); return }
+      link = { ...data, picks: [], expanded: false }
+      setPermanentLinks(prev => [link!, ...prev])
+    }
+    const url = buildShareUrl(link.slug, { customDomain: profile.custom_domain, customDomainVerified: profile.custom_domain_verified })
+    navigator.clipboard?.writeText(url).catch(() => {})
+    setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
+  }
 
   function togglePermLinkExpanded(id: string) {
     setPermanentLinks(prev => prev.map(l => l.id === id ? { ...l, expanded: !l.expanded } : l))
@@ -295,7 +325,7 @@ export default function DashboardPage() {
                   <button onClick={() => setShowAddPortfolio(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Add new location</button>
                   <Link href="/explore" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>+ Add from Explore</Link>
                   {portfolioLocs.length > 0 && (
-                    <button onClick={() => { setPreselectAllPortfolio(true); setShowCreatePermanent(true) }} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>🔗 Share entire portfolio</button>
+                    <button onClick={shareFullPortfolio} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>🔗 Share entire portfolio</button>
                   )}
                 </div>
               </div>
@@ -359,12 +389,18 @@ export default function DashboardPage() {
                 return (
                   <div key={link.id} style={{ borderBottom: i < permanentLinks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
                     <div style={{ padding: '1rem 1.25rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 3 }}>{link.session_name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {link.session_name}
+                            {link.is_full_portfolio && <span style={{ padding: '1px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.2)' }}>🔗 Auto-syncs with portfolio</span>}
+                          </div>
                           <div style={{ fontSize: 11, color: 'var(--sky)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.replace('https://', '')}</div>
                         </div>
-                        <button onClick={() => { navigator.clipboard?.writeText(url).catch(() => {}); setToast('📋 Link copied!') }} style={{ padding: '5px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)', flexShrink: 0 }}>Copy link</button>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <button onClick={() => { navigator.clipboard?.writeText(url).catch(() => {}); setToast('📋 Link copied!') }} style={{ padding: '5px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)' }}>Copy link</button>
+                          {!link.is_full_portfolio && <button onClick={() => setEditingPermLink(link)} style={{ padding: '5px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)' }}>Edit</button>}
+                        </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{link.picks.length === 0 ? 'No picks yet' : `${link.picks.length} pick${link.picks.length !== 1 ? 's' : ''}`}</div>
@@ -504,6 +540,23 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* EDIT PERMANENT LINK MODAL */}
+      {editingPermLink && (
+        <CreatePermanentLinkModal
+          portfolio={portfolioLocs}
+          preselectAll={false}
+          userId={profile?.id ?? ''}
+          photographerName={profile?.full_name ?? ''}
+          editLink={editingPermLink}
+          onClose={() => setEditingPermLink(null)}
+          onCreated={(link) => {
+            setPermanentLinks(prev => prev.map(l => l.id === link.id ? { ...l, session_name: link.session_name, portfolio_location_ids: link.portfolio_location_ids } : l))
+            setEditingPermLink(null)
+            setToast('✓ Permanent link updated')
+          }}
+        />
+      )}
+
       {/* PORTFOLIO EDIT MODAL */}
       {editingPortfolioId && (
         <PortfolioEditModal
@@ -538,17 +591,29 @@ export default function DashboardPage() {
 // ── Create Permanent Link Modal ───────────────────────────────────────────────
 
 function CreatePermanentLinkModal({
-  portfolio, preselectAll, userId, photographerName, onClose, onCreated,
+  portfolio, preselectAll, userId, photographerName, editLink, onClose, onCreated,
 }: {
   portfolio: PortfolioLocation[]; preselectAll: boolean
-  userId: string; photographerName: string; onClose: () => void; onCreated: (link: any) => void
+  userId: string; photographerName: string; editLink?: PermanentLink | null
+  onClose: () => void; onCreated: (link: any) => void
 }) {
-  const [sessionName,    setSessionName]    = useState(preselectAll ? 'My portfolio' : '')
-  const [selectedIds,    setSelectedIds]    = useState<string[]>(preselectAll ? portfolio.map(p => p.id) : [])
+  const isEdit = !!editLink
+  const [sessionName,    setSessionName]    = useState(editLink?.session_name ?? (preselectAll ? 'My portfolio' : ''))
+  const [selectedIds,    setSelectedIds]    = useState<string[]>(
+    editLink?.portfolio_location_ids ?? (preselectAll ? portfolio.map(p => p.id) : [])
+  )
   const [message,        setMessage]        = useState('')
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState('')
   const [locSearch,      setLocSearch]      = useState('')
+
+  // Load the existing message when editing
+  useEffect(() => {
+    if (!editLink) return
+    supabase.from('share_links').select('message').eq('id', editLink.id).single().then(({ data }) => {
+      if (data?.message) setMessage(data.message)
+    })
+  }, [editLink])
 
   function toggleLoc(id: string) {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -566,6 +631,17 @@ function CreatePermanentLinkModal({
     if (selectedIds.length === 0) { setError('Select at least one location.'); return }
     setSaving(true); setError('')
     try {
+      if (isEdit && editLink) {
+        // Update in place — slug stays the same so existing shared URLs keep working.
+        const { data, error: updateErr } = await supabase.from('share_links').update({
+          session_name:           sessionName.trim(),
+          message:                message.trim() || null,
+          portfolio_location_ids: selectedIds,
+        }).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
+        if (updateErr) throw updateErr
+        onCreated(data); onClose()
+        return
+      }
       const slug = generateSlug(sessionName, photographerName || 'photographer')
       const { data, error: insertErr } = await supabase.from('share_links').insert({
         user_id: userId, slug, session_name: sessionName.trim(),
@@ -573,10 +649,10 @@ function CreatePermanentLinkModal({
         portfolio_location_ids: selectedIds,
         location_ids: [], secret_ids: [],
         expires_at: null, is_permanent: true,
-      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids').single()
+      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
       if (insertErr) throw insertErr
       onCreated(data); onClose()
-    } catch (err: any) { setError('Could not create link — please try again.'); console.error(err) }
+    } catch (err: any) { setError(isEdit ? 'Could not save changes — please try again.' : 'Could not create link — please try again.'); console.error(err) }
     finally { setSaving(false) }
   }
 
@@ -596,7 +672,7 @@ function CreatePermanentLinkModal({
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📌 {preselectAll ? 'Share entire portfolio' : 'Create permanent link'}</div>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📌 {isEdit ? 'Edit permanent link' : preselectAll ? 'Share entire portfolio' : 'Create permanent link'}</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>A reusable link that never expires. Drop it in your booking workflow to send clients every time.</div>
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
@@ -648,7 +724,7 @@ function CreatePermanentLinkModal({
           {error && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={create} disabled={saving || !sessionName.trim() || selectedIds.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !sessionName.trim() || selectedIds.length === 0 ? 0.5 : 1 }}>
-              {saving ? 'Creating…' : 'Create permanent link →'}
+              {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save changes' : 'Create permanent link →')}
             </button>
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>

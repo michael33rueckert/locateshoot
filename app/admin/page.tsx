@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin'
+import AppNav from '@/components/AppNav'
 
 interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
 
@@ -205,12 +206,10 @@ export default function AdminPage() {
 
   return (
     <div style={{ minHeight: '100svh', background: 'var(--cream)' }}>
-      <div style={{ background: 'var(--ink)', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link href="/dashboard" style={{ fontSize: 12, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>← Dashboard</Link>
-          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 900, color: 'var(--cream)' }}>Admin</div>
-        </div>
-        <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)' }}>Admin-only tools & metrics</div>
+      <AppNav />
+      <div style={{ background: 'var(--cream-dark)', padding: '10px 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>Admin</div>
+        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Admin-only tools & metrics</div>
       </div>
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.5rem 1rem 4rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

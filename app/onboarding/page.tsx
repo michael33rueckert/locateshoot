@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import AppNav from '@/components/AppNav'
 
 interface PublicLocation {
   id: string; name: string; city: string | null; state: string | null
@@ -164,12 +165,7 @@ export default function OnboardingPage() {
 
   return (
     <div style={{ minHeight: '100svh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: 'var(--ink)', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Link href="/" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 900, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
-        </Link>
-        <button onClick={skip} disabled={saving} style={{ background: 'transparent', border: 'none', color: 'rgba(245,240,232,.55)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Skip for now</button>
-      </div>
+      <AppNav rightExtra={<button onClick={skip} disabled={saving} style={{ background: 'transparent', border: 'none', color: 'rgba(245,240,232,.55)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Skip for now</button>} />
 
       <div style={{ maxWidth: 860, width: '100%', margin: '0 auto', padding: '2.5rem 1.5rem 4rem', flex: 1 }}>
         <div style={{ marginBottom: '1.5rem' }}>

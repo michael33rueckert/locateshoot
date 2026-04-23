@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import AppNav from '@/components/AppNav'
 
 interface Template {
   id: string; name: string; body: string
@@ -360,6 +361,8 @@ export default function ProfilePage() {
   }
 
   return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div className="profile-topnav-mobile"><AppNav /></div>
     <div className="profile-outer">
 
       {/* SIDEBAR — className enables mobile horizontal tab bar */}
@@ -408,9 +411,8 @@ export default function ProfilePage() {
       {/* MAIN CONTENT — className enables mobile full-width */}
       <div className="profile-main">
 
-        {/* Mobile nav — dropdown replaces horizontal scroll */}
+        {/* Mobile nav — section dropdown (hamburger above handles dashboard/explore/etc.) */}
         <div className="profile-mobile-nav">
-          <Link href="/dashboard" style={{ fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 10 }}>← Back to dashboard</Link>
           <label style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', display: 'block', marginBottom: 4 }}>Section</label>
           <select value={active} onChange={e => setActive(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--cream-dark)', borderRadius: 6, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', appearance: 'none', backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%236b5f52' stroke-width='1.5' fill='none'/></svg>\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: 32 }}>
             {NAV_ITEMS.map(item => (
@@ -780,6 +782,7 @@ export default function ProfilePage() {
 
       <style>{`
         .profile-mobile-nav { display: none; }
+        .profile-topnav-mobile { display: none; }
         @media (max-width: 768px) {
           .profile-sidebar { display: none !important; }
           .profile-mobile-nav {
@@ -789,8 +792,10 @@ export default function ProfilePage() {
             padding: 1rem 1.25rem;
           }
           .profile-mobile-back { display: none !important; }
+          .profile-topnav-mobile { display: block; }
         }
       `}</style>
+    </div>
     </div>
   )
 }
