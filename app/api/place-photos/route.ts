@@ -51,7 +51,9 @@ async function searchOnce(
 }
 
 export async function POST(request: Request) {
-  if (!PLACES_KEY) return NextResponse.json({ photos: [] })
+  if (!PLACES_KEY) {
+    return NextResponse.json({ photos: [], error: 'no-places-key' })
+  }
 
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid body' }, { status: 400 })

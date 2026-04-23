@@ -395,8 +395,8 @@ export default function ClientPickerPage() {
         </div>
       </div>
 
-      {/* Mobile map toggle */}
-      <button className="pick-mobile-toggle" onClick={() => setMobileMapVisible(p => !p)} style={{ display: 'none' }}>
+      {/* Mobile map toggle — hidden on desktop via CSS, visible ≤768px */}
+      <button className="pick-mobile-toggle" onClick={() => setMobileMapVisible(p => !p)}>
         {mobileMapVisible ? '☰ View List' : '🗺 View Map'}
       </button>
 
@@ -512,22 +512,47 @@ export default function ClientPickerPage() {
         .pick-body { display: grid; grid-template-columns: 420px 1fr; }
         .pick-sidebar { overflow: hidden; }
         .pick-map-col { position: relative; }
+        .pick-mobile-toggle { display: none; }
 
         /* Tablet 768–1023: narrower sidebar so the map still breathes. */
         @media (max-width: 1023px) and (min-width: 769px) {
           .pick-body { grid-template-columns: 340px 1fr !important; }
         }
 
-        /* Mobile ≤768: split view — map visible at the top, list below.
-           Both always rendered so the client never has to hunt for the map. */
+        /* Mobile ≤768: list fills the screen by default; a floating
+           "View Map" pill toggles to a full-screen map view. Matches the
+           Explore page pattern so clients feel at home. */
         @media (max-width: 768px) {
           .pick-body { display: flex !important; flex-direction: column !important; }
-          .pick-map-col { flex: 0 0 44svh !important; min-height: 260px !important; max-height: 50svh !important; }
-          .pick-sidebar { flex: 1 !important; min-height: 0 !important; border-right: none !important; border-top: 1px solid var(--cream-dark) !important; }
-          /* These classes are no longer used on mobile but kept for the old toggle call sites. */
-          .pick-sidebar-hidden { display: none !important; }
-          .pick-map-col.pick-map-visible { flex: 1 1 auto !important; max-height: none !important; }
-          .pick-mobile-toggle { display: none !important; }
+          .pick-sidebar { flex: 1 !important; min-height: 0 !important; border-right: none !important; }
+          .pick-sidebar.pick-sidebar-hidden { display: none !important; }
+          .pick-map-col { display: none !important; }
+          .pick-map-col.pick-map-visible {
+            display: block !important;
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+          }
+          .pick-mobile-toggle {
+            display: flex !important;
+            position: fixed !important;
+            bottom: calc(env(safe-area-inset-bottom, 0) + 82px) !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 400 !important;
+            align-items: center !important;
+            gap: 8px !important;
+            padding: 11px 22px !important;
+            border-radius: 999px !important;
+            border: none !important;
+            font-family: var(--font-dm-sans), sans-serif !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            box-shadow: 0 6px 24px rgba(0,0,0,.35) !important;
+            white-space: nowrap !important;
+            background: var(--ink) !important;
+            color: var(--cream) !important;
+          }
         }
       `}</style>
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={() => setLightboxSrc(null)} />

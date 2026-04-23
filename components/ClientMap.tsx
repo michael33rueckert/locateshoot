@@ -13,6 +13,11 @@ function mapHasSize(map: any): boolean {
 function isFiniteLatLng(lat: any, lng: any): boolean {
   return Number.isFinite(lat) && Number.isFinite(lng)
 }
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
 
 export interface ClientLocation {
   id: number
@@ -104,7 +109,7 @@ export default function ClientMap({
         const isChosen = chosenId === loc.id
         const isRec    = loc.type === 'recommended'
 
-        let bg     = isRec ? 'rgba(61,110,140,0.9)' : 'rgba(245,240,232,0.92)'
+        let bg     = isRec ? 'rgba(61,110,140,0.95)' : 'rgba(245,240,232,0.95)'
         let color  = isRec ? 'white' : '#1a1612'
         let size   = 28
         let border = '2.5px solid white'
@@ -115,18 +120,37 @@ export default function ClientMap({
           bg = '#c4922a'; color = '#1a1612'; size = 32; border = '3px solid white'
         }
 
+        // Name label sits to the right of the numbered dot so clients can scan
+        // the map without having to tap every marker. Icon anchor keeps the dot
+        // centered on the actual coordinate.
+        const labelText = escapeHtml(loc.name)
+        const labelBg   = isChosen ? '#4a6741' : isActive ? '#c4922a' : 'rgba(26,22,18,.88)'
+        const labelFg   = isActive && !isChosen ? '#1a1612' : 'white'
+        const totalW    = size + 8 + 180   // dot + gap + max label width
+
         const marker = L.marker([loc.lat, loc.lng], {
           icon: L.divIcon({
             className: '',
-            html: `<div style="
-              width:${size}px; height:${size}px; border-radius:50%;
-              background:${bg}; border:${border};
-              box-shadow:0 3px 10px rgba(0,0,0,.4);
-              display:flex; align-items:center; justify-content:center;
-              font-size:12px; font-weight:700; color:${color};
-              transition:all .25s;
-            ">${isChosen ? '✓' : i + 1}</div>`,
-            iconSize:   [size, size],
+            html: `<div style="display:flex;align-items:center;gap:6px;transition:all .25s;">
+              <div style="
+                width:${size}px; height:${size}px; border-radius:50%;
+                background:${bg}; border:${border};
+                box-shadow:0 3px 10px rgba(0,0,0,.4);
+                display:flex; align-items:center; justify-content:center;
+                font-size:12px; font-weight:700; color:${color};
+                flex-shrink:0;
+              ">${isChosen ? '✓' : i + 1}</div>
+              <div style="
+                max-width:180px; padding:3px 8px; border-radius:6px;
+                background:${labelBg}; color:${labelFg};
+                font-family:var(--font-dm-sans), sans-serif;
+                font-size:11px; font-weight:600;
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                box-shadow:0 2px 6px rgba(0,0,0,.3);
+                line-height:1.25;
+              ">${labelText}</div>
+            </div>`,
+            iconSize:   [totalW, size],
             iconAnchor: [size / 2, size / 2],
           }),
           zIndexOffset: isActive || isChosen ? 1000 : 0,
