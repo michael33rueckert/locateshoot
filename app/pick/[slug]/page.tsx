@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import ImageLightbox from '@/components/ImageLightbox'
-import { usePlacePhotos } from '@/hooks/usePlacePhotos'
+import { useServerPlacePhotos } from '@/hooks/useServerPlacePhotos'
 import type { ClientLocation } from '@/components/ClientMap'
 
 const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false })
@@ -42,6 +42,13 @@ export default function ClientPickerPage() {
   useEffect(() => {
     if (mobileMapVisible) setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
   }, [mobileMapVisible])
+
+  // Split-view mobile layout mounts both map and list at once — nudge Leaflet
+  // once so it measures the map column correctly after the first paint.
+  useEffect(() => {
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 400)
+    return () => clearTimeout(t)
+  }, [])
 
   useEffect(() => {
     if (!slug) return
@@ -501,16 +508,26 @@ export default function ClientPickerPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        .pick-body { display: grid; grid-template-columns: 400px 1fr; }
+        /* Desktop ≥1024: sidebar + map side by side. */
+        .pick-body { display: grid; grid-template-columns: 420px 1fr; }
         .pick-sidebar { overflow: hidden; }
         .pick-map-col { position: relative; }
+
+        /* Tablet 768–1023: narrower sidebar so the map still breathes. */
+        @media (max-width: 1023px) and (min-width: 769px) {
+          .pick-body { grid-template-columns: 340px 1fr !important; }
+        }
+
+        /* Mobile ≤768: split view — map visible at the top, list below.
+           Both always rendered so the client never has to hunt for the map. */
         @media (max-width: 768px) {
           .pick-body { display: flex !important; flex-direction: column !important; }
-          .pick-sidebar { flex: 1 !important; min-height: 0 !important; border-right: none !important; }
+          .pick-map-col { flex: 0 0 44svh !important; min-height: 260px !important; max-height: 50svh !important; }
+          .pick-sidebar { flex: 1 !important; min-height: 0 !important; border-right: none !important; border-top: 1px solid var(--cream-dark) !important; }
+          /* These classes are no longer used on mobile but kept for the old toggle call sites. */
           .pick-sidebar-hidden { display: none !important; }
-          .pick-map-col { display: none !important; }
-          .pick-map-col.pick-map-visible { display: block !important; position: fixed !important; inset: 0 !important; z-index: 300 !important; height: 100svh !important; }
-          .pick-mobile-toggle { display: flex !important; position: fixed !important; bottom: 80px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 400 !important; align-items: center !important; gap: 8px !important; padding: 10px 22px !important; border-radius: 50px !important; border: none !important; font-family: var(--font-dm-sans), sans-serif !important; font-size: 13px !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 4px 20px rgba(0,0,0,.35) !important; white-space: nowrap !important; background: var(--ink) !important; color: var(--cream) !important; }
+          .pick-map-col.pick-map-visible { flex: 1 1 auto !important; max-height: none !important; }
+          .pick-mobile-toggle { display: none !important; }
         }
       `}</style>
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={() => setLightboxSrc(null)} />
@@ -531,7 +548,7 @@ function DetailPhotoGallery({
   // Live Google Places photos (up to 10) — higher quality than the single seeded
   // thumbnail. Merge: Google first (for variety), then any seeded/community
   // photos that aren't already duplicates.
-  const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
+  const { photos: googlePhotos, loading: googleLoading } = useServerPlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
   const seeded = loc.photoUrls.length > 0 ? loc.photoUrls : (loc.photoUrl ? [loc.photoUrl] : [])
   const photos = (() => {
     if (googlePhotos.length === 0) return seeded

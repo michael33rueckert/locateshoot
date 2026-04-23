@@ -33,7 +33,9 @@ export async function sendEmail({ to, subject, html, replyTo }: SendArgs): Promi
     to: Array.isArray(to) ? to : [to],
     subject,
     html,
-    ...(replyTo ? { reply_to: replyTo } : {}),
+    // Resend v6+ uses replyTo (camelCase). Set both spellings to be safe
+    // across transient SDK/API mismatches.
+    ...(replyTo ? { replyTo, reply_to: replyTo } : {}),
   } as any)
   if (error) {
     console.error('sendEmail: resend returned error', error)

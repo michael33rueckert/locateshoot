@@ -53,6 +53,7 @@ export function middleware(request: NextRequest) {
          pathname.startsWith('/pick/')
       || pathname.startsWith('/api/pick-data/')
       || pathname === '/api/submit-pick'
+      || pathname === '/api/place-photos'
     const isStaticAsset = pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname === '/robots.txt' || pathname === '/sitemap.xml'
     if (!isPickRoute && !isStaticAsset) {
       const redirect = new URL(pathname + (request.nextUrl.search ?? ''), `https://${APEX_DOMAIN}`)
@@ -73,6 +74,7 @@ export function middleware(request: NextRequest) {
        pathname.startsWith('/pick/')
     || pathname.startsWith('/api/pick-data/')
     || pathname === '/api/submit-pick'
+    || pathname === '/api/place-photos'
 
   if (isPublicPath || isStaticFile || isPwaPath || isClientPickPath) {
     return NextResponse.next()
