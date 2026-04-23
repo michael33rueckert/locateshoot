@@ -32,11 +32,11 @@ async function sb(path, opts = {}) {
   return r.json()
 }
 
-async function searchPlace({ name, city, state, lat, lng }) {
+async function searchOnce({ name, city, state, lat, lng }, includedType) {
   const body = {
     textQuery: [name, city, state].filter(Boolean).join(' '),
-    maxResultCount: 1,
-    // Bias toward the location's coordinates so we don't match namesakes in other states.
+    maxResultCount: 5,
+    ...(includedType ? { includedType } : {}),
     ...(lat != null && lng != null ? {
       locationBias: {
         circle: { center: { latitude: lat, longitude: lng }, radius: 5000 },
@@ -48,7 +48,7 @@ async function searchPlace({ name, city, state, lat, lng }) {
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': PLACES_KEY,
-      'X-Goog-FieldMask': 'places.displayName,places.rating,places.userRatingCount,places.id',
+      'X-Goog-FieldMask': 'places.displayName,places.rating,places.userRatingCount,places.types,places.id',
     },
     body: JSON.stringify(body),
   })
@@ -56,8 +56,20 @@ async function searchPlace({ name, city, state, lat, lng }) {
     const t = await r.text()
     throw new Error(`Places ${r.status}: ${t}`)
   }
-  const j = await r.json()
-  return j.places?.[0] ?? null
+  const candidates = (await r.json()).places ?? []
+  return candidates.find(p => p.rating != null) ?? null
+}
+
+// Plain text search frequently matches a neighborhood/district result that has no rating
+// (e.g. "Pike Place Market" matches the neighborhood, not the market). Fall back through
+// a few common primary-type filters to find the actual rated establishment.
+async function searchPlace(loc) {
+  for (const t of [undefined, 'tourist_attraction', 'park', 'museum', 'historical_landmark']) {
+    const p = await searchOnce(loc, t)
+    if (p) return p
+    await new Promise(r => setTimeout(r, 120))
+  }
+  return null
 }
 
 async function run() {
