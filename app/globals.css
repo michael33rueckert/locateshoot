@@ -1136,10 +1136,19 @@ body {
 }
  
 /* ─────────────────────────────────────────────────────────────────────────────
+   TABLET + PHONE (≤1023px) — nav collapses to the hamburger menu so the
+   desktop link row doesn't get squished. All app-level pages use AppNav.
+   ───────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  .hamburger-btn { display: flex !important; }
+  .nav-links     { display: none !important; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    PHONE (≤768px)
    ───────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
- 
+
   /* ── Hamburger ── */
   .hamburger-btn { display: flex !important; }
   .nav-links     { display: none !important; }
