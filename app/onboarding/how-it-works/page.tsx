@@ -115,7 +115,7 @@ export default function HowItWorksPage() {
             Got it — take me to my dashboard →
           </Link>
           <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 12 }}>
-            You can always revisit this guide from your profile.
+            You can always revisit this guide from the <strong>Getting Started</strong> link at the bottom of the site.
           </div>
         </div>
       </div>

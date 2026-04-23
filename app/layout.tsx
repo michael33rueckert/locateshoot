@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import MfaGate from '@/components/MfaGate'
 import InstallPrompt from '@/components/InstallPrompt'
 import FeedbackButton from '@/components/FeedbackButton'
+import SiteFooter from '@/components/SiteFooter'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -45,6 +46,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <SiteFooter />
         <MfaGate />
         <InstallPrompt />
         <FeedbackButton />
