@@ -128,9 +128,10 @@ function AddLocationModal({ onClose, user }: { onClose:()=>void; user:any }) {
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, isInPortfolio, onClose, onAddToPortfolio, onSignIn, user }: {
-  loc:any; isInPortfolio:boolean; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; user:any
+function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, user }: {
+  loc:any; portfolioId:string|null; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; user:any
 }) {
+  const isInPortfolio = !!portfolioId
   const router = useRouter()
   const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
   const { photos: communityPhotos } = useCommunityPhotos(loc.id, user?.id ?? null)
@@ -210,12 +211,12 @@ function DetailPanel({ loc, isInPortfolio, onClose, onAddToPortfolio, onSignIn, 
             {loc.permit_website&&<a href={loc.permit_website} target="_blank" rel="noopener noreferrer" style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:6,fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500}}>🔗 Permit info source →</a>}
           </div>
           {user
-            ? <button
-                onClick={()=>!isInPortfolio&&onAddToPortfolio(loc.id)}
-                disabled={isInPortfolio}
-                style={{width:'100%',padding:'12px',borderRadius:4,cursor:isInPortfolio?'default':'pointer',fontFamily:'inherit',fontSize:14,fontWeight:600,marginBottom:10,background:isInPortfolio?'rgba(74,103,65,.1)':'var(--gold)',color:isInPortfolio?'var(--sage)':'var(--ink)',border:isInPortfolio?'1px solid rgba(74,103,65,.3)':'none'}}>
-                {isInPortfolio?'✓ In your portfolio':'Add to my portfolio'}
-              </button>
+            ? (isInPortfolio
+                ? <div style={{display:'flex',gap:8,marginBottom:10}}>
+                    <div style={{flex:1,padding:'12px',borderRadius:4,fontFamily:'inherit',fontSize:14,fontWeight:600,background:'rgba(74,103,65,.1)',color:'var(--sage)',border:'1px solid rgba(74,103,65,.3)',textAlign:'center'}}>✓ In your portfolio</div>
+                    <Link href={`/dashboard?editPortfolio=${portfolioId}`} style={{padding:'12px 16px',borderRadius:4,fontFamily:'inherit',fontSize:14,fontWeight:600,background:'var(--ink)',color:'var(--cream)',textDecoration:'none',whiteSpace:'nowrap',display:'flex',alignItems:'center'}}>Edit & add photos →</Link>
+                  </div>
+                : <button onClick={()=>onAddToPortfolio(loc.id)} style={{width:'100%',padding:'12px',borderRadius:4,cursor:'pointer',fontFamily:'inherit',fontSize:14,fontWeight:600,marginBottom:10,background:'var(--gold)',color:'var(--ink)',border:'none'}}>Add to my portfolio</button>)
             : <button onClick={onSignIn} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:600,border:'none',cursor:'pointer',marginBottom:10}}>Sign in to add to your portfolio</button>}
           {user&&<button onClick={shareWithClient} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer',marginBottom:'1rem'}}>🔗 Share with client</button>}
           <div style={{padding:'10px 12px',background:'rgba(196,146,42,.04)',border:'1px solid rgba(196,146,42,.15)',borderRadius:6,marginBottom:10}}>
@@ -250,7 +251,9 @@ export default function ExplorePage() {
   const [minRating,      setMinRating]      = useState(0)
   const [sortBy,         setSortBy]         = useState<SortValue>('quality')
   const [photoMap,       setPhotoMap]       = useState<Record<string,string>>({})
-  const [portfolioSources, setPortfolioSources] = useState<Set<string>>(new Set())
+  // Map: public locations.id → portfolio_locations.id, so we can deep-link
+  // to the portfolio edit modal after a user adds a location.
+  const [portfolioSources, setPortfolioSources] = useState<Map<string, string>>(new Map())
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
@@ -303,9 +306,14 @@ export default function ExplorePage() {
   }, [locations])
 
   useEffect(() => {
-    if(!user){setPortfolioSources(new Set());return}
-    supabase.from('portfolio_locations').select('source_location_id').eq('user_id',user.id)
-      .then(({data})=>{if(data)setPortfolioSources(new Set(data.map((r:any)=>r.source_location_id).filter(Boolean)))})
+    if(!user){setPortfolioSources(new Map());return}
+    supabase.from('portfolio_locations').select('id,source_location_id').eq('user_id',user.id)
+      .then(({data})=>{
+        if(!data)return
+        const m=new Map<string,string>()
+        data.forEach((r:any)=>{ if(r.source_location_id) m.set(String(r.source_location_id), String(r.id)) })
+        setPortfolioSources(m)
+      })
   }, [user])
 
   useEffect(() => {
@@ -337,14 +345,14 @@ export default function ExplorePage() {
 
   async function addToPortfolio(locId:any) {
     if(!user){setToast('Sign in to build your portfolio');return}
-    if(portfolioSources.has(locId))return
-    setPortfolioSources(prev=>new Set([...prev,locId]))
+    const key=String(locId)
+    if(portfolioSources.has(key))return
     try {
       const { data: full, error: fetchErr } = await supabase.from('locations')
         .select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info')
         .eq('id',locId).single()
       if(fetchErr||!full)throw fetchErr??new Error('Location not found')
-      const { error } = await supabase.from('portfolio_locations').insert({
+      const { data: inserted, error } = await supabase.from('portfolio_locations').insert({
         user_id:            user.id,
         source_location_id: full.id,
         name:               full.name,
@@ -360,12 +368,12 @@ export default function ExplorePage() {
         best_time:          full.best_time,
         parking_info:       full.parking_info,
         is_secret:          false,
-      })
-      if(error)throw error
-      setToast('Added to your portfolio! Upload your photos from the dashboard.')
+      }).select('id').single()
+      if(error||!inserted)throw error??new Error('Insert failed')
+      setPortfolioSources(prev=>{const n=new Map(prev);n.set(key,String(inserted.id));return n})
+      setToast('Added to your portfolio!')
     } catch(e){
       console.error(e)
-      setPortfolioSources(prev=>{const n=new Set(prev);n.delete(locId);return n})
       setToast('⚠ Could not add to portfolio — please try again')
     }
   }
@@ -561,7 +569,7 @@ export default function ExplorePage() {
       </button>
 
       {detailLoc&&(
-        <DetailPanel loc={detailLoc} isInPortfolio={portfolioSources.has(detailLoc.id)} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} user={user}/>
+        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} user={user}/>
       )}
       {showAddModal&&<AddLocationModal onClose={()=>setShowAddModal(false)} user={user}/>}
       {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}

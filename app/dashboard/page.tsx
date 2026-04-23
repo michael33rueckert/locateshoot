@@ -113,6 +113,20 @@ export default function DashboardPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // Open the edit modal when arriving via /dashboard?editPortfolio=<id>
+  // (e.g. after clicking "Edit & add photos" on Explore).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get('editPortfolio')
+    if (id) {
+      setEditingPortfolioId(id)
+      params.delete('editPortfolio')
+      const qs = params.toString()
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+    }
+  }, [])
+
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
   const isAdmin   = profile?.email === ADMIN_EMAIL
 
@@ -610,6 +624,11 @@ function CreatePermanentLinkModal({
 interface PortfolioRow {
   id: string; name: string; description: string | null
   city: string | null; state: string | null
+  latitude: number | null; longitude: number | null
+  access_type: string | null
+  tags: string[] | null
+  permit_required: boolean | null; permit_notes: string | null
+  best_time: string | null; parking_info: string | null
   is_secret: boolean; source_location_id: string | null
 }
 
@@ -625,6 +644,15 @@ function PortfolioEditModal({
   const [row,     setRow]     = useState<PortfolioRow | null>(null)
   const [name,    setName]    = useState('')
   const [desc,    setDesc]    = useState('')
+  const [city,    setCity]    = useState('')
+  const [state,   setState]   = useState('')
+  const [access,  setAccess]  = useState<'public'|'private'>('public')
+  const [tags,    setTags]    = useState<string[]>([])
+  const [tagInput,setTagInput]= useState('')
+  const [permitRequired, setPermitRequired] = useState(false)
+  const [permitNotes,    setPermitNotes]    = useState('')
+  const [bestTime,       setBestTime]       = useState('')
+  const [parkingInfo,    setParkingInfo]    = useState('')
   const [isSecret,setIsSecret]= useState(false)
   const [photos,  setPhotos]  = useState<PhotoRow[]>([])
   const [saving,  setSaving]  = useState(false)
@@ -637,7 +665,7 @@ function PortfolioEditModal({
     let cancelled = false
     async function load() {
       const [rowRes, photosRes] = await Promise.all([
-        supabase.from('portfolio_locations').select('id,name,description,city,state,is_secret,source_location_id').eq('id', portfolioId).single(),
+        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,source_location_id').eq('id', portfolioId).single(),
         supabase.from('location_photos').select('id,url,storage_path,caption').eq('portfolio_location_id', portfolioId).order('created_at', { ascending: true }),
       ])
       if (cancelled) return
@@ -645,6 +673,14 @@ function PortfolioEditModal({
         setRow(rowRes.data)
         setName(rowRes.data.name ?? '')
         setDesc(rowRes.data.description ?? '')
+        setCity(rowRes.data.city ?? '')
+        setState(rowRes.data.state ?? '')
+        setAccess((rowRes.data.access_type === 'private' ? 'private' : 'public'))
+        setTags(Array.isArray(rowRes.data.tags) ? rowRes.data.tags : [])
+        setPermitRequired(!!rowRes.data.permit_required)
+        setPermitNotes(rowRes.data.permit_notes ?? '')
+        setBestTime(rowRes.data.best_time ?? '')
+        setParkingInfo(rowRes.data.parking_info ?? '')
         setIsSecret(!!rowRes.data.is_secret)
       }
       if (photosRes.data) setPhotos(photosRes.data)
@@ -654,11 +690,27 @@ function PortfolioEditModal({
     return () => { cancelled = true }
   }, [portfolioId])
 
+  function addTag(t: string) {
+    const v = t.trim(); if (!v || tags.length >= 12 || tags.includes(v)) return
+    setTags(p => [...p, v]); setTagInput('')
+  }
+  function removeTag(t: string) { setTags(p => p.filter(x => x !== t)) }
+
   async function save() {
     if (!name.trim()) { setErr('Name is required.'); return }
     setSaving(true); setErr('')
     const { error } = await supabase.from('portfolio_locations').update({
-      name: name.trim(), description: desc.trim() || null, is_secret: isSecret,
+      name:            name.trim(),
+      description:     desc.trim() || null,
+      city:            city.trim() || null,
+      state:           state.trim() || null,
+      access_type:     access,
+      tags:            tags.length > 0 ? tags : null,
+      permit_required: permitRequired,
+      permit_notes:    permitNotes.trim() || null,
+      best_time:       bestTime.trim() || null,
+      parking_info:    parkingInfo.trim() || null,
+      is_secret:       isSecret,
     }).eq('id', portfolioId)
     setSaving(false)
     if (error) { setErr(error.message); return }
@@ -740,13 +792,75 @@ function PortfolioEditModal({
               </div>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Description</label>
-                <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="What's special about this spot?" />
+                <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} placeholder="What's special about this spot?" />
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>City</label>
+                  <input value={city} onChange={e => setCity(e.target.value)} style={inputStyle} placeholder="Kansas City" />
+                </div>
+                <div>
+                  <label style={labelStyle}>State</label>
+                  <input value={state} onChange={e => setState(e.target.value)} style={inputStyle} placeholder="MO" />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Access</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {(['public','private'] as const).map(opt => (
+                    <button key={opt} onClick={() => setAccess(opt)} style={{ flex: 1, padding: '8px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500, border: `1px solid ${access === opt ? 'var(--gold)' : 'var(--cream-dark)'}`, background: access === opt ? 'rgba(196,146,42,.08)' : 'white', color: access === opt ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {opt === 'public' ? '● Public' : '🔒 Private'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Tags <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({tags.length}/12)</span></label>
+                {tags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
+                    {tags.map(t => (
+                      <span key={t} onClick={() => removeTag(t)} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, background: 'var(--gold)', color: 'var(--ink)', cursor: 'pointer', fontWeight: 500 }}>{t} ✕</span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput) } }} placeholder="Add a tag (press Enter)" style={{ ...inputStyle, flex: 1 }} />
+                  <button onClick={() => addTag(tagInput)} style={{ padding: '9px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Add</button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>Best time</label>
+                  <input value={bestTime} onChange={e => setBestTime(e.target.value)} style={inputStyle} placeholder="Golden hour, sunrise…" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Parking info</label>
+                  <input value={parkingInfo} onChange={e => setParkingInfo(e.target.value)} style={inputStyle} placeholder="Free lot, street parking…" />
+                </div>
+              </div>
+
+              <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)', marginBottom: '1.25rem' }}>
+                <div onClick={() => setPermitRequired(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: permitRequired ? 10 : 0 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${permitRequired ? 'var(--rust)' : 'var(--sand)'}`, background: permitRequired ? 'var(--rust)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{permitRequired ? '✓' : ''}</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>🔒 Permit required</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Mark if this location requires a permit to shoot.</div>
+                  </div>
+                </div>
+                {permitRequired && (
+                  <textarea value={permitNotes} onChange={e => setPermitNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', marginTop: 4 }} placeholder="Details — fee, where to get it, contact, etc." />
+                )}
+              </div>
+
               <div onClick={() => setIsSecret(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer', background: isSecret ? 'rgba(124,92,191,.05)' : 'var(--cream)', border: `1px solid ${isSecret ? 'rgba(124,92,191,.3)' : 'var(--cream-dark)'}` }}>
                 <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${isSecret ? '#7c5cbf' : 'var(--sand)'}`, background: isSecret ? '#7c5cbf' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{isSecret ? '✓' : ''}</div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Hide from Explore when adding to public DB</div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Marks this as a private portfolio spot. Still shows on your share links.</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Mark as secret</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Private portfolio spot — still shows on your share links.</div>
                 </div>
               </div>
 
