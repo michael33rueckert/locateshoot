@@ -186,8 +186,9 @@ export default function ClientPickerPage() {
 
   function confirmChoice() {
     if (!chosenId) return
-    if (shareData?.is_permanent) setShowEmailPrompt(true)
-    else savePick(null, null, null)
+    // Ask every client for name + email so the photographer always has a
+    // reply-to address, regardless of whether the link is permanent.
+    setShowEmailPrompt(true)
   }
 
   function submitEmail() {
