@@ -42,6 +42,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'share link expired' }, { status: 410 })
   }
 
+  // If the request is coming in on a photographer's custom domain, require that
+  // domain's owner to match the share link's owner. Keeps one photographer's
+  // custom domain from submitting picks against another photographer's links.
+  const host = (request.headers.get('host') ?? '').toLowerCase().split(':')[0]
+  const apex = (process.env.NEXT_PUBLIC_APEX_DOMAIN ?? 'locateshoot.com').toLowerCase()
+  const isPrimary = !host || host === apex || host === `www.${apex}` || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.vercel.app')
+  if (!isPrimary) {
+    const { data: owner } = await admin.from('profiles').select('id').ilike('custom_domain', host).maybeSingle()
+    if (!owner || owner.id !== link.user_id) {
+      return NextResponse.json({ error: 'share link not found' }, { status: 404 })
+    }
+  }
+
   const { data: inserted, error: insErr } = await admin
     .from('client_picks')
     .insert({
