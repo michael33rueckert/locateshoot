@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Playfair_Display, DM_Sans } from 'next/font/google'
 import './globals.css'
 import 'leaflet/dist/leaflet.css'
+import MfaGate from '@/components/MfaGate'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -42,6 +43,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <MfaGate />
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {

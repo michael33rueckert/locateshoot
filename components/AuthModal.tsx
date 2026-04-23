@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-type Mode = 'login' | 'signup' | 'forgot'
+type Mode = 'login' | 'signup' | 'forgot' | 'mfa'
 
 interface Props {
   initialMode: 'login' | 'signup'
@@ -19,9 +19,45 @@ export default function AuthModal({ initialMode, onClose }: Props) {
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState('')
   const [success,   setSuccess]   = useState('')
+  const [mfaCode,     setMfaCode]     = useState('')
+  const [mfaFactorId, setMfaFactorId] = useState('')
 
   function switchMode(m: Mode) {
     setMode(m); setError(''); setSuccess('')
+  }
+
+  // After a successful password sign-in, check whether this account has an
+  // unverified MFA factor pending for this session (currentLevel=aal1, nextLevel=aal2).
+  // If so, swap the modal into MFA entry mode; otherwise complete sign-in.
+  async function finishLoginOrChallenge() {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (aal && aal.currentLevel === 'aal1' && aal.nextLevel === 'aal2') {
+      const { data: factors, error: fErr } = await supabase.auth.mfa.listFactors()
+      if (fErr) throw fErr
+      const totp = factors?.totp?.find(f => f.status === 'verified')
+      if (!totp) {
+        // Edge case: aal says there's a higher level available but no verified factor.
+        // Let the user through rather than locking them out.
+        onClose(); window.location.href = '/dashboard'; return
+      }
+      setMfaFactorId(totp.id)
+      setMode('mfa')
+      return
+    }
+    onClose(); window.location.href = '/dashboard'
+  }
+
+  async function submitMfa() {
+    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
+    if (cErr) throw cErr
+    const { error: vErr } = await supabase.auth.mfa.verify({
+      factorId: mfaFactorId,
+      challengeId: challenge.id,
+      code: mfaCode.trim(),
+    })
+    if (vErr) throw vErr
+    onClose()
+    window.location.href = '/dashboard'
   }
 
   async function handleSubmit() {
@@ -61,8 +97,12 @@ export default function AuthModal({ initialMode, onClose }: Props) {
           email: email.trim(), password,
         })
         if (error) throw error
-        onClose()
-        window.location.href = '/dashboard'
+        await finishLoginOrChallenge()
+        return
+      }
+
+      if (mode === 'mfa') {
+        await submitMfa()
         return
       }
     } catch (err: any) {
@@ -116,11 +156,13 @@ export default function AuthModal({ initialMode, onClose }: Props) {
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 700, color: '#f5f0e8', marginBottom: 6 }}>
             {mode === 'login'  ? 'Welcome back' :
              mode === 'signup' ? 'Create your account' :
+             mode === 'mfa'    ? 'Two-factor code' :
              'Reset your password'}
           </div>
           <div style={{ fontSize: 13, color: 'rgba(245,240,232,.45)', fontWeight: 300, marginBottom: '1.5rem', lineHeight: 1.5 }}>
             {mode === 'login'  ? 'Sign in to access your dashboard and share links.' :
              mode === 'signup' ? 'Join photographers discovering great locations.' :
+             mode === 'mfa'    ? 'Open your authenticator app and enter the 6-digit code for LocateShoot.' :
              "Enter your email and we'll send you a reset link."}
           </div>
         </div>
@@ -143,7 +185,7 @@ export default function AuthModal({ initialMode, onClose }: Props) {
           )}
 
           {/* Google OAuth */}
-          {mode !== 'forgot' && (
+          {mode !== 'forgot' && mode !== 'mfa' && (
             <>
               <button
                 onClick={handleGoogle}
@@ -180,20 +222,22 @@ export default function AuthModal({ initialMode, onClose }: Props) {
             </div>
           )}
 
-          {/* Email */}
-          <div style={{ marginBottom: 10 }}>
-            <input
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              type="email"
-              placeholder="Email address"
-              style={inp}
-              onKeyDown={e => { if (e.key === 'Enter' && mode === 'forgot') handleSubmit() }}
-            />
-          </div>
+          {/* Email (not in MFA step) */}
+          {mode !== 'mfa' && (
+            <div style={{ marginBottom: 10 }}>
+              <input
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                type="email"
+                placeholder="Email address"
+                style={inp}
+                onKeyDown={e => { if (e.key === 'Enter' && mode === 'forgot') handleSubmit() }}
+              />
+            </div>
+          )}
 
-          {/* Password (not for forgot) */}
-          {mode !== 'forgot' && (
+          {/* Password (not for forgot / mfa) */}
+          {mode !== 'forgot' && mode !== 'mfa' && (
             <div style={{ marginBottom: mode === 'login' ? 6 : '1.25rem' }}>
               <input
                 value={password}
@@ -202,6 +246,24 @@ export default function AuthModal({ initialMode, onClose }: Props) {
                 placeholder="Password"
                 style={inp}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+              />
+            </div>
+          )}
+
+          {/* 6-digit MFA code */}
+          {mode === 'mfa' && (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <input
+                value={mfaCode}
+                onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123 456"
+                maxLength={6}
+                autoFocus
+                style={{ ...inp, fontSize: 22, letterSpacing: 6, textAlign: 'center', fontFamily: 'var(--font-mono, Menlo, monospace)' }}
+                onKeyDown={e => { if (e.key === 'Enter' && mfaCode.length === 6) handleSubmit() }}
               />
             </div>
           )}
@@ -233,12 +295,13 @@ export default function AuthModal({ initialMode, onClose }: Props) {
           {/* Submit */}
           <button
             onClick={handleSubmit}
-            disabled={loading || (mode === 'signup' && !agreed)}
-            style={{ width: '100%', padding: '12px', borderRadius: 8, background: '#c4922a', color: '#1a1612', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: loading || (mode === 'signup' && !agreed) ? 'default' : 'pointer', opacity: loading || (mode === 'signup' && !agreed) ? 0.6 : 1, marginBottom: '1rem' }}
+            disabled={loading || (mode === 'signup' && !agreed) || (mode === 'mfa' && mfaCode.length !== 6)}
+            style={{ width: '100%', padding: '12px', borderRadius: 8, background: '#c4922a', color: '#1a1612', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: loading || (mode === 'signup' && !agreed) || (mode === 'mfa' && mfaCode.length !== 6) ? 'default' : 'pointer', opacity: loading || (mode === 'signup' && !agreed) || (mode === 'mfa' && mfaCode.length !== 6) ? 0.6 : 1, marginBottom: '1rem' }}
           >
             {loading ? 'Please wait…' :
              mode === 'login'  ? 'Sign In' :
              mode === 'signup' ? 'Create Account' :
+             mode === 'mfa'    ? 'Verify' :
              'Send Reset Link'}
           </button>
 
@@ -256,6 +319,13 @@ export default function AuthModal({ initialMode, onClose }: Props) {
                   Sign in
                 </button>
               </>
+            ) : mode === 'mfa' ? (
+              <button
+                onClick={async () => { await supabase.auth.signOut(); switchMode('login'); setPassword(''); setMfaCode('') }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,.55)', fontFamily: 'inherit', fontSize: 13, padding: 0 }}
+              >
+                ← Use a different account
+              </button>
             ) : (
               <>Remember your password?{' '}
                 <button onClick={() => switchMode('login')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4922a', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, padding: 0 }}>
