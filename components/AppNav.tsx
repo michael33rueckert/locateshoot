@@ -105,6 +105,7 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
   const LINKS = [
     { href: '/dashboard', label: 'Dashboard' },
+    { href: '/portfolio', label: 'Portfolio' },
     { href: '/explore',   label: 'Explore map' },
     { href: '/share',     label: 'New share' },
     { href: '/profile',   label: 'Profile' },

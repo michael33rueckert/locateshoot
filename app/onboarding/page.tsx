@@ -134,7 +134,7 @@ export default function OnboardingPage() {
         if (fresh.length > 0) await supabase.from('portfolio_locations').insert(fresh as any)
       }
       await markOnboarded()
-      router.push('/dashboard')
+      router.push('/onboarding/how-it-works')
     } finally { setSaving(false) }
   }
 
@@ -143,7 +143,7 @@ export default function OnboardingPage() {
     setSaving(true)
     try {
       await markOnboarded()
-      router.push('/dashboard')
+      router.push('/onboarding/how-it-works')
     } finally { setSaving(false) }
   }
 
