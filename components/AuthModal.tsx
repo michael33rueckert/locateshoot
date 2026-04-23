@@ -106,7 +106,15 @@ export default function AuthModal({ initialMode, onClose }: Props) {
         return
       }
     } catch (err: any) {
-      setError(err.message ?? 'Something went wrong — please try again.')
+      const raw = String(err?.message ?? '')
+      // Supabase's built-in confirmation-email sender hits a tight rate limit
+      // on the free tier. Give the user a clearer next step than the raw
+      // "Error sending confirmation email" string.
+      if (/confirmation email|rate limit|email rate/i.test(raw)) {
+        setError('We couldn\'t send the confirmation email right now. Please try again in a few minutes.')
+      } else {
+        setError(raw || 'Something went wrong — please try again.')
+      }
     } finally {
       setLoading(false)
     }
