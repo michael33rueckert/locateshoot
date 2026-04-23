@@ -2,6 +2,21 @@
 
 import { useEffect, useRef } from 'react'
 
+// Leaflet throws "Invalid LatLng object: (NaN, NaN)" when flyTo/setView run while the
+// map container has zero width/height — which happens on mobile because the map column
+// is hidden until the user taps "View Map". These guards skip those calls until the
+// container is real and the coordinates are actually numbers.
+function mapHasSize(map: any): boolean {
+  if (!map) return false
+  try {
+    const size = map.getSize()
+    return size.x > 0 && size.y > 0
+  } catch { return false }
+}
+function isFiniteLatLng(lat: any, lng: any): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng)
+}
+
 export interface ExploreLocation {
   id: number
   name: string
@@ -73,6 +88,8 @@ export default function ExploreMap({
   // ── Fly to user location when it arrives ──────────────────────────────────
   useEffect(() => {
     if (!mapRef.current || !userLocation) return
+    if (!mapHasSize(mapRef.current)) return
+    if (!isFiniteLatLng(userLocation.lat, userLocation.lng)) return
     mapRef.current.flyTo([userLocation.lat, userLocation.lng], 13, { duration: 1.2 })
   }, [userLocation])
 
@@ -133,6 +150,7 @@ export default function ExploreMap({
       markersRef.current = {}
 
       locations.forEach(loc => {
+        if (!isFiniteLatLng(loc.lat, loc.lng)) return
         const isActive = activeId === loc.id
         const color    = loc.access === 'private' ? '#b54b2a' : '#4a6741'
         const size     = isActive ? 22 : 16
@@ -169,8 +187,9 @@ export default function ExploreMap({
   // ── Fly to active location when sidebar card is clicked ───────────────────
   useEffect(() => {
     if (!mapRef.current || !activeId) return
+    if (!mapHasSize(mapRef.current)) return
     const loc = locations.find(l => l.id === activeId)
-    if (!loc) return
+    if (!loc || !isFiniteLatLng(loc.lat, loc.lng)) return
     mapRef.current.flyTo([loc.lat, loc.lng], 14, { duration: 0.8 })
   }, [activeId, locations])
 

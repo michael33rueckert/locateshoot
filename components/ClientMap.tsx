@@ -2,6 +2,18 @@
 
 import { useEffect, useRef } from 'react'
 
+// Leaflet throws "Invalid LatLng object: (NaN, NaN)" when flyTo/setView/fitBounds
+// run while the map container has zero width/height. On mobile the map column is
+// hidden until the user taps "View Map", so these guards skip the calls in that
+// state and on any row missing real coordinates.
+function mapHasSize(map: any): boolean {
+  if (!map) return false
+  try { const s = map.getSize(); return s.x > 0 && s.y > 0 } catch { return false }
+}
+function isFiniteLatLng(lat: any, lng: any): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng)
+}
+
 export interface ClientLocation {
   id: number
   name: string
@@ -60,8 +72,9 @@ export default function ClientMap({
       mapRef.current = map
 
       // Fit map to all locations on load
-      if (locations.length > 0) {
-        const bounds = L.latLngBounds(locations.map(l => [l.lat, l.lng]))
+      const valid = locations.filter(l => isFiniteLatLng(l.lat, l.lng))
+      if (valid.length > 0 && mapHasSize(map)) {
+        const bounds = L.latLngBounds(valid.map(l => [l.lat, l.lng] as [number, number]))
         map.fitBounds(bounds, { padding: [48, 48] })
       }
     })
@@ -86,6 +99,7 @@ export default function ClientMap({
       markersRef.current = {}
 
       locations.forEach((loc, i) => {
+        if (!isFiniteLatLng(loc.lat, loc.lng)) return
         const isActive = activeId === loc.id
         const isChosen = chosenId === loc.id
         const isRec    = loc.type === 'recommended'
@@ -135,8 +149,9 @@ export default function ClientMap({
   // ── Fly to active location ─────────────────────────────────────────────────
   useEffect(() => {
     if (!mapRef.current || !activeId) return
+    if (!mapHasSize(mapRef.current)) return
     const loc = locations.find(l => l.id === activeId)
-    if (!loc) return
+    if (!loc || !isFiniteLatLng(loc.lat, loc.lng)) return
     mapRef.current.flyTo([loc.lat, loc.lng], 14, { duration: 0.8 })
   }, [activeId, locations])
 
