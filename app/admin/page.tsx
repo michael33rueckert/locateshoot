@@ -77,6 +77,7 @@ export default function AdminPage() {
 
   const [scanRunning,     setScanRunning]     = useState(false)
   const [scanResult,      setScanResult]      = useState<ScanResult | null>(null)
+  const [scanProgress,    setScanProgress]    = useState<{ done: number; total: number; current: string } | null>(null)
   const [scanCities,      setScanCities]      = useState<string[]>([])
   const [scanCategories,  setScanCategories]  = useState<string[]>(ALL_CATEGORIES.map(c => c.name))
   const [customCityInput, setCustomCityInput] = useState('')
@@ -118,17 +119,44 @@ export default function AdminPage() {
   async function runScanner() {
     if (!userId || scanCities.length === 0 || scanCategories.length === 0) return
     setScanRunning(true); setScanResult(null)
-    try {
-      const res = await fetch('/api/scan-locations', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cities: scanCities, categories: scanCategories, userId }),
-      })
-      const data: ScanResult = await res.json()
-      setScanResult(data)
-      if (data.inserted > 0) { setLocationCount(prev => prev + data.inserted); setToast(`✓ Added ${data.inserted} locations`) }
-      else setToast('Scan complete — no new locations')
-    } catch (e) { setToast('⚠ Scanner error'); console.error(e) }
-    finally { setScanRunning(false) }
+    // Break the scan into one (city × category) call at a time — keeps each
+    // request under Vercel Hobby's 60s cap and lets us show progress.
+    const pairs: { city: string; category: string }[] = []
+    for (const city of scanCities) for (const category of scanCategories) pairs.push({ city, category })
+    setScanProgress({ done: 0, total: pairs.length, current: '' })
+
+    const merged: ScanResult = { success: true, inserted: 0, errors: 0, scans: 0, locations: [], errorList: [] }
+    let failedCount = 0
+    for (let i = 0; i < pairs.length; i++) {
+      const { city, category } = pairs[i]
+      setScanProgress({ done: i, total: pairs.length, current: `${category} in ${city.split(',')[0]}` })
+      try {
+        const res = await fetch('/api/scan-locations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cities: [city], categories: [category], userId }),
+        })
+        if (!res.ok) {
+          failedCount++
+          merged.errorList.push(`${category} / ${city.split(',')[0]} — HTTP ${res.status}`)
+          continue
+        }
+        const data: ScanResult = await res.json()
+        merged.inserted  += data.inserted ?? 0
+        merged.errors    += data.errors   ?? 0
+        merged.scans     += data.scans    ?? 0
+        merged.locations.push(...(data.locations ?? []))
+        merged.errorList.push(...(data.errorList ?? []))
+      } catch (e: any) {
+        failedCount++
+        merged.errorList.push(`${category} / ${city.split(',')[0]} — ${e?.message ?? 'request failed'}`)
+      }
+      setScanResult({ ...merged })
+    }
+    setScanProgress(null)
+    setScanRunning(false)
+    if (merged.inserted > 0) { setLocationCount(prev => prev + merged.inserted); setToast(`✓ Added ${merged.inserted} locations${failedCount > 0 ? ` · ${failedCount} chunk(s) failed` : ''}`) }
+    else if (failedCount > 0) setToast(`⚠ Scan had ${failedCount} failed chunk(s) — see results below`)
+    else setToast('Scan complete — no new locations')
   }
 
   async function setUserPlan(userId: string, plan: 'pro' | 'free') {
@@ -379,11 +407,19 @@ export default function AdminPage() {
             )}
 
             <button onClick={runScanner} disabled={scanRunning || scanCities.length === 0 || scanCategories.length === 0} style={{ width: '100%', padding: '13px', borderRadius: 4, background: scanRunning ? 'rgba(196,146,42,.3)' : 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: scanRunning || scanCities.length === 0 || scanCategories.length === 0 ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: scanCities.length === 0 || scanCategories.length === 0 ? 0.4 : 1 }}>
-              {scanRunning ? (<><div style={{ width: 16, height: 16, border: '2px solid rgba(26,22,18,.3)', borderTop: '2px solid var(--ink)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Scanning…</>) :
+              {scanRunning ? (<><div style={{ width: 16, height: 16, border: '2px solid rgba(26,22,18,.3)', borderTop: '2px solid var(--ink)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />{scanProgress ? `Scanning ${scanProgress.done + 1} / ${scanProgress.total}…` : 'Scanning…'}</>) :
                 scanCities.length === 0 ? '← Add a city' :
                 scanCategories.length === 0 ? '← Select a category' :
                 `🤖 Run — ${scanCities.length} × ${scanCategories.length}`}
             </button>
+            {scanRunning && scanProgress && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginBottom: 6 }}>
+                  <div style={{ height: '100%', width: `${Math.round((scanProgress.done / Math.max(1, scanProgress.total)) * 100)}%`, background: 'var(--gold)', transition: 'width .3s ease' }} />
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)' }}>Now: {scanProgress.current}</div>
+              </div>
+            )}
 
             {scanResult && (
               <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,.05)', borderRadius: 8, border: '1px solid rgba(255,255,255,.1)' }}>

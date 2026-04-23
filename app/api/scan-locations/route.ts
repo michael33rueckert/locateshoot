@@ -167,6 +167,10 @@ async function scanWithRetry(city: string, categoryPrompt: string, maxRetries = 
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 
+// Vercel Hobby caps serverless functions at 60s. One city × one category
+// comfortably fits; multi-category scans are broken up client-side.
+export const maxDuration = 60
+
 export async function POST(request: Request) {
   try {
     const supabase    = getServiceClient()
