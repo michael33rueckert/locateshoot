@@ -168,7 +168,7 @@ export default function HomePage() {
           <li><a href="#how"     onClick={e => { e.preventDefault(); scrollTo('how')     }}>How it works</a></li>
           <li><a href="#pricing" onClick={e => { e.preventDefault(); scrollTo('pricing') }}>Pricing</a></li>
         </ul>
-        <div className="nav-cta" style={{ marginLeft: 'auto' }}>
+        <div className="nav-cta">
           {authLoading ? <div style={{ width: 140 }} /> : user ? (
             <>
               <button className="btn btn-ghost" onClick={handleSignOut}>Sign Out</button>

@@ -51,6 +51,7 @@ export default function ClientMap({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<any>(null)
   const markersRef   = useRef<Record<number, any>>({})
+  const didInitialFitRef = useRef(false)
 
   // ── Init map ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -95,6 +96,25 @@ export default function ClientMap({
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fit bounds once the locations arrive ──────────────────────────────────
+  // The init effect runs before the /api/pick-data fetch resolves, so the
+  // initial fitBounds has nothing to fit and the map stays zoomed on the
+  // fallback center (markers exist but scroll off-screen). This separate
+  // effect catches the first non-empty locations update and zooms to show
+  // every pin, so clients see all the dots immediately.
+  useEffect(() => {
+    if (!mapRef.current || didInitialFitRef.current) return
+    const valid = locations.filter(l => isFiniteLatLng(l.lat, l.lng))
+    if (valid.length === 0) return
+    import('leaflet').then(L => {
+      const map = mapRef.current
+      if (!map || !mapHasSize(map)) return
+      const bounds = L.latLngBounds(valid.map(l => [l.lat, l.lng] as [number, number]))
+      map.fitBounds(bounds, { padding: [48, 48] })
+      didInitialFitRef.current = true
+    })
+  }, [locations])
 
   // ── Redraw markers ─────────────────────────────────────────────────────────
   useEffect(() => {
