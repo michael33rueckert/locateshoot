@@ -67,7 +67,7 @@ export function middleware(request: NextRequest) {
   const isClientPickPath =
        pathname.startsWith('/pick/')
     || pathname.startsWith('/api/pick-data/')
-    || pathname === '/api/notify-pick'
+    || pathname === '/api/submit-pick'
 
   if (isPublicPath || isStaticFile || isPwaPath || isClientPickPath) {
     return NextResponse.next()

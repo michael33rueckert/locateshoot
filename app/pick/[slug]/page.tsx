@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import ImageLightbox from '@/components/ImageLightbox'
 import { usePlacePhotos } from '@/hooks/usePlacePhotos'
 import type { ClientLocation } from '@/components/ClientMap'
@@ -31,11 +30,14 @@ export default function ClientPickerPage() {
   const [detailLoc,        setDetailLoc]        = useState<FullLocation | null>(null)
   const [confirmed,        setConfirmed]        = useState(false)
   const [showEmailPrompt,  setShowEmailPrompt]  = useState(false)
+  const [clientFirstName,  setClientFirstName]  = useState('')
+  const [clientLastName,   setClientLastName]   = useState('')
   const [clientEmail,      setClientEmail]      = useState('')
   const [emailError,       setEmailError]       = useState('')
   const [submitting,       setSubmitting]       = useState(false)
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
-  const emailRef = useRef<HTMLInputElement>(null)
+  const emailRef     = useRef<HTMLInputElement>(null)
+  const firstNameRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (mobileMapVisible) setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
@@ -102,7 +104,7 @@ export default function ClientPickerPage() {
   }, [slug])
 
   useEffect(() => {
-    if (showEmailPrompt) setTimeout(() => emailRef.current?.focus(), 100)
+    if (showEmailPrompt) setTimeout(() => firstNameRef.current?.focus(), 100)
   }, [showEmailPrompt])
 
   // Detect whether the photographer's logo is visually light or dark so we
@@ -156,23 +158,27 @@ export default function ClientPickerPage() {
     if (loc) { setDetailLoc(loc); setActiveId(id); setMobileMapVisible(false) }
   }, [locations])
 
-  async function savePick(email: string | null) {
+  async function savePick(first: string | null, last: string | null, email: string | null) {
     if (!shareData || !chosenId) return
     setSubmitting(true)
     const chosen = locations.find(l => String(l.id) === String(chosenId))
     try {
-      const { data: inserted } = await supabase.from('client_picks').insert({
-        share_link_id: shareData.id,
-        client_email:  email ?? null,
-        location_name: chosen?.name ?? null,
-      }).select('id').single()
-      if (inserted?.id) {
-        // Fire-and-forget — don't block the success UI on email delivery.
-        fetch('/api/notify-pick', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pickId: inserted.id }),
-        }).catch(() => {})
+      // Server-side insert + photographer email, done in one call. RLS blocks
+      // anonymous client_picks writes, so we can't insert from the browser.
+      const res = await fetch('/api/submit-pick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shareLinkId:  shareData.id,
+          firstName:    first ?? '',
+          lastName:     last  ?? '',
+          email:        email ?? '',
+          locationName: chosen?.name ?? '',
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        console.error('submit-pick failed', j)
       }
     } catch (e) { console.error(e) }
     setSubmitting(false); setShowEmailPrompt(false); setConfirmed(true)
@@ -181,13 +187,16 @@ export default function ClientPickerPage() {
   function confirmChoice() {
     if (!chosenId) return
     if (shareData?.is_permanent) setShowEmailPrompt(true)
-    else savePick(null)
+    else savePick(null, null, null)
   }
 
   function submitEmail() {
+    const first = clientFirstName.trim()
+    const last  = clientLastName.trim()
     const email = clientEmail.trim()
+    if (!first || !last) { setEmailError('Please enter your first and last name.'); return }
     if (!email || !email.includes('@')) { setEmailError('Please enter a valid email.'); return }
-    setEmailError(''); savePick(email)
+    setEmailError(''); savePick(first, last, email)
   }
 
   const chosenLoc = locations.find(l => String(l.id) === String(chosenId)) ?? null
@@ -449,22 +458,42 @@ export default function ClientPickerPage() {
       {showEmailPrompt && (
         <>
           <div onClick={() => setShowEmailPrompt(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 600 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 420, maxWidth: '92vw', padding: '2rem', zIndex: 700, textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>📍</div>
-            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>Almost done!</div>
-            <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: '1.5rem' }}>
-              Enter your email so <strong style={{ fontWeight: 600 }}>{shareData?.photographer_name ?? 'your photographer'}</strong> can confirm the location.
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 440, maxWidth: '92vw', padding: '2rem', zIndex: 700 }}>
+            <div style={{ fontSize: 36, marginBottom: 12, textAlign: 'center' }}>📍</div>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 8, textAlign: 'center' }}>Almost done!</div>
+            <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: '1.25rem', textAlign: 'center' }}>
+              Share your details so <strong style={{ fontWeight: 600 }}>{shareData?.photographer_name ?? 'your photographer'}</strong> can confirm the location.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <input
+                ref={firstNameRef}
+                value={clientFirstName}
+                onChange={e => { setClientFirstName(e.target.value); setEmailError('') }}
+                onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
+                placeholder="First name"
+                autoComplete="given-name"
+                style={{ padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+              />
+              <input
+                value={clientLastName}
+                onChange={e => { setClientLastName(e.target.value); setEmailError('') }}
+                onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
+                placeholder="Last name"
+                autoComplete="family-name"
+                style={{ padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+              />
             </div>
             <input ref={emailRef} type="email" value={clientEmail} onChange={e => { setClientEmail(e.target.value); setEmailError('') }}
               onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
               placeholder="your@email.com"
-              style={{ width: '100%', padding: '12px 14px', border: `1.5px solid ${emailError ? 'var(--rust)' : 'var(--cream-dark)'}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none', marginBottom: emailError ? 6 : 16, textAlign: 'center' }} />
-            {emailError && <div style={{ fontSize: 12, color: 'var(--rust)', marginBottom: 12 }}>{emailError}</div>}
+              autoComplete="email"
+              style={{ width: '100%', padding: '12px 14px', border: `1.5px solid ${emailError ? 'var(--rust)' : 'var(--cream-dark)'}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none', marginBottom: emailError ? 6 : 16 }} />
+            {emailError && <div style={{ fontSize: 12, color: 'var(--rust)', marginBottom: 12, textAlign: 'center' }}>{emailError}</div>}
             <button onClick={submitEmail} disabled={submitting}
               style={{ width: '100%', padding: '13px', borderRadius: 8, background: isGoldAccent ? 'var(--gold)' : accentColor, color: isGoldAccent ? 'var(--ink)' : 'white', border: 'none', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginBottom: 10, opacity: submitting ? 0.7 : 1 }}>
               {submitting ? 'Sending…' : 'Confirm my choice →'}
             </button>
-            <button onClick={() => setShowEmailPrompt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--ink-soft)', fontFamily: 'inherit' }}>Go back</button>
+            <button onClick={() => setShowEmailPrompt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--ink-soft)', fontFamily: 'inherit', display: 'block', margin: '0 auto' }}>Go back</button>
           </div>
         </>
       )}
