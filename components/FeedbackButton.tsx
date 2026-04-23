@@ -30,8 +30,7 @@ export default function FeedbackButton() {
           pageUrl: typeof window !== 'undefined' ? window.location.href : undefined,
         }),
       })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) { setErr(j.error ?? 'Could not send — please try again.'); return }
+      if (!res.ok) { setErr('Could not send right now — please try again in a moment.'); return }
       setSent(true); setMsg('')
     } catch { setErr('Network error — please try again.') }
     finally { setSending(false) }
@@ -95,7 +94,7 @@ export default function FeedbackButton() {
               💬 Send feedback
             </div>
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
-              Bug reports, feature ideas, or anything else — it all goes straight to Michael.
+              Bug reports, feature ideas, or anything else — our team reads every message and will follow up if needed.
             </div>
 
             {sent ? (

@@ -113,8 +113,7 @@ function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; o
         },
         body: JSON.stringify({ locationName: locName, locationId: String(locId ?? ''), message: msg.trim() }),
       })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) { setErr(j.error ?? 'Could not send — please try again.'); return }
+      if (!res.ok) { setErr('Could not send right now — please try again in a moment.'); return }
       setSent(true)
     } catch { setErr('Network error — please try again.') }
     finally { setSending(false) }
