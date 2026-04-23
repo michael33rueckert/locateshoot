@@ -34,8 +34,18 @@ function useCommunityPhotos(locationId: any, currentUserId: string|null) {
   useEffect(() => {
     if (!locationId) return
     setLoading(true)
-    supabase.from('location_photos').select('id,url,is_private,caption,photographer_name,created_at,user_id').eq('location_id', locationId).order('created_at',{ascending:false})
-      .then(({ data }) => { setPhotos((data??[]).filter((p:any)=>!p.is_private||p.user_id===currentUserId)); setLoading(false) })
+    supabase.from('location_photos').select('id,url,is_private,caption,photographer_name,created_at,user_id,storage_path').eq('location_id', locationId).order('created_at',{ascending:false})
+      .then(({ data }) => {
+        const filtered = (data??[]).filter((p:any) => {
+          // Hide seed photos (Wikipedia / other external sources) from the Photographer tab —
+          // they have storage_path like "external:wikipedia". Community uploads live in Storage
+          // with paths like "{userId}/{locationId}/{timestamp}.jpg".
+          if (typeof p.storage_path === 'string' && p.storage_path.startsWith('external:')) return false
+          if (p.is_private && p.user_id !== currentUserId) return false
+          return true
+        })
+        setPhotos(filtered); setLoading(false)
+      })
   }, [locationId, currentUserId])
   return { photos, loading }
 }
@@ -534,8 +544,21 @@ export default function ExplorePage() {
               <div key={String(loc.id)}
                 onClick={()=>{ setDetailLoc(loc); setActiveId(loc.id) }}
                 style={{display:'flex',gap:10,padding:'10px 1.25rem',borderBottom:'1px solid var(--cream-dark)',cursor:'pointer',background:isActive?'rgba(196,146,42,.06)':'white',borderLeft:`3px solid ${isActive?'var(--gold)':'transparent'}`,transition:'background .12s'}}>
-                <div className={loc.bg} onClick={thumb ? e => { e.stopPropagation(); setLightboxSrc(thumb) } : undefined} style={{width:56,height:56,borderRadius:8,flexShrink:0,position:'relative',overflow:'hidden',cursor:thumb?'zoom-in':'pointer'}}>
-                  {thumb&&<img src={thumb} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>}
+                <div
+                  className={thumb ? loc.bg : undefined}
+                  onClick={thumb ? e => { e.stopPropagation(); setLightboxSrc(thumb) } : undefined}
+                  style={{
+                    width:56, height:56, borderRadius:8, flexShrink:0,
+                    position:'relative', overflow:'hidden',
+                    cursor: thumb ? 'zoom-in' : 'pointer',
+                    background: thumb ? undefined : 'var(--cream-dark)',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                  }}
+                >
+                  {thumb
+                    ? <img src={thumb} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
+                    : <span style={{fontSize:22,color:'var(--ink-soft)',opacity:.45}}>📍</span>
+                  }
                   {loc.rating!=='—'&&<div style={{position:'absolute',bottom:3,right:3,background:'rgba(26,22,18,.75)',borderRadius:4,padding:'1px 5px',fontSize:10,fontWeight:600,color:'var(--gold)',zIndex:1}}>★{loc.rating}</div>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
