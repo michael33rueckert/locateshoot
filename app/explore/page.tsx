@@ -98,11 +98,30 @@ function PhotoUploadPanel({ locationId, user, onUpload }: { locationId:any; user
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 
-function ReportModal({ locName, onClose }: { locName:string; onClose:()=>void }) {
-  const [msg,setMsg]=useState('');const [sent,setSent]=useState(false)
+function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; onClose:()=>void }) {
+  const [msg,setMsg]=useState('');const [sent,setSent]=useState(false);const [sending,setSending]=useState(false);const [err,setErr]=useState('')
+  async function submit() {
+    if (!msg.trim()) return
+    setSending(true); setErr('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/report-correction', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ locationName: locName, locationId: String(locId ?? ''), message: msg.trim() }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { setErr(j.error ?? 'Could not send — please try again.'); return }
+      setSent(true)
+    } catch { setErr('Network error — please try again.') }
+    finally { setSending(false) }
+  }
   return(<><div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,22,18,.5)',zIndex:600}}/><div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:12,width:420,maxWidth:'92vw',padding:'1.5rem',zIndex:700,boxShadow:'0 20px 60px rgba(0,0,0,.25)'}}>
-    {sent?<div style={{textAlign:'center',padding:'1rem 0'}}><div style={{fontSize:36,marginBottom:10}}>✓</div><div style={{fontSize:16,fontWeight:500,color:'var(--ink)',marginBottom:6}}>Thanks!</div><button onClick={onClose} style={{padding:'8px 20px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>Close</button></div>
-    :<><div style={{fontSize:16,fontWeight:500,color:'var(--ink)',marginBottom:4}}>Report a correction</div><div style={{fontSize:13,color:'var(--ink-soft)',marginBottom:'1rem'}}>{locName}</div><textarea value={msg} onChange={e=>setMsg(e.target.value)} rows={4} placeholder="Describe the correction…" style={{width:'100%',padding:'9px 12px',border:'1px solid var(--cream-dark)',borderRadius:4,fontFamily:'inherit',fontSize:13,outline:'none',resize:'vertical',marginBottom:10}}/><div style={{display:'flex',gap:8}}><button onClick={()=>setSent(true)} disabled={!msg.trim()} style={{flex:1,padding:'9px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',border:'none',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit',opacity:msg.trim()?1:.4}}>Send</button><button onClick={onClose} style={{padding:'9px 16px',borderRadius:4,background:'transparent',color:'var(--ink-soft)',border:'1px solid var(--sand)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button></div></>}
+    {sent?<div style={{textAlign:'center',padding:'1rem 0'}}><div style={{fontSize:36,marginBottom:10}}>✓</div><div style={{fontSize:16,fontWeight:500,color:'var(--ink)',marginBottom:6}}>Thanks — sent.</div><button onClick={onClose} style={{padding:'8px 20px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>Close</button></div>
+    :<><div style={{fontSize:16,fontWeight:500,color:'var(--ink)',marginBottom:4}}>Report a correction</div><div style={{fontSize:13,color:'var(--ink-soft)',marginBottom:'1rem'}}>{locName}</div><textarea value={msg} onChange={e=>setMsg(e.target.value)} rows={4} placeholder="Describe the correction…" style={{width:'100%',padding:'9px 12px',border:'1px solid var(--cream-dark)',borderRadius:4,fontFamily:'inherit',fontSize:13,outline:'none',resize:'vertical',marginBottom:10}}/>{err&&<div style={{fontSize:12,color:'var(--rust)',marginBottom:8}}>{err}</div>}<div style={{display:'flex',gap:8}}><button onClick={submit} disabled={!msg.trim()||sending} style={{flex:1,padding:'9px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',border:'none',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit',opacity:msg.trim()&&!sending?1:.4}}>{sending?'Sending…':'Send'}</button><button onClick={onClose} style={{padding:'9px 16px',borderRadius:4,background:'transparent',color:'var(--ink-soft)',border:'1px solid var(--sand)',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button></div></>}
   </div></>)
 }
 
@@ -237,7 +256,7 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
           <div style={{textAlign:'center'}}><button onClick={()=>setShowReport(true)} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'var(--ink-soft)',fontFamily:'inherit',textDecoration:'underline',padding:0}}>Report a correction</button></div>
         </div>
       </div>
-      {showReport&&<ReportModal locName={loc.name} onClose={()=>setShowReport(false)}/>}
+      {showReport&&<ReportModal locName={loc.name} locId={loc.id} onClose={()=>setShowReport(false)}/>}
     </>
   )
 }

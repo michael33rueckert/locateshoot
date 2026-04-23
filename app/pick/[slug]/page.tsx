@@ -160,11 +160,19 @@ export default function ClientPickerPage() {
     setSubmitting(true)
     const chosen = locations.find(l => String(l.id) === String(chosenId))
     try {
-      await supabase.from('client_picks').insert({
+      const { data: inserted } = await supabase.from('client_picks').insert({
         share_link_id: shareData.id,
         client_email:  email ?? null,
         location_name: chosen?.name ?? null,
-      })
+      }).select('id').single()
+      if (inserted?.id) {
+        // Fire-and-forget — don't block the success UI on email delivery.
+        fetch('/api/notify-pick', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pickId: inserted.id }),
+        }).catch(() => {})
+      }
     } catch (e) { console.error(e) }
     setSubmitting(false); setShowEmailPrompt(false); setConfirmed(true)
   }

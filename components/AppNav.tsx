@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ADMIN_EMAIL } from '@/lib/admin'
+import NotificationBell from '@/components/NotificationBell'
 
 /**
  * Consistent top-bar nav used on every internal page. Logo always on the left,
@@ -139,6 +140,7 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {rightExtra}
+          {signedIn && <NotificationBell />}
           {canInstall && (
             <button
               className="nav-links"

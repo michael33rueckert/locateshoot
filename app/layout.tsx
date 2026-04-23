@@ -4,6 +4,7 @@ import './globals.css'
 import 'leaflet/dist/leaflet.css'
 import MfaGate from '@/components/MfaGate'
 import InstallPrompt from '@/components/InstallPrompt'
+import FeedbackButton from '@/components/FeedbackButton'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -46,6 +47,7 @@ export default function RootLayout({
         {children}
         <MfaGate />
         <InstallPrompt />
+        <FeedbackButton />
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
