@@ -202,20 +202,6 @@ export default function HomePage() {
               </>
             )}
           </div>
-          <div className="hero-stats">
-            <div>
-              <div className="hero-stat-num">1</div>
-              <div className="hero-stat-label">Reusable link per photographer</div>
-            </div>
-            <div>
-              <div className="hero-stat-num">30s</div>
-              <div className="hero-stat-label">Client picks a location</div>
-            </div>
-            <div>
-              <div className="hero-stat-num">Free</div>
-              <div className="hero-stat-label">To get started</div>
-            </div>
-          </div>
         </div>
       </section>
 
