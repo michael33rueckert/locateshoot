@@ -13,6 +13,7 @@ interface PublicLocation {
   quality_score: number | null; rating: number | null
   description: string | null; permit_required: boolean | null; permit_notes: string | null
   best_time: string | null; parking_info: string | null
+  photo_url?: string | null
 }
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
@@ -68,7 +69,23 @@ export default function OnboardingPage() {
         .map(r => ({ ...r, d: calcDist(lat, lng, r.latitude, r.longitude) }))
         .filter(r => r.d <= RADIUS_MI)
         .sort((a, b) => (b.quality_score ?? 0) - (a.quality_score ?? 0) || a.d - b.d)
-      setLocations(rows as any)
+
+      // Fetch one representative photo per location for the tile previews
+      const ids = rows.map(r => r.id)
+      const photoMap: Record<string, string> = {}
+      if (ids.length > 0) {
+        const { data: photos } = await supabase
+          .from('location_photos')
+          .select('location_id,url,created_at')
+          .in('location_id', ids)
+          .eq('is_private', false)
+          .order('created_at', { ascending: true })
+        ;(photos ?? []).forEach((p: any) => {
+          if (p.location_id && p.url && !photoMap[p.location_id]) photoMap[p.location_id] = p.url
+        })
+      }
+
+      setLocations(rows.map(r => ({ ...r, photo_url: photoMap[r.id] ?? null })) as any)
       // Pre-select the top 12 so it's one click to get rolling
       setSelected(new Set(rows.slice(0, 12).map(r => r.id)))
     } finally { setLoading(false) }
@@ -210,14 +227,19 @@ export default function OnboardingPage() {
             )}
 
             {!loading && locations.length > 0 && (
+              <>
+              <div style={{ padding: '10px 14px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: 'var(--ink)', lineHeight: 1.55 }}>
+                💡 <strong style={{ fontWeight: 600 }}>Next step — add your own photos.</strong> The preview images below are Wikipedia shots so you can see what the location looks like. After you add locations to your portfolio, upload <em>your</em> professional photos — that's what clients will see on your share links.
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 10 }}>
                 {locations.map((l, i) => {
                   const sel = selected.has(l.id)
                   const cityLine = [l.city, l.state].filter(Boolean).join(', ')
                   return (
                     <div key={l.id} onClick={() => toggle(l.id)} style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${sel ? 'var(--gold)' : 'var(--cream-dark)'}`, background: sel ? 'rgba(196,146,42,.04)' : 'white', cursor: 'pointer', transition: 'all .15s', position: 'relative' }}>
-                      <div className={BG_CYCLE[i % BG_CYCLE.length]} style={{ height: 80, position: 'relative' }}>
-                        <div style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 4, background: sel ? 'var(--gold)' : 'rgba(255,255,255,.9)', border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--cream-dark)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{sel ? '✓' : ''}</div>
+                      <div className={BG_CYCLE[i % BG_CYCLE.length]} style={{ height: 100, position: 'relative', overflow: 'hidden' }}>
+                        {l.photo_url && <img src={l.photo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                        <div style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 4, background: sel ? 'var(--gold)' : 'rgba(255,255,255,.9)', border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--cream-dark)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--ink)', zIndex: 1 }}>{sel ? '✓' : ''}</div>
                       </div>
                       <div style={{ padding: '10px 12px' }}>
                         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</div>
@@ -231,6 +253,7 @@ export default function OnboardingPage() {
                   )
                 })}
               </div>
+              </>
             )}
           </div>
         )}

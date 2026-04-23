@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { ADMIN_EMAIL } from '@/lib/admin'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import ImageLightbox from '@/components/ImageLightbox'
 import { buildShareUrl } from '@/lib/custom-domain'
 
 interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
 interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
-interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number }
+interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number; preview_url: string | null }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
 interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; picks: ClientPick[]; expanded: boolean }
 
@@ -84,16 +85,43 @@ export default function DashboardPage() {
 
       if (portfolioRes.data && portfolioRes.data.length > 0) {
         const pIds = portfolioRes.data.map((p: any) => p.id)
-        const { data: photoCounts } = await supabase
+        const sourceIds = portfolioRes.data.map((p: any) => p.source_location_id).filter(Boolean)
+
+        // Count of photographer's own photos per portfolio copy + first-photo preview
+        const { data: ownPhotos } = await supabase
           .from('location_photos')
-          .select('portfolio_location_id')
+          .select('portfolio_location_id,url,created_at')
           .in('portfolio_location_id', pIds)
-        const countMap: Record<string, number> = {}
-        ;(photoCounts ?? []).forEach((r: any) => {
+          .eq('is_private', false)
+          .order('created_at', { ascending: true })
+        const ownCount: Record<string, number> = {}
+        const ownUrl:   Record<string, string> = {}
+        ;(ownPhotos ?? []).forEach((r: any) => {
           const k = r.portfolio_location_id
-          if (k) countMap[k] = (countMap[k] ?? 0) + 1
+          if (!k) return
+          ownCount[k] = (ownCount[k] ?? 0) + 1
+          if (!ownUrl[k] && r.url) ownUrl[k] = r.url
         })
-        setPortfolioLocs(portfolioRes.data.map((p: any) => ({ ...p, photo_count: countMap[p.id] ?? 0 })))
+
+        // Fallback: one representative photo from the public source location (Wikipedia seed)
+        const sourceUrl: Record<string, string> = {}
+        if (sourceIds.length > 0) {
+          const { data: srcPhotos } = await supabase
+            .from('location_photos')
+            .select('location_id,url,created_at')
+            .in('location_id', sourceIds)
+            .eq('is_private', false)
+            .order('created_at', { ascending: true })
+          ;(srcPhotos ?? []).forEach((r: any) => {
+            if (r.location_id && r.url && !sourceUrl[r.location_id]) sourceUrl[r.location_id] = r.url
+          })
+        }
+
+        setPortfolioLocs(portfolioRes.data.map((p: any) => ({
+          ...p,
+          photo_count: ownCount[p.id] ?? 0,
+          preview_url: ownUrl[p.id] ?? (p.source_location_id ? sourceUrl[p.source_location_id] ?? null : null),
+        })))
       } else {
         setPortfolioLocs([])
       }
@@ -287,16 +315,17 @@ export default function DashboardPage() {
                       <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
-                        <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 90, position: 'relative' }}>
+                        <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 110, position: 'relative', overflow: 'hidden' }}>
+                          {loc.preview_url && <img src={loc.preview_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                           <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: noPhotos ? 'rgba(196,146,42,.9)' : 'rgba(74,103,65,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
-                            {noPhotos ? '⚠ No photos' : `${loc.photo_count} photo${loc.photo_count !== 1 ? 's' : ''}`}
+                            {noPhotos ? '⚠ Add your photos' : `${loc.photo_count} yours`}
                           </div>
                         </div>
                         <div style={{ padding: '10px 12px' }}>
                           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
                           <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: noPhotos ? 8 : 4 }}>📍 {cityLine || '—'}</div>
                           {noPhotos
-                            ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 500, lineHeight: 1.4 }}>Add photos to replace Google Photos</div>
+                            ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.4 }}>→ Add your professional photos</div>
                             : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
                         </div>
                       </div>
@@ -667,6 +696,7 @@ function PortfolioEditModal({
   const [photos,  setPhotos]  = useState<PhotoRow[]>([])
   const [saving,  setSaving]  = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [err,     setErr]     = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -891,7 +921,7 @@ function PortfolioEditModal({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(90px,1fr))', gap: 6 }}>
                     {photos.map(p => (
                       <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}>
-                        <img src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={p.url} alt="" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
                         <button onClick={() => deletePhoto(p)} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                       </div>
                     ))}
@@ -916,6 +946,7 @@ function PortfolioEditModal({
           )}
         </div>
       </div>
+      <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </>
   )
 }

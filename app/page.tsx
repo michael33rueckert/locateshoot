@@ -19,6 +19,7 @@ interface TrendingLocation {
   tags: string[]
   access_type: string
   quality_score: number
+  photo_url?: string | null
 }
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
@@ -99,6 +100,7 @@ export default function HomePage() {
           supabase.from('locations')
             .select('id,name,city,state,rating,save_count,tags,access_type,quality_score')
             .eq('status', 'published')
+            .eq('source', 'curated')
             .not('latitude', 'is', null)
             .order('quality_score', { ascending: false })
             .limit(6),
@@ -108,7 +110,17 @@ export default function HomePage() {
           const unique = new Set(citiesRes.data.map((r: any) => r.city?.toLowerCase()).filter(Boolean))
           setCityCount(unique.size)
         }
-        if (trendRes.data) setTrendingLocs(trendRes.data)
+        if (trendRes.data && trendRes.data.length > 0) {
+          const ids = trendRes.data.map((r: any) => r.id)
+          const { data: photos } = await supabase.from('location_photos')
+            .select('location_id,url,created_at')
+            .in('location_id', ids)
+            .eq('is_private', false)
+            .order('created_at', { ascending: true })
+          const photoMap: Record<string, string> = {}
+          ;(photos ?? []).forEach((p: any) => { if (p.location_id && !photoMap[p.location_id]) photoMap[p.location_id] = p.url })
+          setTrendingLocs(trendRes.data.map((r: any) => ({ ...r, photo_url: photoMap[r.id] ?? null })))
+        }
       } catch (e) { console.error(e) }
       finally { setStatsLoading(false) }
     }
@@ -246,8 +258,9 @@ export default function HomePage() {
                   style={{ cursor: user ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}
                   onClick={user ? handleViewLocations : undefined}
                 >
-                  <div className={`card-img ${BG_CYCLE[i % BG_CYCLE.length]}`}>
-                    <span className={`card-badge ${loc.access_type === 'public' ? 'badge-public' : 'badge-private'}`}>
+                  <div className={`card-img ${BG_CYCLE[i % BG_CYCLE.length]}`} style={{ position: 'relative', overflow: 'hidden' }}>
+                    {loc.photo_url && <img src={loc.photo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                    <span className={`card-badge ${loc.access_type === 'public' ? 'badge-public' : 'badge-private'}`} style={{ position: 'relative', zIndex: 1 }}>
                       {loc.access_type === 'public' ? '● Public' : '🔒 Private'}
                     </span>
                   </div>

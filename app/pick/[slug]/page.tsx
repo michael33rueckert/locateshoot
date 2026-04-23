@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import ImageLightbox from '@/components/ImageLightbox'
 import type { ClientLocation } from '@/components/ClientMap'
 
 const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false })
@@ -19,6 +20,7 @@ export default function ClientPickerPage() {
   const [shareData,        setShareData]        = useState<any>(null)
   const [branding,         setBranding]         = useState<any>(null)
   const [logoIsLight,      setLogoIsLight]      = useState<boolean | null>(null)
+  const [lightboxSrc,      setLightboxSrc]      = useState<string | null>(null)
   const [locations,        setLocations]        = useState<FullLocation[]>([])
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState<string | null>(null)
@@ -189,6 +191,7 @@ export default function ClientPickerPage() {
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, color: 'rgba(245,240,232,.6)' }}>Loading…</div>
         </div>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
       </div>
     )
   }
@@ -216,7 +219,7 @@ export default function ClientPickerPage() {
           </div>
           <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
             <div className={chosenLoc.bg} style={{ width: 56, height: 56, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-              {chosenLoc.photoUrl && <img src={chosenLoc.photoUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+              {chosenLoc.photoUrl && <img src={chosenLoc.photoUrl} alt="" onClick={() => setLightboxSrc(chosenLoc.photoUrl)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
             </div>
             <div>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 700, color: 'var(--ink)' }}>{chosenLoc.name}</div>
@@ -225,6 +228,7 @@ export default function ClientPickerPage() {
           </div>
         </div>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
       </div>
     )
   }
@@ -327,7 +331,7 @@ export default function ClientPickerPage() {
                 <div key={String(loc.id)} onClick={() => { setDetailLoc(loc); setActiveId(loc.id) }}
                   style={{ display: 'flex', gap: 12, padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`, transition: 'all .15s' }}>
                   <div className={loc.bg} style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-                    {loc.photoUrl && <img src={loc.photoUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                    {loc.photoUrl && <img src={loc.photoUrl} alt="" onClick={e => { e.stopPropagation(); setLightboxSrc(loc.photoUrl) }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
                     <div style={{ position: 'absolute', top: 4, left: 4, width: 22, height: 22, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.9)' : 'rgba(26,22,18,.6)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
                       {isChosen ? '✓' : i + 1}
                     </div>
@@ -392,7 +396,7 @@ export default function ClientPickerPage() {
             </div>
             <button onClick={() => setDetailLoc(null)} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: '50%', background: 'rgba(26,22,18,.6)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>✕</button>
             <div className={detailLoc.bg} style={{ height: 200, position: 'relative', overflow: 'hidden' }}>
-              {detailLoc.photoUrl && <img src={detailLoc.photoUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+              {detailLoc.photoUrl && <img src={detailLoc.photoUrl} alt="" onClick={() => setLightboxSrc(detailLoc.photoUrl)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
               <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: detailLoc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: detailLoc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1 }}>
                 {detailLoc.access === 'public' ? '● Public' : '🔒 Private'}
               </div>
@@ -469,6 +473,7 @@ export default function ClientPickerPage() {
           .pick-mobile-toggle { display: flex !important; position: fixed !important; bottom: 80px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 400 !important; align-items: center !important; gap: 8px !important; padding: 10px 22px !important; border-radius: 50px !important; border: none !important; font-family: var(--font-dm-sans), sans-serif !important; font-size: 13px !important; font-weight: 600 !important; cursor: pointer !important; box-shadow: 0 4px 20px rgba(0,0,0,.35) !important; white-space: nowrap !important; background: var(--ink) !important; color: var(--cream) !important; }
         }
       `}</style>
+      <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>
   )
 }

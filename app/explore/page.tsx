@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { usePlacePhotos } from '@/hooks/usePlacePhotos'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import AuthModal from '@/components/AuthModal'
+import ImageLightbox from '@/components/ImageLightbox'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
@@ -128,8 +129,8 @@ function AddLocationModal({ onClose, user }: { onClose:()=>void; user:any }) {
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, user }: {
-  loc:any; portfolioId:string|null; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; user:any
+function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user }: {
+  loc:any; portfolioId:string|null; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; onOpenLightbox:(src:string)=>void; user:any
 }) {
   const isInPortfolio = !!portfolioId
   const router = useRouter()
@@ -164,9 +165,9 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, us
         <div style={{position:'relative',height:220,background:'#1a1612',overflow:'hidden'}}>
           {photoTab==='google'&&(googleLoading
             ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
-            :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+            :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} onClick={()=>onOpenLightbox(googlePhotos[activePhoto].url)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>
             :<div className={loc.bg} style={{position:'absolute',inset:0}}/>)}
-          {photoTab==='community'&&(hasCommunity?<img src={communityPhotos[0].url} alt={loc.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}}><span style={{fontSize:32}}>📷</span><span style={{fontSize:12,color:'rgba(255,255,255,.6)'}}>No community photos yet</span></div>)}
+          {photoTab==='community'&&(hasCommunity?<img src={communityPhotos[0].url} alt={loc.name} onClick={()=>onOpenLightbox(communityPhotos[0].url)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>:<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}}><span style={{fontSize:32}}>📷</span><span style={{fontSize:12,color:'rgba(255,255,255,.6)'}}>No community photos yet</span></div>)}
           {photoTab==='upload'&&<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:36}}>📷</span></div>}
           {photoTab!=='upload'&&<div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>}
           {photoTab==='google'&&hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
@@ -258,6 +259,7 @@ export default function ExplorePage() {
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
   const [showPinSearch,    setShowPinSearch]    = useState(false)
+  const [lightboxSrc,      setLightboxSrc]      = useState<string | null>(null)
 
   // ── FIX 1: Trigger Leaflet resize on mount so map fills its container ──
   useEffect(() => {
@@ -371,7 +373,7 @@ export default function ExplorePage() {
       }).select('id').single()
       if(error||!inserted)throw error??new Error('Insert failed')
       setPortfolioSources(prev=>{const n=new Map(prev);n.set(key,String(inserted.id));return n})
-      setToast('Added to your portfolio!')
+      setToast('✓ Added! Next: upload your own pro photos from the dashboard.')
     } catch(e){
       console.error(e)
       setToast('⚠ Could not add to portfolio — please try again')
@@ -528,7 +530,7 @@ export default function ExplorePage() {
               <div key={String(loc.id)}
                 onClick={()=>{ setDetailLoc(loc); setActiveId(loc.id) }}
                 style={{display:'flex',gap:10,padding:'10px 1.25rem',borderBottom:'1px solid var(--cream-dark)',cursor:'pointer',background:isActive?'rgba(196,146,42,.06)':'white',borderLeft:`3px solid ${isActive?'var(--gold)':'transparent'}`,transition:'background .12s'}}>
-                <div className={loc.bg} style={{width:56,height:56,borderRadius:8,flexShrink:0,position:'relative',overflow:'hidden'}}>
+                <div className={loc.bg} onClick={thumb ? e => { e.stopPropagation(); setLightboxSrc(thumb) } : undefined} style={{width:56,height:56,borderRadius:8,flexShrink:0,position:'relative',overflow:'hidden',cursor:thumb?'zoom-in':'pointer'}}>
                   {thumb&&<img src={thumb} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>}
                   {loc.rating!=='—'&&<div style={{position:'absolute',bottom:3,right:3,background:'rgba(26,22,18,.75)',borderRadius:4,padding:'1px 5px',fontSize:10,fontWeight:600,color:'var(--gold)',zIndex:1}}>★{loc.rating}</div>}
                 </div>
@@ -569,10 +571,11 @@ export default function ExplorePage() {
       </button>
 
       {detailLoc&&(
-        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} user={user}/>
+        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} onOpenLightbox={setLightboxSrc} user={user}/>
       )}
       {showAddModal&&<AddLocationModal onClose={()=>setShowAddModal(false)} user={user}/>}
       {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}
+      <ImageLightbox src={lightboxSrc} onClose={()=>setLightboxSrc(null)}/>
 
       {toast&&(
         <div style={{position:'fixed',bottom:'5rem',right:'1.5rem',background:'var(--ink)',color:'var(--cream)',padding:'10px 18px',borderRadius:10,fontSize:13,border:'1px solid rgba(255,255,255,.1)',zIndex:9999,boxShadow:'0 8px 32px rgba(0,0,0,.3)'}}>
