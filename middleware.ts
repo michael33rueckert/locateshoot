@@ -7,6 +7,19 @@ const PUBLIC_PATHS = [
   '/not-available',
 ]
 
+// PWA installability requires the browser to fetch these without cookies. If the
+// preview gate redirects them, Chrome fails to parse the manifest and refuses to
+// install — you get "Add to Home Screen" (shortcut) instead of "Install app".
+const PWA_PATHS = new Set([
+  '/manifest.json',
+  '/sw.js',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-512-maskable.png',
+  '/apple-touch-icon.png',
+  '/icon.png',
+])
+
 const APEX_DOMAIN = process.env.NEXT_PUBLIC_APEX_DOMAIN ?? 'locateshoot.com'
 
 function isPrimaryHost(host: string | null): boolean {
@@ -44,11 +57,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // ── Always allow public paths and static files ─────────────────────────────
+  // ── Always allow public paths, static files, and PWA asset paths ──────────
   const isPublicPath = PUBLIC_PATHS.some(p => pathname.startsWith(p))
   const isStaticFile = pathname.startsWith('/_next') || pathname.startsWith('/favicon')
+  const isPwaPath    = PWA_PATHS.has(pathname) || pathname.startsWith('/icon.')
 
-  if (isPublicPath || isStaticFile) {
+  if (isPublicPath || isStaticFile || isPwaPath) {
     return NextResponse.next()
   }
 
