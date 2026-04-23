@@ -81,8 +81,11 @@ export async function GET(request: Request, context: any) {
       .eq('is_private', false)
       .order('created_at', { ascending: true })
 
-    // Fallback: photos on the source public location (for portfolio rows without their own photos yet)
+    // Fallback: photos + real rating/permit data on the source public location
+    // (portfolio copies only store a subset of the fields, so we merge anything
+    // the portfolio row doesn't have its own value for).
     let sourcePhotos: any[] = []
+    let sourceLookup: Record<string, any> = {}
     if (sourceIds.length > 0) {
       const { data } = await admin
         .from('location_photos')
@@ -91,6 +94,11 @@ export async function GET(request: Request, context: any) {
         .eq('is_private', false)
         .order('created_at', { ascending: true })
       sourcePhotos = data ?? []
+      const { data: sourceRows } = await admin
+        .from('locations')
+        .select('id,access_type,rating,quality_score,save_count,permit_required,permit_notes,permit_fee,permit_website,permit_certainty')
+        .in('id', sourceIds)
+      ;(sourceRows ?? []).forEach((s: any) => { sourceLookup[s.id] = s })
     }
 
     const ownMap: Record<string, string[]> = {}
@@ -104,6 +112,10 @@ export async function GET(request: Request, context: any) {
 
     locations = (portfolioRows ?? []).map((p: any) => {
       const urls = ownMap[p.id] ?? (p.source_location_id ? sourceMap[p.source_location_id] : null) ?? []
+      const src  = p.source_location_id ? sourceLookup[p.source_location_id] : null
+      // Prefer the portfolio row's value when the photographer set it; fall back
+      // to the public source location's value otherwise.
+      const preferOwn = <K extends keyof typeof p>(k: K) => (p[k] != null ? p[k] : src?.[k] ?? null)
       return {
         id:               p.id,
         name:             p.name,
@@ -112,12 +124,16 @@ export async function GET(request: Request, context: any) {
         state:            p.state,
         latitude:         p.latitude,
         longitude:        p.longitude,
-        access_type:      p.access_type,
+        access_type:      preferOwn('access_type'),
         tags:             p.tags,
-        permit_required:  p.permit_required,
-        permit_notes:     p.permit_notes,
-        quality_score:    null,
-        save_count:       0,
+        permit_required:  preferOwn('permit_required'),
+        permit_notes:     preferOwn('permit_notes'),
+        permit_fee:       src?.permit_fee       ?? null,
+        permit_website:   src?.permit_website   ?? null,
+        permit_certainty: src?.permit_certainty ?? 'unknown',
+        rating:           src?.rating           ?? null,
+        quality_score:    src?.quality_score    ?? null,
+        save_count:       src?.save_count       ?? 0,
         photo_url:        urls[0] ?? null,
         photo_urls:       urls,
       }
@@ -128,7 +144,7 @@ export async function GET(request: Request, context: any) {
     if (locIds.length > 0) {
       const { data, error } = await admin
         .from('locations')
-        .select('id,name,city,state,latitude,longitude,access_type,description,tags,permit_required,permit_notes,quality_score,save_count')
+        .select('id,name,city,state,latitude,longitude,access_type,description,tags,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,rating,quality_score,save_count')
         .in('id', locIds)
       if (error) console.error('locations query error:', error)
       locations = data ?? []

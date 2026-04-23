@@ -11,7 +11,18 @@ const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false }
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
-type FullLocation = ClientLocation & { tags: string[]; desc: string; permit: string | null; saves: number; photoUrl: string | null; photoUrls: string[] }
+type FullLocation = ClientLocation & {
+  tags: string[]
+  desc: string
+  permitRequired: boolean | null
+  permitNotes: string | null
+  permitFee: string | null
+  permitWebsite: string | null
+  permitCertainty: string
+  saves: number
+  photoUrl: string | null
+  photoUrls: string[]
+}
 
 export default function ClientPickerPage() {
   const params = useParams()
@@ -68,6 +79,11 @@ export default function ClientPickerPage() {
         const all: FullLocation[] = []
 
         ;(locs ?? []).forEach((loc: any, idx: number) => {
+          // Prefer the real Google rating (already a 0–5 decimal). Fall back to
+          // the legacy 0–100 quality_score scaled to 5 if rating isn't set.
+          const ratingStr = loc.rating != null
+            ? Number(loc.rating).toFixed(1)
+            : (loc.quality_score ? (loc.quality_score / 20).toFixed(1) : '—')
           all.push({
             id:     loc.id,
             name:   loc.name,
@@ -75,12 +91,16 @@ export default function ClientPickerPage() {
             lat:    loc.latitude,
             lng:    loc.longitude,
             access: loc.access_type ?? 'public',
-            rating: loc.quality_score ? (loc.quality_score / 20).toFixed(1) : '—',
+            rating: ratingStr,
             bg:     BG_CYCLE[idx % BG_CYCLE.length],
             type:   'favorite',
             tags:   loc.tags ?? [],
             desc:   loc.description ?? '',
-            permit: loc.permit_required ? `Permit required${loc.permit_notes ? ' — ' + loc.permit_notes : ''}` : 'No permit required',
+            permitRequired:  loc.permit_required ?? null,
+            permitNotes:     loc.permit_notes ?? null,
+            permitFee:       loc.permit_fee ?? null,
+            permitWebsite:   loc.permit_website ?? null,
+            permitCertainty: loc.permit_certainty ?? 'unknown',
             saves:  loc.save_count ?? 0,
             photoUrl: loc.photo_url ?? null,
             photoUrls: loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : []),
@@ -95,7 +115,9 @@ export default function ClientPickerPage() {
             bg: s.bg ?? 'bg-1', type: 'secret',
             tags: s.tags ?? [],
             desc: s.description ?? '',
-            permit: null, saves: 0,
+            permitRequired: null, permitNotes: null, permitFee: null,
+            permitWebsite: null, permitCertainty: 'unknown',
+            saves: 0,
             photoUrl: null,
             photoUrls: [],
           })
@@ -437,18 +459,46 @@ export default function ClientPickerPage() {
                 </div>
               )}
               {detailLoc.desc && <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, marginBottom: '1.25rem' }}>{detailLoc.desc}</p>}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1.5rem' }}>
-                {[
-                  { icon: '🔒', label: 'Access',  value: detailLoc.access === 'public' ? 'Free public access' : 'Private — booking required' },
-                  { icon: '⭐', label: 'Rating',  value: detailLoc.rating !== '—' ? `${detailLoc.rating} / 5` : 'Not yet rated' },
-                  { icon: '📋', label: 'Permit',  value: detailLoc.permit ?? 'Ask your photographer' },
-                  { icon: '❤',  label: 'Saves',   value: detailLoc.saves > 0 ? `${detailLoc.saves} photographers` : 'New location' },
-                ].map(item => (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1rem' }}>
+                {(() => {
+                  const permitText =
+                    detailLoc.permitRequired === true
+                      ? `Permit required${detailLoc.permitNotes ? ' — ' + detailLoc.permitNotes : ''}${detailLoc.permitFee ? ' · ' + detailLoc.permitFee : ''}`
+                      : detailLoc.permitRequired === false
+                        ? 'No permit required'
+                        : 'Ask your photographer'
+                  return [
+                    { icon: '🔒', label: 'Access', value: detailLoc.access === 'public' ? 'Free public access' : detailLoc.access === 'private' ? 'Private — booking required' : 'Ask your photographer' },
+                    { icon: '⭐', label: 'Rating', value: detailLoc.rating !== '—' ? `${detailLoc.rating} / 5` : 'Not yet rated' },
+                    { icon: '📋', label: 'Permit', value: permitText },
+                    { icon: '❤',  label: 'Saves',  value: detailLoc.saves > 0 ? `${detailLoc.saves} photographers` : 'New location' },
+                  ]
+                })().map(item => (
                   <div key={item.label} style={{ background: 'var(--cream)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--cream-dark)' }}>
                     <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--ink-soft)', marginBottom: 4 }}>{item.icon} {item.label}</div>
                     <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.4 }}>{item.value}</div>
                   </div>
                 ))}
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([detailLoc.name, detailLoc.city].filter(Boolean).join(' '))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}
+                >
+                  🗺 Open in Google Maps
+                </a>
+                {detailLoc.permitWebsite && (
+                  <a
+                    href={detailLoc.permitWebsite}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}
+                  >
+                    📋 Permit info
+                  </a>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 10, paddingBottom: '1rem' }}>
                 <button onClick={() => setDetailLoc(null)} style={{ flex: 1, padding: '12px', borderRadius: 4, border: '1px solid var(--sand)', background: 'transparent', color: 'var(--ink-soft)', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Back</button>
