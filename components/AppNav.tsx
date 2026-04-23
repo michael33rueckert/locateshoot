@@ -139,6 +139,16 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {rightExtra}
+          {canInstall && (
+            <button
+              className="nav-links"
+              onClick={installApp}
+              title="Install LocateShoot"
+              style={{ padding: '5px 10px', borderRadius: 4, background: canInstall === 'manual' ? 'transparent' : 'rgba(196,146,42,.12)', border: `1px solid ${canInstall === 'manual' ? 'rgba(255,255,255,.15)' : 'rgba(196,146,42,.35)'}`, color: canInstall === 'manual' ? 'rgba(245,240,232,.6)' : 'var(--gold)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+            >
+              📲 Install
+            </button>
+          )}
           <button className="nav-links" onClick={signedIn ? signOut : undefined} style={{ padding: '5px 12px', borderRadius: 4, background: 'transparent', border: '1px solid rgba(255,255,255,.2)', color: 'rgba(245,240,232,.6)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', display: signedIn ? undefined : 'none' }}>Sign out</button>
           <button className="hamburger-btn" onClick={() => setOpen(p => !p)} aria-label="Menu">
             {open ? '✕' : '☰'}
@@ -148,37 +158,28 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
       {open && (
         <div className="mobile-menu" onClick={() => setOpen(false)}>
+          {signedIn && LINKS.map(l => (
+            <Link
+              key={l.href}
+              href={l.href}
+              style={{
+                color: isActive(l.href) ? 'var(--gold)' : undefined,
+                fontWeight: isActive(l.href) ? 600 : undefined,
+              }}
+            >
+              {isActive(l.href) ? '• ' : ''}{l.label}
+            </Link>
+          ))}
+          {canInstall && (
+            <button
+              onClick={e => { e.stopPropagation(); installApp() }}
+              style={{ fontSize: 15, color: canInstall === 'manual' ? 'rgba(245,240,232,.75)' : 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}
+            >
+              📲 Install app
+            </button>
+          )}
           {signedIn ? (
-            <>
-              {LINKS.map(l => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  style={{
-                    color: isActive(l.href) ? 'var(--gold)' : undefined,
-                    fontWeight: isActive(l.href) ? 600 : undefined,
-                  }}
-                >
-                  {isActive(l.href) ? '• ' : ''}{l.label}
-                </Link>
-              ))}
-              {canInstall && canInstall !== 'manual' ? (
-                <button
-                  onClick={e => { e.stopPropagation(); installApp() }}
-                  style={{ fontSize: 15, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}
-                >
-                  📲 Install app
-                </button>
-              ) : canInstall === 'manual' ? (
-                <button
-                  onClick={e => { e.stopPropagation(); installApp() }}
-                  style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}
-                >
-                  📲 Install app
-                </button>
-              ) : null}
-              <button onClick={signOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
-            </>
+            <button onClick={signOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
           ) : loaded ? (
             <Link href="/">Sign in</Link>
           ) : null}
