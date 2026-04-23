@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   // creating junk rows.
   const { data: link, error: linkErr } = await admin
     .from('share_links')
-    .select('id,user_id,session_name,expires_at,max_picks')
+    .select('id,user_id,session_name,expires_at,max_picks,is_permanent')
     .eq('id', shareLinkId)
     .single()
   if (linkErr || !link) return NextResponse.json({ error: 'share link not found' }, { status: 404 })
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
             ${locationsList}
             ${clientDisplay !== 'Your client' ? `<div><strong>Client:</strong> ${escapeHtml(clientDisplay)}</div>` : ''}
             ${email ? `<div><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}" style="color:#c4922a;">${escapeHtml(email)}</a></div>` : ''}
-            ${link.session_name ? `<div><strong>Session:</strong> ${escapeHtml(link.session_name)}</div>` : ''}
+            ${!link.is_permanent && link.session_name ? `<div><strong>Session:</strong> ${escapeHtml(link.session_name)}</div>` : ''}
           </div>
           <div style="margin: 24px 0;">
             <a href="${dashUrl}" style="display:inline-block;padding:12px 22px;background:#c4922a;color:#1a1612;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">
