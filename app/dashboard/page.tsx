@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { ADMIN_EMAIL } from '@/lib/admin'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import ImageLightbox from '@/components/ImageLightbox'
+import AppNav from '@/components/AppNav'
 import { buildShareUrl } from '@/lib/custom-domain'
 
 interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
@@ -51,7 +51,6 @@ export default function DashboardPage() {
   const [editingPortfolioId,  setEditingPortfolioId]   = useState<string | null>(null)
   const [editingPermLink,     setEditingPermLink]      = useState<PermanentLink | null>(null)
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
-  const [mobileMenuOpen,      setMobileMenuOpen]       = useState(false)
 
   useEffect(() => {
     if (!toast) return
@@ -167,7 +166,6 @@ export default function DashboardPage() {
   }, [])
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
-  const isAdmin   = profile?.email === ADMIN_EMAIL
 
   async function shareFullPortfolio() {
     if (!profile?.id) return
@@ -218,8 +216,6 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  async function handleSignOut() { await supabase.auth.signOut(); window.location.href = '/' }
-
   function linkStatus(s: ShareLink) {
     return s.expires_at && new Date(s.expires_at) < new Date() ? 'expired' : 'active'
   }
@@ -238,39 +234,7 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#f0ece4' }}>
 
-      {/* NAV */}
-      <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 60 }}>
-        <Link href="/" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 20, fontWeight: 900, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
-        </Link>
-
-        {/* Desktop nav links */}
-        <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <Link href="/explore" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Explore map</Link>
-          <Link href="/share"   style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>New share</Link>
-          <Link href="/profile" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Profile</Link>
-          {isAdmin && <Link href="/admin" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Admin</Link>}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span className="nav-links" style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(196,146,42,.15)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)' }}>⭐ Pro</span>
-          <button onClick={handleSignOut} className="nav-links" style={{ padding: '5px 12px', borderRadius: 4, background: 'transparent', border: '1px solid rgba(255,255,255,.2)', color: 'rgba(245,240,232,.6)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Sign out</button>
-          {/* Hamburger */}
-          <button className="hamburger-btn" onClick={() => setMobileMenuOpen(p => !p)} aria-label="Menu">
-            {mobileMenuOpen ? '✕' : '☰'}
-          </button>
-        </div>
-      </nav>
-
-      {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="mobile-menu" onClick={() => setMobileMenuOpen(false)}>
-          <Link href="/explore">Explore map</Link>
-          <Link href="/share">New share</Link>
-          <Link href="/profile">Profile</Link>
-          <button onClick={handleSignOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
-        </div>
-      )}
+      <AppNav />
 
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem 1.5rem 4rem' }}>
 

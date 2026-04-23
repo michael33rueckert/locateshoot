@@ -2,21 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ADMIN_EMAIL } from '@/lib/admin'
 
 /**
- * Consistent top-bar nav used on every internal page (dashboard, explore,
- * profile, admin, onboarding, share). Logo always on the left, hamburger
- * always on the right on mobile/tablet. Desktop shows inline links.
+ * Consistent top-bar nav used on every internal page. Logo always on the left,
+ * hamburger always on the right on mobile/tablet. Desktop shows inline links.
  *
- * Pages can pass a `rightExtra` slot for a context-specific action (e.g.
- * onboarding's "Skip" button) — it renders next to the hamburger.
+ * Pages can pass `rightExtra` for a context-specific action (e.g. onboarding's
+ * "Skip" button) — it renders next to the hamburger.
  */
 export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode }) {
-  const [open,    setOpen]    = useState(false)
-  const [email,   setEmail]   = useState<string | null>(null)
-  const [loaded,  setLoaded]  = useState(false)
+  const pathname = usePathname() ?? ''
+  const [open,   setOpen]   = useState(false)
+  const [email,  setEmail]  = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -33,6 +34,16 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
     window.location.href = '/'
   }
 
+  const LINKS = [
+    { href: '/dashboard', label: 'Dashboard' },
+    { href: '/explore',   label: 'Explore map' },
+    { href: '/share',     label: 'New share' },
+    { href: '/profile',   label: 'Profile' },
+    ...(isAdmin ? [{ href: '/admin', label: 'Admin' }] : []),
+  ]
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
   return (
     <>
       <nav style={{ position: 'sticky', top: 0, zIndex: 200, background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 60 }}>
@@ -42,13 +53,20 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
         {/* Desktop inline links */}
         <div className="nav-links" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          {signedIn && <>
-            <Link href="/dashboard" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Dashboard</Link>
-            <Link href="/explore"   style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Explore map</Link>
-            <Link href="/share"     style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>New share</Link>
-            <Link href="/profile"   style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Profile</Link>
-            {isAdmin && <Link href="/admin" style={{ fontSize: 13, color: 'rgba(245,240,232,.55)', textDecoration: 'none' }}>Admin</Link>}
-          </>}
+          {signedIn && LINKS.map(l => (
+            <Link
+              key={l.href}
+              href={l.href}
+              style={{
+                fontSize: 13,
+                color: isActive(l.href) ? 'var(--gold)' : 'rgba(245,240,232,.55)',
+                fontWeight: isActive(l.href) ? 600 : 400,
+                textDecoration: 'none',
+              }}
+            >
+              {l.label}
+            </Link>
+          ))}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -64,11 +82,18 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
         <div className="mobile-menu" onClick={() => setOpen(false)}>
           {signedIn ? (
             <>
-              <Link href="/dashboard">Dashboard</Link>
-              <Link href="/explore">Explore map</Link>
-              <Link href="/share">New share</Link>
-              <Link href="/profile">Profile</Link>
-              {isAdmin && <Link href="/admin">Admin</Link>}
+              {LINKS.map(l => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  style={{
+                    color: isActive(l.href) ? 'var(--gold)' : undefined,
+                    fontWeight: isActive(l.href) ? 600 : undefined,
+                  }}
+                >
+                  {isActive(l.href) ? '• ' : ''}{l.label}
+                </Link>
+              ))}
               <button onClick={signOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
             </>
           ) : loaded ? (

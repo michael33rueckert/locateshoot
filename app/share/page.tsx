@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import AppNav from '@/components/AppNav'
 import { buildShareUrl } from '@/lib/custom-domain'
 import type { MapLocation } from '@/components/ShareMap'
 
@@ -52,7 +53,6 @@ export default function SharePage() {
   const [customDomain,     setCustomDomain]     = useState<string | null>(null)
   const [customVerified,   setCustomVerified]   = useState(false)
   const [isSaving,         setIsSaving]         = useState(false)
-  const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
 
   // Handle ?step=3 from explore page — wait for portfolio, then translate
   // the preselected public-location id into the matching portfolio_location id.
@@ -276,34 +276,19 @@ export default function SharePage() {
 
   return (
     <div className="share-outer">
+      <div className="share-topnav-mobile"><AppNav /></div>
 
       {/* SIDEBAR */}
       <div className="share-sidebar" style={{ background: 'white', borderRight: '1px solid var(--cream-dark)', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: '1.25rem 1.5rem 0', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <div className="share-desktop-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <Link href="/" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 900, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
             </Link>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Link href="/dashboard" style={{ fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none' }}>← Dashboard</Link>
-              <button
-                className="hamburger-btn"
-                onClick={() => setMobileMenuOpen(p => !p)}
-                style={{ background: 'rgba(26,22,18,.08)', border: '1px solid rgba(26,22,18,.15)', color: 'var(--ink)' }}
-              >
-                {mobileMenuOpen ? '✕' : '☰'}
-              </button>
-            </div>
+            <Link href="/dashboard" style={{ fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none' }}>← Dashboard</Link>
           </div>
-
-          {mobileMenuOpen && (
-            <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 8, padding: '0.5rem', marginBottom: '1rem' }}>
-              <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} style={{ display: 'block', padding: '10px', fontSize: 14, color: 'var(--ink)', textDecoration: 'none', borderBottom: '1px solid var(--cream-dark)' }}>← Dashboard</Link>
-              <Link href="/explore" onClick={() => setMobileMenuOpen(false)} style={{ display: 'block', padding: '10px', fontSize: 14, color: 'var(--ink)', textDecoration: 'none' }}>Browse map</Link>
-            </div>
-          )}
 
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, lineHeight: 1.15, color: 'var(--ink)', marginBottom: 4 }}>
             Share locations<br />with your client
@@ -594,6 +579,15 @@ export default function SharePage() {
           {toast}
         </div>
       )}
+
+      <style>{`
+        .share-topnav-mobile { display: none; }
+        @media (max-width: 768px) {
+          .share-topnav-mobile { display: block; }
+          .share-desktop-header { display: none !important; }
+          .share-sidebar { height: calc(100svh - 60px) !important; }
+        }
+      `}</style>
     </div>
   )
 }

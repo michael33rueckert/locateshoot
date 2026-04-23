@@ -9,6 +9,7 @@ import { usePlacePhotos } from '@/hooks/usePlacePhotos'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import AuthModal from '@/components/AuthModal'
 import ImageLightbox from '@/components/ImageLightbox'
+import AppNav from '@/components/AppNav'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
@@ -266,7 +267,6 @@ export default function ExplorePage() {
   // to the portfolio edit modal after a user adds a location.
   const [portfolioSources, setPortfolioSources] = useState<Map<string, string>>(new Map())
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
-  const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false)
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
   const [showPinSearch,    setShowPinSearch]    = useState(false)
   const [lightboxSrc,      setLightboxSrc]      = useState<string | null>(null)
@@ -335,7 +335,7 @@ export default function ExplorePage() {
   }, [toast])
 
   useEffect(() => {
-    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowAddModal(false);setShowFilters(false);setMobileMenuOpen(false);setShowPinSearch(false)}}
+    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowAddModal(false);setShowFilters(false);setShowPinSearch(false)}}
     window.addEventListener('keydown',onKey)
     return()=>window.removeEventListener('keydown',onKey)
   }, [])
@@ -423,30 +423,7 @@ export default function ExplorePage() {
   return (
     <div style={{height:'100svh',display:'flex',flexDirection:'column',overflow:'hidden',background:'#f9f6f1'}}>
 
-      {/* NAV */}
-      <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 1.5rem',height:56,background:'rgba(26,22,18,.96)',backdropFilter:'blur(8px)',borderBottom:'1px solid rgba(255,255,255,.07)',flexShrink:0,zIndex:200}}>
-        <Link href="/" style={{fontFamily:'var(--font-playfair),serif',fontSize:18,fontWeight:900,color:'var(--cream)',display:'flex',alignItems:'center',gap:7,textDecoration:'none'}}>
-          <span style={{width:6,height:6,borderRadius:'50%',background:'var(--gold)',display:'inline-block'}}/>LocateShoot
-        </Link>
-        <div className="nav-links" style={{flex:1,maxWidth:400,margin:'0 1.5rem',position:'relative'}}>
-          <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search locations" style={{width:'100%',padding:'7px 14px 7px 34px',background:'rgba(255,255,255,.1)',border:'1px solid rgba(255,255,255,.15)',borderRadius:6,color:'var(--cream)',fontFamily:'inherit',fontSize:13,outline:'none'}}/>
-          <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',fontSize:14,color:'rgba(245,240,232,.4)'}}>🔍</span>
-        </div>
-        <div className="nav-links" style={{display:'flex',alignItems:'center',gap:10}}>
-          <button onClick={()=>setShowAddModal(true)} style={{padding:'6px 12px',borderRadius:4,background:'rgba(196,146,42,.15)',color:'var(--gold)',border:'1px solid rgba(196,146,42,.3)',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>+ Add location</button>
-          {user?<Link href="/dashboard" style={{fontSize:13,color:'rgba(245,240,232,.55)',textDecoration:'none'}}>Dashboard</Link>
-            :<Link href="/" style={{padding:'5px 14px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',fontSize:13,fontWeight:500,textDecoration:'none'}}>Join Free</Link>}
-        </div>
-        <button className="hamburger-btn" onClick={()=>setMobileMenuOpen(p=>!p)}>{mobileMenuOpen?'✕':'☰'}</button>
-      </nav>
-
-      {mobileMenuOpen&&(
-        <div className="mobile-menu" onClick={()=>setMobileMenuOpen(false)}>
-          {user?<Link href="/dashboard">Dashboard</Link>:<Link href="/">Join Free</Link>}
-          <button onClick={()=>{setShowAddModal(true);setMobileMenuOpen(false)}} style={{padding:'12px 0',fontSize:15,color:'rgba(245,240,232,.7)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',textAlign:'left',borderBottom:'1px solid rgba(255,255,255,.06)'}}>+ Add a location</button>
-          <button onClick={()=>{requestLocation();setMobileMenuOpen(false)}} style={{padding:'12px 0',fontSize:15,color:'rgba(245,240,232,.7)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>📍 Near me</button>
-        </div>
-      )}
+      <AppNav rightExtra={user ? <Link href="/dashboard" className="explore-back-dash" style={{fontSize:12,color:'rgba(245,240,232,.55)',textDecoration:'none',padding:'5px 10px',borderRadius:4,border:'1px solid rgba(255,255,255,.15)',whiteSpace:'nowrap'}}>← Dashboard</Link> : null} />
 
       {/* Location banner */}
       {!locGranted&&(
@@ -472,6 +449,12 @@ export default function ExplorePage() {
           <button onClick={()=>setShowPinSearch(p=>!p)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${searchPin?'var(--sky)':'var(--cream-dark)'}`,background:searchPin?'rgba(61,110,140,.08)':'white',color:searchPin?'var(--sky)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
             📍 {searchPin?searchPin.label.split(',')[0]:'Find Locations Near'}
             {searchPin&&<span onClick={e=>{e.stopPropagation();setSearchPin(null);setUserLocation(null)}} style={{marginLeft:2}}>✕</span>}
+          </button>
+          <button onClick={requestLocation} disabled={locLoading} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${locGranted?'var(--sage)':'var(--cream-dark)'}`,background:locGranted?'rgba(74,103,65,.08)':'white',color:locGranted?'var(--sage)':'var(--ink-soft)',cursor:locLoading?'default':'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,opacity:locLoading?.6:1}}>
+            {locLoading?'Locating…':locGranted?'✓ Near me':'📡 Near me'}
+          </button>
+          <button onClick={()=>setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:'1px solid rgba(196,146,42,.4)',background:'rgba(196,146,42,.08)',color:'var(--gold)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,marginLeft:'auto'}}>
+            + Add location
           </button>
           {accessFilter!=='All'&&<span onClick={()=>setAccessFilter('All')} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{accessFilter} ✕</span>}
           {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{t} ✕</span>)}
@@ -616,6 +599,11 @@ export default function ExplorePage() {
         .explore-map-col .leaflet-container {
           height: 100% !important;
           min-height: 300px;
+        }
+        /* Mobile-only back-to-Dashboard chip next to hamburger */
+        .explore-back-dash { display: none; }
+        @media (max-width: 768px) {
+          .explore-back-dash { display: inline-block; }
         }
       `}</style>
     </div>
