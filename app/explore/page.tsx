@@ -190,7 +190,7 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
           <div style={{fontFamily:'var(--font-playfair),serif',fontSize:22,fontWeight:700,color:'var(--ink)',marginBottom:3}}>{loc.name}</div>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:'1rem',flexWrap:'wrap'}}>
             <span style={{fontSize:13,color:'var(--ink-soft)'}}>📍 {loc.city}</span>
-            <a href={`https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500,display:'inline-flex',alignItems:'center',gap:4}}>
+            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([loc.name, loc.city].filter(Boolean).join(' '))}&query_place_id=`} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500,display:'inline-flex',alignItems:'center',gap:4}}>
               Open in Google Maps →
             </a>
           </div>
@@ -393,6 +393,10 @@ export default function ExplorePage() {
       return matchesAccess&&matchesTags&&matchesSearch&&matchesRating
     })
     return[...result].sort((a:any,b:any)=>{
+      // Put locations with photos first regardless of sort mode. Blank-gradient
+      // cards at the top look like the photos are broken.
+      const ap=photoMap[a.id]?1:0, bp=photoMap[b.id]?1:0
+      if(ap!==bp)return bp-ap
       switch(sortBy){
         case'quality':return(b.qualityScore??0)-(a.qualityScore??0)
         case'rating_asc':return(a.ratingNum??0)-(b.ratingNum??0)
@@ -402,7 +406,7 @@ export default function ExplorePage() {
         default:return 0
       }
     })
-  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user])
+  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap])
 
   const activeFilterCount=(accessFilter!=='All'?1:0)+selectedTags.length+(minRating>0?1:0)+(sortBy!=='quality'?1:0)
 
