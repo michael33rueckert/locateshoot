@@ -98,12 +98,17 @@ export default function ClientPickerPage() {
           const ratingStr = loc.rating != null
             ? Number(loc.rating).toFixed(1)
             : (loc.quality_score ? (loc.quality_score / 20).toFixed(1) : '—')
+          // Supabase-js surfaces `numeric` columns as strings, so coerce here
+          // — the map's Number.isFinite check silently drops pins otherwise
+          // and the viewport stays on the fallback center.
+          const lat = typeof loc.latitude  === 'number' ? loc.latitude  : parseFloat(loc.latitude)
+          const lng = typeof loc.longitude === 'number' ? loc.longitude : parseFloat(loc.longitude)
           all.push({
             id:     loc.id,
             name:   loc.name,
             city:   [loc.city, loc.state].filter(Boolean).join(', ') || 'Unknown',
-            lat:    loc.latitude,
-            lng:    loc.longitude,
+            lat,
+            lng,
             access: loc.access_type ?? 'public',
             rating: ratingStr,
             bg:     BG_CYCLE[idx % BG_CYCLE.length],
