@@ -138,34 +138,6 @@ function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; o
   </div></>)
 }
 
-function AddLocationModal({ onClose, user }: { onClose:()=>void; user:any }) {
-  const [name,setName]=useState('');const [city,setCity]=useState('');const [state,setState]=useState('');const [desc,setDesc]=useState('');const [access,setAccess]=useState('public');const [tags,setTags]=useState<string[]>([]);const [tagIn,setTagIn]=useState('');const [saving,setSaving]=useState(false);const [saved,setSaved]=useState(false);const [err,setErr]=useState('');const [pin,setPin]=useState<{lat:number;lng:number}|null>(null);const [photos,setPhotos]=useState<File[]>([]);const ref=useRef<HTMLInputElement>(null)
-  const SUGGESTIONS=['Golden Hour','Forest','Urban','Waterfront','Historic','Nature','Romantic','Dramatic','Meadow','Creek','Bridge']
-  function onAddr(r:AddressResult){setPin({lat:r.lat,lng:r.lng});if(!name.trim()){const p=r.label?.split(',')??[];if(p.length>0)setName(p[0].trim())};if(!city.trim()){const p=r.label?.split(',')??[];if(p.length>1)setCity(p[1].trim())}}
-  function addTag(t:string){const v=t.trim();if(!v||tags.includes(v)||tags.length>=8)return;setTags(p=>[...p,v]);setTagIn('')}
-  const input:React.CSSProperties={width:'100%',padding:'9px 12px',border:'1px solid var(--cream-dark)',borderRadius:4,fontFamily:'var(--font-dm-sans),sans-serif',fontSize:14,color:'var(--ink)',background:'white',outline:'none'}
-  const label:React.CSSProperties={display:'block',fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:5}
-  async function submit(){if(!name.trim()||!city.trim()||!state.trim()){setErr('Name, city, and state are required.');return}if(!pin){setErr('Please search for the location first.');return}setSaving(true);setErr('');try{const{data,error:ie}=await supabase.from('locations').insert({name:name.trim(),city:city.trim(),state:state.trim().slice(0,2).toUpperCase(),latitude:pin.lat,longitude:pin.lng,description:desc.trim()||null,access_type:access,tags,status:'pending',source:'community',added_by:user?.id??null}).select('id').single();if(ie)throw ie;if(photos.length>0&&data?.id){const{data:prof}=user?await supabase.from('profiles').select('full_name').eq('id',user.id).single():{data:null};for(const f of photos){try{const ext=f.name.split('.').pop(),path=`${user?.id??'guest'}/${data.id}/${Date.now()}.${ext}`;const{error:ue}=await supabase.storage.from('location-photos').upload(path,f,{contentType:f.type});if(ue)continue;const{data:u}=supabase.storage.from('location-photos').getPublicUrl(path);await supabase.from('location_photos').insert({location_id:data.id,user_id:user?.id??null,url:u.publicUrl,storage_path:path,is_private:false,caption:null,photographer_name:prof?.full_name??''})}catch{}}}setSaved(true)}catch(e:any){setErr('Could not submit — please try again.');console.error(e)}finally{setSaving(false)}}
-  return(<><div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,22,18,.6)',backdropFilter:'blur(4px)',zIndex:800}}/><div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:16,width:560,maxWidth:'94vw',maxHeight:'92vh',overflowY:'auto',zIndex:900,boxShadow:'0 24px 64px rgba(0,0,0,.3)'}}>
-    <div style={{padding:'1.5rem'}}>
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'1.25rem'}}><div><div style={{fontFamily:'var(--font-playfair),serif',fontSize:22,fontWeight:700,color:'var(--ink)',marginBottom:3}}>📍 Add a location</div><div style={{fontSize:13,color:'var(--ink-soft)',fontWeight:300}}>Know a great spot? Submit it to the community.</div></div><button onClick={onClose} style={{width:32,height:32,borderRadius:'50%',background:'var(--cream-dark)',border:'none',cursor:'pointer',fontSize:16,color:'var(--ink-soft)',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button></div>
-      {saved?<div style={{textAlign:'center',padding:'2rem 0'}}><div style={{fontSize:48,marginBottom:12}}>🎉</div><div style={{fontFamily:'var(--font-playfair),serif',fontSize:20,fontWeight:700,color:'var(--ink)',marginBottom:8}}>Thanks!</div><div style={{fontSize:14,color:'var(--ink-soft)',fontWeight:300,marginBottom:'1.5rem'}}>Your location has been submitted for review.</div><button onClick={onClose} style={{padding:'10px 24px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontSize:14,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>Done</button></div>
-      :<>
-        <div style={{marginBottom:'1.25rem'}}><label style={label}>Search for the location *</label><AddressSearch onSelect={onAddr} placeholder="Search by name or address…"/>{pin&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 13px',borderRadius:6,marginTop:8,background:'rgba(74,103,65,.08)',border:'1px solid rgba(74,103,65,.2)',fontSize:13,color:'var(--sage)'}}><span>📍</span><div style={{flex:1}}><div style={{fontWeight:500}}>Pin placed</div><div style={{fontSize:10,marginTop:1}}>{pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}</div></div><button onClick={()=>setPin(null)} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit'}}>Clear</button></div>}</div>
-        <div style={{marginBottom:'1rem'}}><label style={label}>Location name *</label><input value={name} onChange={e=>setName(e.target.value)} style={input}/></div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 90px',gap:10,marginBottom:'1rem'}}><div><label style={label}>City *</label><input value={city} onChange={e=>setCity(e.target.value)} style={input}/></div><div><label style={label}>State *</label><input value={state} onChange={e=>setState(e.target.value.slice(0,2).toUpperCase())} style={input} placeholder="MO" maxLength={2}/></div></div>
-        <div style={{marginBottom:'1rem'}}><label style={label}>Description</label><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3} style={{...input,resize:'vertical'}}/></div>
-        <div style={{marginBottom:'1rem'}}><label style={label}>Access</label><div style={{display:'flex',gap:8}}>{['public','private'].map(t=><button key={t} onClick={()=>setAccess(t)} style={{flex:1,padding:'9px',borderRadius:4,border:`1.5px solid ${access===t?'var(--gold)':'var(--cream-dark)'}`,background:access===t?'rgba(196,146,42,.08)':'white',color:access===t?'var(--gold)':'var(--ink-soft)',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>{t==='public'?'● Public':'🔒 Private'}</button>)}</div></div>
-        <div style={{marginBottom:'1.25rem'}}><label style={label}>Tags (up to 8)</label><div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:8}}>{SUGGESTIONS.map(t=><button key={t} onClick={()=>addTag(t)} style={{padding:'3px 9px',borderRadius:20,fontSize:11,cursor:'pointer',fontFamily:'inherit',border:'1px solid var(--sand)',background:tags.includes(t)?'var(--ink)':'var(--cream)',color:tags.includes(t)?'var(--cream)':'var(--ink-soft)'}}>{t}</button>)}</div>{tags.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>{tags.map(t=><span key={t} onClick={()=>setTags(p=>p.filter(x=>x!==t))} style={{padding:'3px 8px',borderRadius:20,fontSize:11,background:'var(--gold)',color:'var(--ink)',cursor:'pointer',fontWeight:500}}>{t} ✕</span>)}</div>}<div style={{display:'flex',gap:6}}><input value={tagIn} onChange={e=>setTagIn(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')addTag(tagIn)}} placeholder="Custom tag…" style={{...input,flex:1}}/><button onClick={()=>addTag(tagIn)} style={{padding:'9px 14px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',border:'none',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Add</button></div></div>
-        <div style={{marginBottom:'1.25rem'}}><div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}><label style={{...label,marginBottom:0}}>Photos (optional)</label><button onClick={()=>ref.current?.click()} style={{padding:'6px 12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',border:'none',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>+ Add</button><input ref={ref} type="file" accept="image/*" multiple onChange={e=>setPhotos(p=>[...p,...Array.from(e.target.files??[])].slice(0,10))} style={{display:'none'}}/></div>
-        {photos.length>0?<div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6}}>{photos.map((f,i)=><div key={i} style={{position:'relative',aspectRatio:'1',borderRadius:8,overflow:'hidden',border:'1px solid var(--cream-dark)'}}><img src={URL.createObjectURL(f)} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/><button onClick={()=>setPhotos(p=>p.filter((_,j)=>j!==i))} style={{position:'absolute',top:3,right:3,width:20,height:20,borderRadius:'50%',background:'rgba(26,22,18,.7)',border:'none',cursor:'pointer',fontSize:12,color:'white',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button></div>)}</div>
-        :<div onClick={()=>ref.current?.click()} style={{border:'2px dashed var(--cream-dark)',borderRadius:10,padding:'1rem',textAlign:'center',cursor:'pointer',background:'var(--cream)'}}><div style={{fontSize:24,marginBottom:4}}>📷</div><div style={{fontSize:12,color:'var(--ink-soft)',fontWeight:300}}>Tap to add photos</div></div>}</div>
-        {err&&<div style={{padding:'8px 12px',background:'rgba(181,75,42,.08)',border:'1px solid rgba(181,75,42,.2)',borderRadius:6,fontSize:13,color:'var(--rust)',marginBottom:'1rem'}}>{err}</div>}
-        <div style={{display:'flex',gap:10}}><button onClick={submit} disabled={saving||!name.trim()||!city.trim()||!state.trim()||!pin} style={{flex:1,padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontSize:14,fontWeight:500,cursor:'pointer',fontFamily:'inherit',opacity:saving||!name.trim()||!city.trim()||!state.trim()||!pin?.5:1}}>{saving?'Submitting…':!pin?'Search for location first':'Submit location →'}</button><button onClick={onClose} style={{padding:'12px 20px',borderRadius:4,background:'transparent',color:'var(--ink-soft)',border:'1px solid var(--sand)',fontSize:14,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button></div>
-      </>}
-    </div>
-  </div></>)
-}
 
 // ── Detail panel ──────────────────────────────────────────────────────────────
 // Defined OUTSIDE the main component so it's a stable React component.
@@ -292,7 +264,6 @@ export default function ExplorePage() {
   const [authOpen,       setAuthOpen]       = useState<'login'|'signup'|null>(null)
   const [toast,          setToast]          = useState<string|null>(null)
   const [searchQuery,    setSearchQuery]    = useState('')
-  const [showAddModal,   setShowAddModal]   = useState(false)
   const [showFilters,    setShowFilters]    = useState(false)
   const [accessFilter,   setAccessFilter]   = useState<AccessFilter>('All')
   const [selectedTags,   setSelectedTags]   = useState<string[]>([])
@@ -373,7 +344,7 @@ export default function ExplorePage() {
   }, [toast])
 
   useEffect(() => {
-    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowAddModal(false);setShowFilters(false);setShowPinSearch(false)}}
+    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowFilters(false);setShowPinSearch(false)}}
     window.addEventListener('keydown',onKey)
     return()=>window.removeEventListener('keydown',onKey)
   }, [])
@@ -506,10 +477,7 @@ export default function ExplorePage() {
           <button onClick={requestLocation} disabled={locLoading} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${locGranted?'var(--sage)':'var(--cream-dark)'}`,background:locGranted?'rgba(74,103,65,.08)':'white',color:locGranted?'var(--sage)':'var(--ink-soft)',cursor:locLoading?'default':'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,opacity:locLoading?.6:1}}>
             {locLoading?'Locating…':locGranted?'✓ Near me':'📡 Near me'}
           </button>
-          <button onClick={()=>setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:'1px solid rgba(196,146,42,.4)',background:'rgba(196,146,42,.08)',color:'var(--gold)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,marginLeft:'auto'}}>
-            + Add location
-          </button>
-          {accessFilter!=='All'&&<span onClick={()=>setAccessFilter('All')} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{accessFilter} ✕</span>}
+          {accessFilter!=='All'&&<span onClick={()=>setAccessFilter('All')} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0,marginLeft:'auto'}}>{accessFilter} ✕</span>}
           {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{t} ✕</span>)}
           {activeFilterCount>0&&<button onClick={clearAllFilters} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:0,fontWeight:500}}>Clear all</button>}
         </div>
@@ -636,7 +604,6 @@ export default function ExplorePage() {
       {detailLoc&&(
         <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} onOpenLightbox={openLightbox} user={user}/>
       )}
-      {showAddModal&&<AddLocationModal onClose={()=>setShowAddModal(false)} user={user}/>}
       {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={()=>setLightboxSrc(null)}/>
 

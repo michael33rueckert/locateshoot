@@ -78,7 +78,7 @@ export default function LocationGuideCard({
         className={guide.cover_photo_url ? undefined : bgClass}
         style={{
           position: 'relative',
-          height: 90,
+          aspectRatio: '4 / 3',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

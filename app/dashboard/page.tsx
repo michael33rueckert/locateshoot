@@ -60,7 +60,7 @@ export default function DashboardPage() {
         const prefs = (profileRes.data as any).preferences ?? {}
         const needsOnboarding = !prefs.onboarded_at && (!portfolioRes.data || portfolioRes.data.length === 0)
         if (needsOnboarding) {
-          window.location.href = '/onboarding'
+          window.location.href = '/onboarding/how-it-works'
           return
         }
       }
@@ -259,7 +259,7 @@ export default function DashboardPage() {
                         <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
-                          <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 110, position: 'relative', overflow: 'hidden' }}>
+                          <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ aspectRatio: '4 / 3', position: 'relative', overflow: 'hidden' }}>
                             {loc.preview_url && <img src={thumbUrl(loc.preview_url) ?? loc.preview_url} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                             {noPhotos && (
                               <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(196,146,42,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
