@@ -37,6 +37,10 @@ interface ClientMapProps {
   chosenIds: Array<number | string>
   disabledIds?: Array<number | string>
   onMarkerClick: (id: number) => void
+  /** Set false while the container is hidden (e.g. mobile map toggle). When it
+   *  flips back to true we run invalidateSize + re-fit so the map shows the
+   *  full pin spread instead of the Kansas City fallback center. */
+  visible?: boolean
 }
 
 export default function ClientMap({
@@ -45,6 +49,7 @@ export default function ClientMap({
   chosenIds,
   disabledIds = [],
   onMarkerClick,
+  visible = true,
 }: ClientMapProps) {
   const chosenSet   = new Set(chosenIds.map(String))
   const disabledSet = new Set(disabledIds.map(String))
@@ -97,44 +102,37 @@ export default function ClientMap({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fit bounds when the map is ready, has size, and locations are loaded ──
+  // ── Fit bounds when the map is ready, visible, and locations are loaded ──
   //
-  // Three things race on this page: the leaflet dynamic import, the
-  // /api/pick-data fetch, and on mobile the map container going from
-  // `display:none` to `display:block` when the user taps "View Map". This
-  // effect waits for all three and then fits the bounds exactly once, which
-  // is what makes clients land on a view that shows every pin.
+  // Three things race: leaflet's dynamic import, the /api/pick-data fetch,
+  // and on mobile the map container going from display:none → display:block
+  // when the user taps "View Map". This effect waits on all three and then
+  // fits the bounds exactly once, so clients land on a view that shows every
+  // pin instead of the fallback center.
   //
-  // The ResizeObserver is the mobile piece: `display:none` → block leaves
-  // leaflet sized 0×0 until the container actually gains dimensions, so we
-  // re-trigger on the first real size event and also call `invalidateSize`
-  // so tiles render against the correct viewport.
+  // Including `visible` in deps is the mobile piece: React re-runs the effect
+  // when the parent flips the flag, we call invalidateSize so leaflet notices
+  // the container just gained a box, and then fitBounds with the real
+  // viewport.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !containerRef.current) return
+    if (!visible || !mapReady || !mapRef.current) return
+    if (didInitialFitRef.current) return
     const map = mapRef.current
     const valid = locations.filter(l => isFiniteLatLng(l.lat, l.lng))
     if (valid.length === 0) return
 
-    function attemptFit() {
-      if (didInitialFitRef.current) return
-      if (!mapHasSize(map)) return
-      import('leaflet').then(L => {
+    import('leaflet').then(L => {
+      // Give the browser a frame so layout settles after display:none → block.
+      requestAnimationFrame(() => {
+        if (didInitialFitRef.current) return
         map.invalidateSize()
+        if (!mapHasSize(map)) return
         const bounds = L.latLngBounds(valid.map(l => [l.lat, l.lng] as [number, number]))
         map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15, animate: true })
         didInitialFitRef.current = true
       })
-    }
-
-    attemptFit()
-    if (didInitialFitRef.current) return
-
-    // Container might be 0×0 right now (hidden on mobile). Watch for the
-    // transition to non-zero and re-try.
-    const ro = new ResizeObserver(() => attemptFit())
-    ro.observe(containerRef.current)
-    return () => ro.disconnect()
-  }, [mapReady, locations])
+    })
+  }, [visible, mapReady, locations])
 
   // ── Redraw markers ─────────────────────────────────────────────────────────
   useEffect(() => {

@@ -61,6 +61,21 @@ export default function ClientPickerPage() {
   const [emailError,       setEmailError]       = useState('')
   const [submitting,       setSubmitting]       = useState(false)
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
+  // Desktop (≥769px) always shows the map. Below that the sidebar takes the
+  // screen and the map is hidden until `mobileMapVisible` flips. ClientMap
+  // uses this combined signal to decide when to run the initial fitBounds —
+  // otherwise the first fit happens while the container is display:none and
+  // leaflet stays parked on the fallback center.
+  const [isDesktopViewport, setIsDesktopViewport] = useState(true)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mql = window.matchMedia('(min-width: 769px)')
+    const apply = () => setIsDesktopViewport(mql.matches)
+    apply()
+    mql.addEventListener('change', apply)
+    return () => mql.removeEventListener('change', apply)
+  }, [])
+  const mapContainerVisible = isDesktopViewport || mobileMapVisible
   const emailRef     = useRef<HTMLInputElement>(null)
   const firstNameRef = useRef<HTMLInputElement>(null)
 
@@ -468,7 +483,7 @@ export default function ClientPickerPage() {
               ← List
             </button>
           )}
-          <ClientMap locations={locations} activeId={activeId} chosenIds={chosenIds} disabledIds={disabledIds} onMarkerClick={handleMarkerClick} />
+          <ClientMap locations={locations} activeId={activeId} chosenIds={chosenIds} disabledIds={disabledIds} onMarkerClick={handleMarkerClick} visible={mapContainerVisible} />
         </div>
       </div>
 
