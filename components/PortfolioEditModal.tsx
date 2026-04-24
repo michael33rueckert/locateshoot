@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import ImageLightbox from '@/components/ImageLightbox'
+import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 
 // Shared edit modal for a portfolio location. Mounted from the Dashboard and
 // the dedicated /portfolio page — both read/write the same portfolio_locations
@@ -42,7 +43,11 @@ export default function PortfolioEditModal({
   const [parkingInfo,    setParkingInfo]    = useState('')
   const [isSecret,setIsSecret]= useState(false)
   const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
+  const [lat,     setLat]     = useState<number | null>(null)
+  const [lng,     setLng]     = useState<number | null>(null)
+  const [pinLabel,setPinLabel]= useState<string>('')
   const [photos,  setPhotos]  = useState<PhotoRow[]>([])
+  const [draggingPhotoId, setDraggingPhotoId] = useState<string | null>(null)
   const [saving,  setSaving]  = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
@@ -72,6 +77,8 @@ export default function PortfolioEditModal({
         setParkingInfo(rowRes.data.parking_info ?? '')
         setIsSecret(!!rowRes.data.is_secret)
         setHideGooglePhotos(!!rowRes.data.hide_google_photos)
+        setLat(rowRes.data.latitude ?? null)
+        setLng(rowRes.data.longitude ?? null)
       }
       if (photosRes.data) setPhotos(photosRes.data)
       setLoading(false)
@@ -102,10 +109,26 @@ export default function PortfolioEditModal({
       parking_info:       parkingInfo.trim() || null,
       is_secret:          isSecret,
       hide_google_photos: hideGooglePhotos,
+      latitude:           lat,
+      longitude:          lng,
     }).eq('id', portfolioId)
     setSaving(false)
     if (error) { setErr(error.message); return }
     onSaved()
+  }
+
+  async function persistOrder(next: PhotoRow[], prev: PhotoRow[]) {
+    setPhotos(next)
+    setErr('')
+    const results = await Promise.all(next.map((p, idx) =>
+      supabase.from('location_photos').update({ sort_order: idx }).eq('id', p.id)
+    ))
+    const firstErr = results.find(r => r.error)?.error
+    if (firstErr) {
+      setPhotos(prev)
+      setErr(`Could not save photo order: ${firstErr.message}`)
+      console.error('persistOrder failed', firstErr)
+    }
   }
 
   async function movePhoto(photoId: string, direction: -1 | 1) {
@@ -113,23 +136,25 @@ export default function PortfolioEditModal({
     if (i < 0) return
     const j = i + direction
     if (j < 0 || j >= photos.length) return
-    const prev = photos
     const next = [...photos]
     ;[next[i], next[j]] = [next[j], next[i]]
-    setPhotos(next)
-    setErr('')
-    // Rewrite sort_order for every photo so the order is stable even if some
-    // rows had the same default 0 value.
-    const results = await Promise.all(next.map((p, idx) =>
-      supabase.from('location_photos').update({ sort_order: idx }).eq('id', p.id)
-    ))
-    const firstErr = results.find(r => r.error)?.error
-    if (firstErr) {
-      // Revert the optimistic UI so users don't think a stuck reorder worked.
-      setPhotos(prev)
-      setErr(`Could not save photo order: ${firstErr.message}`)
-      console.error('movePhoto failed', firstErr)
-    }
+    await persistOrder(next, photos)
+  }
+
+  async function dropPhoto(targetId: string) {
+    if (!draggingPhotoId || draggingPhotoId === targetId) return
+    const fromIdx = photos.findIndex(p => p.id === draggingPhotoId)
+    const toIdx   = photos.findIndex(p => p.id === targetId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const next = [...photos]
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    await persistOrder(next, photos)
+    setDraggingPhotoId(null)
+  }
+
+  function onPinSelect(r: AddressResult) {
+    setLat(r.lat); setLng(r.lng); setPinLabel(r.shortLabel ?? r.label ?? '')
   }
 
   async function deletePortfolio() {
@@ -203,6 +228,21 @@ export default function PortfolioEditModal({
             <div style={{ padding: '2rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)' }}>Loading…</div>
           ) : (
             <>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Location on the map</label>
+                <AddressSearch onSelect={onPinSelect} placeholder="Update the address to change coordinates…" />
+                {(lat != null && lng != null) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', borderRadius: 6, marginTop: 8, background: 'rgba(74,103,65,.08)', border: '1px solid rgba(74,103,65,.2)', fontSize: 12, color: 'var(--sage)' }}>
+                    <span>📍</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>Pinned</div>
+                      <div style={{ fontSize: 11, fontWeight: 300, color: 'var(--ink-soft)', marginTop: 1 }}>
+                        {pinLabel || `${lat.toFixed(4)}, ${lng.toFixed(4)}`}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Name *</label>
                 <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
@@ -305,14 +345,23 @@ export default function PortfolioEditModal({
                 ) : (
                   <>
                     <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 6 }}>
-                      Drag order with the arrows — the first photo is what clients see first.
+                      Drag to reorder, or use the ‹ › arrows on touch. Photo #1 is the thumbnail everywhere.
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 8 }}>
                       {photos.map((p, i) => {
                         const isFirst = i === 0
                         const isLast  = i === photos.length - 1
+                        const isDragging = draggingPhotoId === p.id
                         return (
-                          <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}>
+                          <div
+                            key={p.id}
+                            draggable
+                            onDragStart={e => { setDraggingPhotoId(p.id); e.dataTransfer.effectAllowed = 'move' }}
+                            onDragEnd={() => setDraggingPhotoId(null)}
+                            onDragOver={e => { if (draggingPhotoId && draggingPhotoId !== p.id) e.preventDefault() }}
+                            onDrop={e => { e.preventDefault(); dropPhoto(p.id) }}
+                            style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: `1px solid ${draggingPhotoId && draggingPhotoId !== p.id ? 'var(--gold)' : 'var(--cream-dark)'}`, cursor: 'grab', opacity: isDragging ? 0.4 : 1 }}
+                          >
                             <img src={p.url} alt="" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
                             <div style={{ position: 'absolute', top: 4, left: 4, padding: '1px 6px', borderRadius: 10, background: 'rgba(26,22,18,.75)', color: 'white', fontSize: 10, fontWeight: 600 }}>{i + 1}</div>
                             <button onClick={() => deletePhoto(p)} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>

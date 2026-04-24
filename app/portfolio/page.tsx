@@ -6,6 +6,11 @@ import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
+import MultiLocationModal from '@/components/MultiLocationModal'
+import {
+  shareFullPortfolio as shareFullPortfolioFn,
+  createMultiLocationLink as createMultiLocationLinkFn,
+} from '@/lib/portfolio-share'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
 // that the Dashboard's portfolio section does, so edits in either place stay in
@@ -25,15 +30,25 @@ interface PortfolioLocation {
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
+interface ProfileLite {
+  id: string
+  full_name: string | null
+  custom_domain: string | null
+  custom_domain_verified: boolean | null
+}
+
 export default function PortfolioPage() {
   const [userId,   setUserId]   = useState<string | null>(null)
+  const [profile,  setProfile]  = useState<ProfileLite | null>(null)
   const [locs,     setLocs]     = useState<PortfolioLocation[]>([])
   const [loading,  setLoading]  = useState(true)
   const [search,   setSearch]   = useState('')
   const [filter,   setFilter]   = useState<'all' | 'with-photos' | 'needs-photos'>('all')
   const [editing,  setEditing]  = useState<string | null>(null)
   const [showAdd,  setShowAdd]  = useState(false)
+  const [showMultiLocModal, setShowMultiLocModal] = useState(false)
   const [toast,    setToast]    = useState<string | null>(null)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -41,10 +56,17 @@ export default function PortfolioPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/'; return }
       setUserId(user.id)
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('id,full_name,custom_domain,custom_domain_verified')
+        .eq('id', user.id)
+        .single()
+      if (profileData) setProfile(profileData as any)
       const { data: rows } = await supabase
         .from('portfolio_locations')
-        .select('id,source_location_id,name,city,state,is_secret,created_at')
+        .select('id,source_location_id,name,city,state,is_secret,created_at,sort_order')
         .eq('user_id', user.id)
+        .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
       if (!rows || rows.length === 0) { setLocs([]); return }
 
@@ -107,6 +129,53 @@ export default function PortfolioPage() {
 
   const needsPhotosCount = locs.filter(l => l.photo_count === 0).length
 
+  async function handleShareFullPortfolio() {
+    if (!profile) return
+    const result = await shareFullPortfolioFn(profile)
+    if (!result.ok) { setToast(`⚠ ${result.error}`); return }
+    setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
+  }
+
+  async function handleCreateMultiLocation({ maxPicks, maxMiles }: { maxPicks: number; maxMiles: number | null }) {
+    if (!profile) return
+    const result = await createMultiLocationLinkFn(profile, { maxPicks, maxMiles })
+    if (!result.ok) { setToast(`⚠ ${result.error}`); return }
+    setShowMultiLocModal(false)
+    setToast(`🔗 ${maxPicks}-location link copied`)
+  }
+
+  // Reorder portfolio locations via HTML5 drag-and-drop. Writes sort_order on
+  // every row so the order is stable. Touch devices should use the arrow
+  // buttons below each tile instead (drag events are flaky on touch).
+  async function reorderPortfolio(fromId: string, toId: string) {
+    if (fromId === toId) return
+    const fromIdx = locs.findIndex(l => l.id === fromId)
+    const toIdx   = locs.findIndex(l => l.id === toId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const next = [...locs]
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    const prev = locs
+    setLocs(next)
+    const results = await Promise.all(next.map((l, idx) =>
+      supabase.from('portfolio_locations').update({ sort_order: idx }).eq('id', l.id)
+    ))
+    const err = results.find(r => r.error)?.error
+    if (err) {
+      setLocs(prev)
+      setToast(`⚠ Could not save order: ${err.message}`)
+      console.error('reorderPortfolio failed', err)
+    }
+  }
+
+  async function movePortfolio(id: string, direction: -1 | 1) {
+    const i = locs.findIndex(l => l.id === id)
+    if (i < 0) return
+    const j = i + direction
+    if (j < 0 || j >= locs.length) return
+    await reorderPortfolio(id, locs[j].id)
+  }
+
   return (
     <div style={{ minHeight: '100svh', background: 'var(--cream)' }}>
       <AppNav />
@@ -124,6 +193,12 @@ export default function PortfolioPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
             <button onClick={() => setShowAdd(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
             <Link href="/explore" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>+ Add from Explore</Link>
+            {locs.length > 0 && (
+              <>
+                <button onClick={handleShareFullPortfolio} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🔗 Share entire portfolio</button>
+                <button onClick={() => setShowMultiLocModal(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🧭 Multi-location link</button>
+              </>
+            )}
           </div>
         </div>
 
@@ -182,33 +257,72 @@ export default function PortfolioPage() {
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Try a different search or clear the filter.</div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
-            {filtered.map((loc, idx) => {
-              const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
-              const noPhotos = loc.photo_count === 0
-              return (
-                <div key={loc.id} onClick={() => setEditing(loc.id)}
-                  style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
-                  <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 140, position: 'relative', overflow: 'hidden' }}>
-                    {loc.preview_url && <img src={loc.preview_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-                    <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 10px', borderRadius: 999, background: noPhotos ? 'rgba(196,146,42,.95)' : 'rgba(74,103,65,.95)', color: 'white', fontSize: 10, fontWeight: 600 }}>
-                      {noPhotos ? '⚠ Add your photos' : `${loc.photo_count} yours`}
+          <>
+            {filter === 'all' && !search.trim() && locs.length > 1 && (
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 8, fontStyle: 'italic' }}>
+                Drag any card to reorder — or use the ‹ › arrows. The order here is how clients see your portfolio.
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+              {filtered.map((loc, idx) => {
+                const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
+                const noPhotos = loc.photo_count === 0
+                const isDragging = draggingId === loc.id
+                // Only allow reorder drag when the user isn't filtering/searching,
+                // otherwise the drop indexes would be misleading.
+                const canReorder = filter === 'all' && !search.trim() && locs.length > 1
+                return (
+                  <div key={loc.id} onClick={() => setEditing(loc.id)}
+                    draggable={canReorder}
+                    onDragStart={e => { if (canReorder) { setDraggingId(loc.id); e.dataTransfer.effectAllowed = 'move' } }}
+                    onDragEnd={() => setDraggingId(null)}
+                    onDragOver={e => { if (canReorder && draggingId && draggingId !== loc.id) e.preventDefault() }}
+                    onDrop={e => {
+                      if (!canReorder || !draggingId) return
+                      e.preventDefault()
+                      reorderPortfolio(draggingId, loc.id)
+                      setDraggingId(null)
+                    }}
+                    style={{ borderRadius: 10, overflow: 'hidden', border: `1px solid ${draggingId && draggingId !== loc.id ? 'var(--gold)' : 'var(--cream-dark)'}`, background: 'white', cursor: canReorder ? 'grab' : 'pointer', transition: 'all .15s', opacity: isDragging ? 0.4 : 1, position: 'relative' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
+                    onMouseLeave={e => { if (!draggingId) { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' } }}>
+                    <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 140, position: 'relative', overflow: 'hidden' }}>
+                      {loc.preview_url && <img src={loc.preview_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                      {noPhotos && (
+                        <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(196,146,42,.95)', color: 'white', fontSize: 10, fontWeight: 600 }}>
+                          ⚠ Add your photos
+                        </div>
+                      )}
+                      {loc.is_secret && <div style={{ position: 'absolute', top: 8, left: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(124,92,191,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>🤫 Secret</div>}
                     </div>
-                    {loc.is_secret && <div style={{ position: 'absolute', top: 8, left: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(124,92,191,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>🤫 Secret</div>}
-                  </div>
-                  <div style={{ padding: '12px 14px' }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6 }}>📍 {cityLine || '—'}</div>
-                    <div style={{ fontSize: 11, color: noPhotos ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: noPhotos ? 600 : 300 }}>
-                      {noPhotos ? '→ Tap to upload your photos' : 'Tap to edit →'}
+                    <div style={{ padding: '12px 14px' }}>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6 }}>📍 {cityLine || '—'}</div>
+                      <div style={{ fontSize: 11, color: noPhotos ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: noPhotos ? 600 : 300 }}>
+                        {noPhotos ? '→ Tap to upload your photos' : 'Tap to edit →'}
+                      </div>
                     </div>
+                    {canReorder && (
+                      <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); movePortfolio(loc.id, -1) }}
+                          disabled={locs.findIndex(l => l.id === loc.id) === 0}
+                          aria-label="Move up"
+                          style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: locs.findIndex(l => l.id === loc.id) === 0 ? 0.35 : 1 }}
+                        >‹</button>
+                        <button
+                          onClick={e => { e.stopPropagation(); movePortfolio(loc.id, 1) }}
+                          disabled={locs.findIndex(l => l.id === loc.id) === locs.length - 1}
+                          aria-label="Move down"
+                          style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: locs.findIndex(l => l.id === loc.id) === locs.length - 1 ? 0.35 : 1 }}
+                        >›</button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -226,6 +340,12 @@ export default function PortfolioPage() {
           userId={userId}
           onClose={() => setShowAdd(false)}
           onCreated={() => { setShowAdd(false); load(); setToast('✓ Added to your portfolio') }}
+        />
+      )}
+      {showMultiLocModal && (
+        <MultiLocationModal
+          onClose={() => setShowMultiLocModal(false)}
+          onCreate={handleCreateMultiLocation}
         />
       )}
 

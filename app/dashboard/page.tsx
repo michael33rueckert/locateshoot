@@ -8,7 +8,12 @@ import ImageLightbox from '@/components/ImageLightbox'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
+import MultiLocationModal from '@/components/MultiLocationModal'
 import { buildShareUrl } from '@/lib/custom-domain'
+import {
+  shareFullPortfolio as shareFullPortfolioFn,
+  createMultiLocationLink as createMultiLocationLinkFn,
+} from '@/lib/portfolio-share'
 
 interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
 interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
@@ -70,7 +75,7 @@ export default function DashboardPage() {
       const [profileRes, sharesRes, portfolioRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email,custom_domain,custom_domain_verified,preferences').eq('id', user.id).single(),
         supabase.from('share_links').select('id,session_name,created_at,expires_at,location_ids,secret_ids,portfolio_location_ids,slug').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10),
-        supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,is_secret,created_at').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,is_secret,created_at,sort_order').eq('user_id', user.id).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
       ])
 
       // Send first-time users to onboarding before the dashboard loads.
@@ -172,62 +177,19 @@ export default function DashboardPage() {
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
 
   async function shareFullPortfolio() {
-    if (!profile?.id) return
-    // Reuse existing single-pick full-portfolio link if one exists, otherwise create one.
-    let link = permanentLinks.find(l => l.is_full_portfolio && (l as any).max_picks !== undefined && ((l as any).max_picks ?? 1) <= 1)
-    // Fallback: also accept legacy links that predate max_picks being selected.
-    if (!link) link = permanentLinks.find(l => l.is_full_portfolio)
-    if (!link) {
-      const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)
-      const slug  = `${clean(profile.full_name || 'photographer')}-portfolio-${Date.now().toString(36)}`
-      const { data, error } = await supabase.from('share_links').insert({
-        user_id:                profile.id,
-        slug,
-        session_name:           'My portfolio',
-        message:                null,
-        photographer_name:      profile.full_name ?? null,
-        portfolio_location_ids: null,
-        location_ids:           [],
-        secret_ids:             [],
-        expires_at:             null,
-        is_permanent:           true,
-        is_full_portfolio:      true,
-        max_picks:              1,
-      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
-      if (error || !data) { setToast('⚠ Could not create portfolio link'); return }
-      link = { ...data, picks: [], expanded: false }
-      setPermanentLinks(prev => [link!, ...prev])
-    }
-    const url = buildShareUrl(link.slug, { customDomain: profile.custom_domain, customDomainVerified: profile.custom_domain_verified })
-    navigator.clipboard?.writeText(url).catch(() => {})
+    if (!profile) return
+    const result = await shareFullPortfolioFn(profile)
+    if (!result.ok) { setToast(`⚠ ${result.error}`); return }
+    // Refresh the list so a newly-created link shows up in the UI.
+    loadData()
     setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
   }
 
   async function createMultiLocationLink({ maxPicks, maxMiles }: { maxPicks: number; maxMiles: number | null }) {
-    if (!profile?.id) return
-    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)
-    const slug  = `${clean(profile.full_name || 'photographer')}-portfolio-${maxPicks}loc-${Date.now().toString(36)}`
-    const sessionName = `My portfolio — ${maxPicks}-location session`
-    const { data, error } = await supabase.from('share_links').insert({
-      user_id:                   profile.id,
-      slug,
-      session_name:              sessionName,
-      message:                   null,
-      photographer_name:         profile.full_name ?? null,
-      portfolio_location_ids:    null,
-      location_ids:              [],
-      secret_ids:                [],
-      expires_at:                null,
-      is_permanent:              true,
-      is_full_portfolio:         true,
-      max_picks:                 maxPicks,
-      max_pick_distance_miles:   maxMiles,
-    }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
-    if (error || !data) { setToast('⚠ Could not create multi-location link'); return }
-    const link = { ...data, picks: [], expanded: false }
-    setPermanentLinks(prev => [link, ...prev])
-    const url = buildShareUrl(link.slug, { customDomain: profile.custom_domain, customDomainVerified: profile.custom_domain_verified })
-    navigator.clipboard?.writeText(url).catch(() => {})
+    if (!profile) return
+    const result = await createMultiLocationLinkFn(profile, { maxPicks, maxMiles })
+    if (!result.ok) { setToast(`⚠ ${result.error}`); return }
+    loadData()
     setToast(`🔗 ${maxPicks}-location link copied`)
   }
 
@@ -317,7 +279,6 @@ export default function DashboardPage() {
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     My Portfolio
                     {portfolioLocs.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(196,146,42,.1)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)' }}>{portfolioLocs.length}</span>}
-                    <Link href="/portfolio" style={{ marginLeft: 4, fontSize: 12, fontWeight: 500, color: 'var(--gold)', textDecoration: 'none' }}>View all →</Link>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Your curated locations — shown to clients on share links.</div>
                 </div>
@@ -338,30 +299,43 @@ export default function DashboardPage() {
                   <Link href="/explore" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Browse Explore →</Link>
                 </div>
               ) : (
-                <div style={{ padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
-                  {portfolioLocs.map((loc, idx) => {
-                    const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
-                    const noPhotos = loc.photo_count === 0
-                    return (
-                      <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
-                        <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 110, position: 'relative', overflow: 'hidden' }}>
-                          {loc.preview_url && <img src={loc.preview_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-                          <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: noPhotos ? 'rgba(196,146,42,.9)' : 'rgba(74,103,65,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
-                            {noPhotos ? '⚠ Add your photos' : `${loc.photo_count} yours`}
+                <div style={{ position: 'relative' }}>
+                  <div style={{ padding: '1rem 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
+                    {portfolioLocs.slice(0, 6).map((loc, idx) => {
+                      const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
+                      const noPhotos = loc.photo_count === 0
+                      return (
+                        <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
+                          <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 110, position: 'relative', overflow: 'hidden' }}>
+                            {loc.preview_url && <img src={loc.preview_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                            {noPhotos && (
+                              <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(196,146,42,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
+                                ⚠ Add your photos
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ padding: '10px 12px' }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: noPhotos ? 8 : 4 }}>📍 {cityLine || '—'}</div>
+                            {noPhotos
+                              ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.4 }}>→ Add your professional photos</div>
+                              : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
                           </div>
                         </div>
-                        <div style={{ padding: '10px 12px' }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: noPhotos ? 8 : 4 }}>📍 {cityLine || '—'}</div>
-                          {noPhotos
-                            ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.4 }}>→ Add your professional photos</div>
-                            : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
+                  {/* Fade the bottom row + centered "View all" CTA when there's more than fits on the preview. */}
+                  {portfolioLocs.length > 6 && (
+                    <div style={{ pointerEvents: 'none', position: 'absolute', left: 0, right: 0, bottom: 0, height: 90, background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,.95) 70%, white 100%)' }} />
+                  )}
+                  <div style={{ padding: portfolioLocs.length > 6 ? '1.25rem 1.25rem 1rem' : '0.75rem 1.25rem 1rem', display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+                    <Link href="/portfolio" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 20, border: '1px solid var(--cream-dark)', background: 'white', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
+                      View all {portfolioLocs.length > 6 ? `${portfolioLocs.length} locations` : 'in portfolio'} →
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -746,80 +720,3 @@ function CreatePermanentLinkModal({
   )
 }
 
-// ── Multi-Location Link Modal ─────────────────────────────────────────────────
-// Configures max_picks + max_pick_distance_miles, then creates a new
-// auto-syncing full-portfolio link so the photographer can send a single URL
-// whenever they run, say, a 2-location proximity session.
-function MultiLocationModal({
-  onClose,
-  onCreate,
-}: {
-  onClose: () => void
-  onCreate: (settings: { maxPicks: number; maxMiles: number | null }) => Promise<void>
-}) {
-  const [maxPicks, setMaxPicks] = useState(2)
-  const [maxMiles, setMaxMiles] = useState<string>('5')
-  const [saving, setSaving]     = useState(false)
-
-  async function submit() {
-    const mi = parseFloat(maxMiles)
-    const parsedMiles = Number.isFinite(mi) && mi > 0 ? mi : null
-    setSaving(true)
-    try { await onCreate({ maxPicks, maxMiles: parsedMiles }) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(6px)', zIndex: 1000 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 460, maxWidth: '94vw', padding: '1.75rem', zIndex: 1001, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
-        <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>🧭 Multi-location link</div>
-        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, marginBottom: '1.25rem' }}>
-          Auto-syncs with your full portfolio. Lets clients pick more than one location — enforce a max distance between picks so they stay within your session window.
-        </div>
-
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 6 }}>
-            Client can pick up to
-          </label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {[2, 3, 4, 5].map(n => (
-              <button key={n} onClick={() => setMaxPicks(n)}
-                style={{ padding: '8px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', border: `1.5px solid ${maxPicks === n ? 'var(--gold)' : 'var(--cream-dark)'}`, background: maxPicks === n ? 'rgba(196,146,42,.12)' : 'white', color: maxPicks === n ? 'var(--gold)' : 'var(--ink-soft)' }}>
-                {n} locations
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 6 }}>
-            Max distance between picks (miles)
-          </label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="number"
-              min={0}
-              step={0.5}
-              value={maxMiles}
-              onChange={e => setMaxMiles(e.target.value)}
-              placeholder="e.g. 5"
-              style={{ flex: 1, padding: '10px 12px', border: '1px solid var(--cream-dark)', borderRadius: 6, fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)', outline: 'none' }}
-            />
-            <button onClick={() => setMaxMiles('')} style={{ padding: '9px 12px', borderRadius: 6, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, color: 'var(--ink-soft)', fontFamily: 'inherit', cursor: 'pointer' }}>No limit</button>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontStyle: 'italic' }}>
-            Leave blank for no cap. For a 1-hour session, 3–5 miles is typical.
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={submit} disabled={saving} style={{ flex: 1, padding: '12px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Creating…' : `Create & copy ${maxPicks}-location link`}
-          </button>
-          <button onClick={onClose} disabled={saving} style={{ padding: '12px 18px', borderRadius: 6, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-        </div>
-      </div>
-    </>
-  )
-}
