@@ -892,47 +892,87 @@ function DetailPhotoGallery({
   const activePhotos = tab === 'photographer' ? photographerPhotos : googlePhotos
   const hasPhotos    = activePhotos.length > 0
   const hasMultiple  = activePhotos.length > 1
-  const current      = activePhotos[Math.min(idx, Math.max(0, activePhotos.length - 1))]
   const heroHeight   = 'clamp(260px, 44vw, 380px)' // closer to a natural photo aspect ratio
+  const stripRef     = useRef<HTMLDivElement>(null)
+
+  // Keep the idx counter + thumbnail-row highlight in sync with the hero's
+  // scroll position. Division by clientWidth works because every image is
+  // pinned to the container width via CSS.
+  function handleHeroScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget
+    if (el.clientWidth === 0) return
+    const next = Math.round(el.scrollLeft / el.clientWidth)
+    if (next !== idx) setIdx(next)
+  }
+
+  // When the strip already exists, snap the hero back to the first image
+  // whenever the tab or location changes. Otherwise switching tabs would
+  // leave the user mid-scroll on a different image than `idx=0` suggests.
+  useEffect(() => {
+    if (!stripRef.current) return
+    stripRef.current.scrollTo({ left: 0, behavior: 'instant' as ScrollBehavior })
+  }, [tab, loc.id])
+
+  // Tapping a thumbnail below the hero should scroll-snap the hero to that
+  // image (instead of only updating state, which would desync).
+  function goToIdx(i: number) {
+    const el = stripRef.current
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' })
+    else setIdx(i)
+  }
 
   return (
     <>
       <div className={hasPhotos ? undefined : loc.bg} style={{ height: heroHeight, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
         {hasPhotos ? (
-          <img
-            // Photographer photos run through the medium-resize helper so the
-            // hero renders a ~1200px JPEG instead of a 5–8 MB original. Google
-            // URLs already come in resized and the helper no-ops on them.
-            src={mediumUrl(current) ?? current}
-            alt={loc.name}
-            decoding="async"
-            onClick={() => onOpenLightbox(activePhotos, idx)}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
-          />
+          <div
+            ref={stripRef}
+            onScroll={handleHeroScroll}
+            style={{
+              position: 'absolute', inset: 0,
+              display: 'flex',
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              scrollSnapType: 'x mandatory',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+            }}
+          >
+            <style>{`.pick-hero-strip::-webkit-scrollbar { display: none; }`}</style>
+            {activePhotos.map((src, i) => (
+              <img
+                key={i}
+                // Photographer photos run through the medium-resize helper so
+                // the hero renders a ~1200px JPEG instead of a 5–8 MB original.
+                // Google URLs already come in resized and the helper no-ops.
+                src={mediumUrl(src) ?? src}
+                alt=""
+                decoding="async"
+                loading={i === 0 ? 'eager' : 'lazy'}
+                onClick={() => onOpenLightbox(activePhotos, i)}
+                style={{
+                  width: '100%', height: '100%',
+                  flexShrink: 0,
+                  objectFit: 'cover',
+                  cursor: 'zoom-in',
+                  scrollSnapAlign: 'start',
+                  scrollSnapStop: 'always',
+                }}
+              />
+            ))}
+          </div>
         ) : googleLoading && !hasPhotographer ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,.2)', borderTop: '2px solid rgba(255,255,255,.7)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
           </div>
         ) : null}
-        <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: loc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1 }}>
+        <div style={{ position: 'absolute', top: 12, left: 12, padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.85)' : 'rgba(181,75,42,.85)', color: loc.access === 'public' ? '#c8e8c4' : '#ffd0c0', zIndex: 1, pointerEvents: 'none' }}>
           {loc.access === 'public' ? '● Public' : '🔒 Private'}
         </div>
         {hasMultiple && (
-          <>
-            <button
-              onClick={e => { e.stopPropagation(); setIdx(i => (i - 1 + activePhotos.length) % activePhotos.length) }}
-              aria-label="Previous photo"
-              style={{ position: 'absolute', top: '50%', left: 10, transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', zIndex: 2 }}
-            >‹</button>
-            <button
-              onClick={e => { e.stopPropagation(); setIdx(i => (i + 1) % activePhotos.length) }}
-              aria-label="Next photo"
-              style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', zIndex: 2 }}
-            >›</button>
-            <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(26,22,18,.7)', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'rgba(255,255,255,.85)', fontVariantNumeric: 'tabular-nums', zIndex: 2 }}>
-              {idx + 1} / {activePhotos.length}
-            </div>
-          </>
+          <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(26,22,18,.7)', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'rgba(255,255,255,.85)', fontVariantNumeric: 'tabular-nums', zIndex: 2, pointerEvents: 'none' }}>
+            {idx + 1} / {activePhotos.length}
+          </div>
         )}
       </div>
 
@@ -966,7 +1006,7 @@ function DetailPhotoGallery({
           {activePhotos.map((url, i) => (
             <div
               key={i}
-              onClick={() => setIdx(i)}
+              onClick={() => goToIdx(i)}
               style={{ width: 56, height: 56, borderRadius: 6, flexShrink: 0, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${idx === i ? 'var(--gold)' : 'transparent'}` }}
             >
               <img src={thumbUrl(url) ?? url} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

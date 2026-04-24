@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import ImageLightbox from '@/components/ImageLightbox'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import { thumbUrl } from '@/lib/image'
+import { useReorderDrag } from '@/hooks/useReorderDrag'
 
 // Shared edit modal for a portfolio location. Mounted from the Dashboard and
 // the dedicated /portfolio page — both read/write the same portfolio_locations
@@ -48,7 +49,6 @@ export default function PortfolioEditModal({
   const [lng,     setLng]     = useState<number | null>(null)
   const [pinLabel,setPinLabel]= useState<string>('')
   const [photos,  setPhotos]  = useState<PhotoRow[]>([])
-  const [draggingPhotoId, setDraggingPhotoId] = useState<string | null>(null)
   const [saving,  setSaving]  = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
@@ -132,27 +132,18 @@ export default function PortfolioEditModal({
     }
   }
 
-  async function movePhoto(photoId: string, direction: -1 | 1) {
-    const i = photos.findIndex(p => p.id === photoId)
-    if (i < 0) return
-    const j = i + direction
-    if (j < 0 || j >= photos.length) return
-    const next = [...photos]
-    ;[next[i], next[j]] = [next[j], next[i]]
-    await persistOrder(next, photos)
-  }
-
-  async function dropPhoto(targetId: string) {
-    if (!draggingPhotoId || draggingPhotoId === targetId) return
-    const fromIdx = photos.findIndex(p => p.id === draggingPhotoId)
-    const toIdx   = photos.findIndex(p => p.id === targetId)
+  async function reorderPhoto(fromId: string, toId: string) {
+    if (fromId === toId) return
+    const fromIdx = photos.findIndex(p => p.id === fromId)
+    const toIdx   = photos.findIndex(p => p.id === toId)
     if (fromIdx < 0 || toIdx < 0) return
     const next = [...photos]
     const [moved] = next.splice(fromIdx, 1)
     next.splice(toIdx, 0, moved)
     await persistOrder(next, photos)
-    setDraggingPhotoId(null)
   }
+
+  const photoReorder = useReorderDrag(reorderPhoto)
 
   function onPinSelect(r: AddressResult) {
     setLat(r.lat); setLng(r.lng); setPinLabel(r.shortLabel ?? r.label ?? '')
@@ -346,40 +337,32 @@ export default function PortfolioEditModal({
                 ) : (
                   <>
                     <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 6 }}>
-                      Drag to reorder, or use the ‹ › arrows on touch. Photo #1 is the thumbnail everywhere.
+                      Press and hold any photo, then drag to reorder. Photo #1 is the thumbnail everywhere.
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 8 }}>
                       {photos.map((p, i) => {
-                        const isFirst = i === 0
-                        const isLast  = i === photos.length - 1
-                        const isDragging = draggingPhotoId === p.id
+                        const isDragging = photoReorder.draggingId === p.id
+                        const isOver     = photoReorder.overId === p.id && photoReorder.draggingId && photoReorder.draggingId !== p.id
+                        const bind       = photoReorder.bindItem(p.id)
                         return (
                           <div
                             key={p.id}
-                            draggable
-                            onDragStart={e => { setDraggingPhotoId(p.id); e.dataTransfer.effectAllowed = 'move' }}
-                            onDragEnd={() => setDraggingPhotoId(null)}
-                            onDragOver={e => { if (draggingPhotoId && draggingPhotoId !== p.id) e.preventDefault() }}
-                            onDrop={e => { e.preventDefault(); dropPhoto(p.id) }}
-                            style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: `1px solid ${draggingPhotoId && draggingPhotoId !== p.id ? 'var(--gold)' : 'var(--cream-dark)'}`, cursor: 'grab', opacity: isDragging ? 0.4 : 1 }}
+                            {...bind}
+                            style={{
+                              position: 'relative',
+                              aspectRatio: '1',
+                              borderRadius: 6,
+                              overflow: 'hidden',
+                              border: `1px solid ${isOver ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                              cursor: 'grab',
+                              opacity: isDragging ? 0.4 : 1,
+                              touchAction: 'manipulation',
+                              userSelect: 'none',
+                            }}
                           >
                             <img src={thumbUrl(p.url) ?? p.url} alt="" loading="lazy" decoding="async" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
                             <div style={{ position: 'absolute', top: 4, left: 4, padding: '1px 6px', borderRadius: 10, background: 'rgba(26,22,18,.75)', color: 'white', fontSize: 10, fontWeight: 600 }}>{i + 1}</div>
-                            <button onClick={() => deletePhoto(p)} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                            <div style={{ position: 'absolute', bottom: 4, left: 4, right: 4, display: 'flex', gap: 4, justifyContent: 'space-between' }}>
-                              <button
-                                onClick={() => movePhoto(p.id, -1)}
-                                disabled={isFirst}
-                                aria-label="Move left"
-                                style={{ flex: 1, padding: '4px 0', borderRadius: 4, background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: isFirst ? 'default' : 'pointer', fontSize: 13, opacity: isFirst ? 0.35 : 1 }}
-                              >‹</button>
-                              <button
-                                onClick={() => movePhoto(p.id, 1)}
-                                disabled={isLast}
-                                aria-label="Move right"
-                                style={{ flex: 1, padding: '4px 0', borderRadius: 4, background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: isLast ? 'default' : 'pointer', fontSize: 13, opacity: isLast ? 0.35 : 1 }}
-                              >›</button>
-                            </div>
+                            <button onClick={e => { e.stopPropagation(); deletePhoto(p) }} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                           </div>
                         )
                       })}

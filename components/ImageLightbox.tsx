@@ -138,9 +138,13 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
 
       {hasMultiple && (
         <>
+          {/* Side + bottom arrows are only useful for mouse/keyboard users.
+              Touch devices swipe (onTouchStart/End handlers above), so hide
+              the chrome on ≤1023px to match the rest of the app's touch UX. */}
           <button
             onClick={e => { e.stopPropagation(); goPrev() }}
             aria-label="Previous image"
+            className="lightbox-side-arrow"
             style={{ ...arrowStyle, left: 16 }}
           >
             ‹
@@ -148,12 +152,15 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
           <button
             onClick={e => { e.stopPropagation(); goNext() }}
             aria-label="Next image"
+            className="lightbox-side-arrow"
             style={{ ...arrowStyle, right: 16 }}
           >
             ›
           </button>
 
-          {/* Bottom arrow pair + counter — easier to reach with thumbs on mobile. */}
+          {/* Bottom counter pill — shows "N of M". On desktop keeps the
+              arrow buttons on either side; on touch breakpoints we drop
+              the arrows and only show the counter. */}
           <div
             onClick={e => e.stopPropagation()}
             style={{
@@ -175,6 +182,7 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
             <button
               onClick={goPrev}
               aria-label="Previous image"
+              className="lightbox-bottom-arrow"
               style={{ background: 'transparent', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer', fontFamily: 'inherit', padding: '0 6px', lineHeight: 1 }}
             >
               ‹
@@ -185,6 +193,7 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
             <button
               onClick={goNext}
               aria-label="Next image"
+              className="lightbox-bottom-arrow"
               style={{ background: 'transparent', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer', fontFamily: 'inherit', padding: '0 6px', lineHeight: 1 }}
             >
               ›
@@ -192,6 +201,11 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
           </div>
         </>
       )}
+      <style>{`
+        @media (max-width: 1023px) {
+          .lightbox-side-arrow, .lightbox-bottom-arrow { display: none !important; }
+        }
+      `}</style>
     </div>
   )
 }

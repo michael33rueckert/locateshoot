@@ -8,6 +8,7 @@ import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import { shareFullPortfolio as shareFullPortfolioFn } from '@/lib/portfolio-share'
 import { thumbUrl } from '@/lib/image'
+import { useReorderDrag } from '@/hooks/useReorderDrag'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
 // that the Dashboard's portfolio section does, so edits in either place stay in
@@ -44,7 +45,6 @@ export default function PortfolioPage() {
   const [editing,  setEditing]  = useState<string | null>(null)
   const [showAdd,  setShowAdd]  = useState(false)
   const [toast,    setToast]    = useState<string | null>(null)
-  const [draggingId, setDraggingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -128,9 +128,10 @@ export default function PortfolioPage() {
     setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
   }
 
-  // Reorder portfolio locations via HTML5 drag-and-drop. Writes sort_order on
-  // every row so the order is stable. Touch devices should use the arrow
-  // buttons below each tile instead (drag events are flaky on touch).
+  // Reorder portfolio locations. Writes sort_order on every row so the order
+  // is stable. Driven by the useReorderDrag hook below — works on mouse,
+  // pen, and touch via Pointer Events (HTML5 drag-and-drop was touch-hostile,
+  // which is why the old implementation needed ‹ › arrow fallbacks).
   async function reorderPortfolio(fromId: string, toId: string) {
     if (fromId === toId) return
     const fromIdx = locs.findIndex(l => l.id === fromId)
@@ -152,13 +153,7 @@ export default function PortfolioPage() {
     }
   }
 
-  async function movePortfolio(id: string, direction: -1 | 1) {
-    const i = locs.findIndex(l => l.id === id)
-    if (i < 0) return
-    const j = i + direction
-    if (j < 0 || j >= locs.length) return
-    await reorderPortfolio(id, locs[j].id)
-  }
+  const reorder = useReorderDrag(reorderPortfolio)
 
   return (
     <div style={{ minHeight: '100svh', background: 'var(--cream)' }}>
@@ -254,32 +249,35 @@ export default function PortfolioPage() {
           <>
             {filter === 'all' && !search.trim() && locs.length > 1 && (
               <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 8, fontStyle: 'italic' }}>
-                Drag any card to reorder — or use the ‹ › arrows. The order here is how clients see your portfolio.
+                Press and hold any card, then drag to reorder. The order here is how clients see your portfolio.
               </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
               {filtered.map((loc, idx) => {
                 const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
                 const noPhotos = loc.photo_count === 0
-                const isDragging = draggingId === loc.id
+                const isDragging = reorder.draggingId === loc.id
                 // Only allow reorder drag when the user isn't filtering/searching,
                 // otherwise the drop indexes would be misleading.
                 const canReorder = filter === 'all' && !search.trim() && locs.length > 1
+                const bind = canReorder ? reorder.bindItem(loc.id) : {}
+                const isOver = reorder.overId === loc.id && reorder.draggingId && reorder.draggingId !== loc.id
                 return (
                   <div key={loc.id} onClick={() => setEditing(loc.id)}
-                    draggable={canReorder}
-                    onDragStart={e => { if (canReorder) { setDraggingId(loc.id); e.dataTransfer.effectAllowed = 'move' } }}
-                    onDragEnd={() => setDraggingId(null)}
-                    onDragOver={e => { if (canReorder && draggingId && draggingId !== loc.id) e.preventDefault() }}
-                    onDrop={e => {
-                      if (!canReorder || !draggingId) return
-                      e.preventDefault()
-                      reorderPortfolio(draggingId, loc.id)
-                      setDraggingId(null)
+                    {...bind}
+                    style={{
+                      borderRadius: 10, overflow: 'hidden',
+                      border: `1px solid ${isOver ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                      background: 'white',
+                      cursor: canReorder ? 'grab' : 'pointer',
+                      transition: 'all .15s',
+                      opacity: isDragging ? 0.4 : 1,
+                      position: 'relative',
+                      touchAction: canReorder ? 'manipulation' : 'auto',
+                      userSelect: 'none',
                     }}
-                    style={{ borderRadius: 10, overflow: 'hidden', border: `1px solid ${draggingId && draggingId !== loc.id ? 'var(--gold)' : 'var(--cream-dark)'}`, background: 'white', cursor: canReorder ? 'grab' : 'pointer', transition: 'all .15s', opacity: isDragging ? 0.4 : 1, position: 'relative' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
-                    onMouseLeave={e => { if (!draggingId) { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' } }}>
+                    onMouseLeave={e => { if (!reorder.draggingId) { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' } }}>
                     <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 140, position: 'relative', overflow: 'hidden' }}>
                       {loc.preview_url && <img src={thumbUrl(loc.preview_url) ?? loc.preview_url} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                       {noPhotos && (
@@ -296,22 +294,6 @@ export default function PortfolioPage() {
                         {noPhotos ? '→ Tap to upload your photos' : 'Tap to edit →'}
                       </div>
                     </div>
-                    {canReorder && (
-                      <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', gap: 4 }}>
-                        <button
-                          onClick={e => { e.stopPropagation(); movePortfolio(loc.id, -1) }}
-                          disabled={locs.findIndex(l => l.id === loc.id) === 0}
-                          aria-label="Move up"
-                          style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: locs.findIndex(l => l.id === loc.id) === 0 ? 0.35 : 1 }}
-                        >‹</button>
-                        <button
-                          onClick={e => { e.stopPropagation(); movePortfolio(loc.id, 1) }}
-                          disabled={locs.findIndex(l => l.id === loc.id) === locs.length - 1}
-                          aria-label="Move down"
-                          style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: locs.findIndex(l => l.id === loc.id) === locs.length - 1 ? 0.35 : 1 }}
-                        >›</button>
-                      </div>
-                    )}
                   </div>
                 )
               })}
