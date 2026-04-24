@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import ImageLightbox from '@/components/ImageLightbox'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import { thumbUrl } from '@/lib/image'
 
 // Shared edit modal for a portfolio location. Mounted from the Dashboard and
 // the dedicated /portfolio page — both read/write the same portfolio_locations
@@ -362,7 +363,7 @@ export default function PortfolioEditModal({
                             onDrop={e => { e.preventDefault(); dropPhoto(p.id) }}
                             style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: `1px solid ${draggingPhotoId && draggingPhotoId !== p.id ? 'var(--gold)' : 'var(--cream-dark)'}`, cursor: 'grab', opacity: isDragging ? 0.4 : 1 }}
                           >
-                            <img src={p.url} alt="" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
+                            <img src={thumbUrl(p.url) ?? p.url} alt="" loading="lazy" decoding="async" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
                             <div style={{ position: 'absolute', top: 4, left: 4, padding: '1px 6px', borderRadius: 10, background: 'rgba(26,22,18,.75)', color: 'white', fontSize: 10, fontWeight: 600 }}>{i + 1}</div>
                             <button onClick={() => deletePhoto(p)} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                             <div style={{ position: 'absolute', bottom: 4, left: 4, right: 4, display: 'flex', gap: 4, justifyContent: 'space-between' }}>

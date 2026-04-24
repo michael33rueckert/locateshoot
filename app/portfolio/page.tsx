@@ -11,6 +11,7 @@ import {
   shareFullPortfolio as shareFullPortfolioFn,
   createMultiLocationLink as createMultiLocationLinkFn,
 } from '@/lib/portfolio-share'
+import { thumbUrl } from '@/lib/image'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
 // that the Dashboard's portfolio section does, so edits in either place stay in
@@ -73,19 +74,15 @@ export default function PortfolioPage() {
       const pIds = rows.map((p: any) => p.id)
       const sourceIds = rows.map((p: any) => p.source_location_id).filter(Boolean)
 
-      const { data: ownPhotos } = await supabase
-        .from('location_photos')
-        .select('portfolio_location_id,url,created_at,sort_order')
-        .in('portfolio_location_id', pIds)
-        .eq('is_private', false)
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true })
+      // One aggregate row per location instead of N photo rows. Scales with
+      // portfolio size, not photo count.
+      const { data: summary } = await supabase.rpc('portfolio_photo_summary', { pids: pIds })
       const ownCount: Record<string, number> = {}
       const ownUrl:   Record<string, string> = {}
-      ;(ownPhotos ?? []).forEach((r: any) => {
+      ;(summary ?? []).forEach((r: any) => {
         if (!r.portfolio_location_id) return
-        ownCount[r.portfolio_location_id] = (ownCount[r.portfolio_location_id] ?? 0) + 1
-        if (!ownUrl[r.portfolio_location_id] && r.url) ownUrl[r.portfolio_location_id] = r.url
+        ownCount[r.portfolio_location_id] = Number(r.cnt ?? 0)
+        if (r.first_url) ownUrl[r.portfolio_location_id] = r.first_url
       })
 
       const sourceUrl: Record<string, string> = {}
@@ -287,7 +284,7 @@ export default function PortfolioPage() {
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
                     onMouseLeave={e => { if (!draggingId) { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' } }}>
                     <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 140, position: 'relative', overflow: 'hidden' }}>
-                      {loc.preview_url && <img src={loc.preview_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                      {loc.preview_url && <img src={thumbUrl(loc.preview_url) ?? loc.preview_url} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                       {noPhotos && (
                         <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(196,146,42,.95)', color: 'white', fontSize: 10, fontWeight: 600 }}>
                           ⚠ Add your photos

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import AppNav from '@/components/AppNav'
 import { buildShareUrl } from '@/lib/custom-domain'
+import { tileUrl } from '@/lib/image'
 import type { MapLocation } from '@/components/ShareMap'
 
 const ShareMap = dynamic(() => import('@/components/ShareMap'), { ssr: false })
@@ -278,7 +279,7 @@ export default function SharePage() {
       <div onClick={() => toggleSelect(loc.id)} style={rowStyle(sel, isSecret)}>
         <div style={checkStyle(sel)}>{sel ? '✓' : ''}</div>
         <div className={loc.photoUrl ? undefined : loc.bg} style={{ width: 42, height: 42, borderRadius: 6, flexShrink: 0, position: 'relative', overflow: 'hidden', background: loc.photoUrl ? 'var(--cream-dark)' : undefined }}>
-          {loc.photoUrl && <img src={loc.photoUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          {loc.photoUrl && <img src={tileUrl(loc.photoUrl) ?? loc.photoUrl} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
           {isSecret && <div style={{ position: 'absolute', bottom: 2, right: 2, width: 14, height: 14, borderRadius: '50%', background: 'rgba(124,92,191,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, zIndex: 1 }}>🤫</div>}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -382,7 +383,7 @@ export default function SharePage() {
                     return (
                       <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: 9, borderRadius: 4, background: 'var(--cream)', marginBottom: 5 }}>
                         <div className={thumb ? undefined : `bg-${(idx%6)+1}`} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0, overflow: 'hidden', position: 'relative', background: thumb ? 'var(--cream-dark)' : undefined }}>
-                          {thumb && <img src={thumb} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                          {thumb && <img src={tileUrl(thumb) ?? thumb} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{p.name}</div>

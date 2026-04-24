@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import ImageLightbox from '@/components/ImageLightbox'
 import { useServerPlacePhotos } from '@/hooks/useServerPlacePhotos'
+import { thumbUrl, mediumUrl } from '@/lib/image'
 import type { ClientLocation } from '@/components/ClientMap'
 
 const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false })
@@ -317,7 +318,7 @@ export default function ClientPickerPage() {
           </div>
           <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
             <div className={chosenLoc.bg} style={{ width: 56, height: 56, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-              {chosenLoc.photoUrl && <img src={chosenLoc.photoUrl} alt="" onClick={() => setLightboxSrc(chosenLoc.photoUrl)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
+              {chosenLoc.photoUrl && <img src={thumbUrl(chosenLoc.photoUrl) ?? chosenLoc.photoUrl} alt="" loading="lazy" decoding="async" onClick={() => setLightboxSrc(chosenLoc.photoUrl!)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
             </div>
             <div>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 700, color: 'var(--ink)' }}>{chosenLoc.name}</div>
@@ -430,7 +431,7 @@ export default function ClientPickerPage() {
                 <div key={String(loc.id)} onClick={() => { setDetailLoc(loc); setActiveId(loc.id) }}
                   style={{ display: 'flex', gap: 12, padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`, transition: 'all .15s', opacity: isDisabled ? 0.45 : 1 }}>
                   <div className={loc.bg} style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-                    {loc.photoUrl && <img src={loc.photoUrl} alt="" onClick={e => { e.stopPropagation(); setLightboxSrc(loc.photoUrl) }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
+                    {loc.photoUrl && <img src={thumbUrl(loc.photoUrl) ?? loc.photoUrl} alt="" loading="lazy" decoding="async" onClick={e => { e.stopPropagation(); setLightboxSrc(loc.photoUrl!) }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
                     <div style={{ position: 'absolute', top: 4, left: 4, width: 22, height: 22, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.9)' : 'rgba(26,22,18,.6)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
                       {isChosen ? '✓' : i + 1}
                     </div>
@@ -741,8 +742,12 @@ function DetailPhotoGallery({
       <div className={hasPhotos ? undefined : loc.bg} style={{ height: heroHeight, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
         {hasPhotos ? (
           <img
-            src={current}
+            // Photographer photos run through the medium-resize helper so the
+            // hero renders a ~1200px JPEG instead of a 5–8 MB original. Google
+            // URLs already come in resized and the helper no-ops on them.
+            src={mediumUrl(current) ?? current}
             alt={loc.name}
+            decoding="async"
             onClick={() => onOpenLightbox(activePhotos, idx)}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
           />
@@ -806,7 +811,7 @@ function DetailPhotoGallery({
               onClick={() => setIdx(i)}
               style={{ width: 56, height: 56, borderRadius: 6, flexShrink: 0, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${idx === i ? 'var(--gold)' : 'transparent'}` }}
             >
-              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={thumbUrl(url) ?? url} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
           ))}
         </div>

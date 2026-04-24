@@ -14,6 +14,7 @@ import {
   shareFullPortfolio as shareFullPortfolioFn,
   createMultiLocationLink as createMultiLocationLinkFn,
 } from '@/lib/portfolio-share'
+import { thumbUrl } from '@/lib/image'
 
 interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
 interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
@@ -96,20 +97,16 @@ export default function DashboardPage() {
         const sourceIds = portfolioRes.data.map((p: any) => p.source_location_id).filter(Boolean)
 
         // Count of photographer's own photos per portfolio copy + first-photo preview
-        const { data: ownPhotos } = await supabase
-          .from('location_photos')
-          .select('portfolio_location_id,url,created_at,sort_order')
-          .in('portfolio_location_id', pIds)
-          .eq('is_private', false)
-          .order('sort_order', { ascending: true })
-          .order('created_at', { ascending: true })
+        // Aggregate count + first-photo per location via RPC instead of
+        // fetching every photo row.
+        const { data: summary } = await supabase.rpc('portfolio_photo_summary', { pids: pIds })
         const ownCount: Record<string, number> = {}
         const ownUrl:   Record<string, string> = {}
-        ;(ownPhotos ?? []).forEach((r: any) => {
+        ;(summary ?? []).forEach((r: any) => {
           const k = r.portfolio_location_id
           if (!k) return
-          ownCount[k] = (ownCount[k] ?? 0) + 1
-          if (!ownUrl[k] && r.url) ownUrl[k] = r.url
+          ownCount[k] = Number(r.cnt ?? 0)
+          if (r.first_url) ownUrl[k] = r.first_url
         })
 
         // Fallback: one representative photo from the public source location (Wikipedia seed)
@@ -309,7 +306,7 @@ export default function DashboardPage() {
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
                           <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ height: 110, position: 'relative', overflow: 'hidden' }}>
-                            {loc.preview_url && <img src={loc.preview_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                            {loc.preview_url && <img src={thumbUrl(loc.preview_url) ?? loc.preview_url} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                             {noPhotos && (
                               <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(196,146,42,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
                                 ⚠ Add your photos

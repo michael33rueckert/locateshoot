@@ -10,6 +10,7 @@ import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import AuthModal from '@/components/AuthModal'
 import ImageLightbox from '@/components/ImageLightbox'
 import AppNav from '@/components/AppNav'
+import { thumbUrl, mediumUrl } from '@/lib/image'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
@@ -213,7 +214,7 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
             ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
             :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} onClick={()=>onOpenLightbox(googlePhotos.map(p=>p.url), activePhoto)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>
             :<div className={loc.bg} style={{position:'absolute',inset:0}}/>)}
-          {photoTab==='community'&&(hasCommunity?<img src={communityPhotos[0].url} alt={loc.name} onClick={()=>onOpenLightbox(communityPhotos.map((p:any)=>p.url), 0)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>:<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}}><span style={{fontSize:32}}>📷</span><span style={{fontSize:12,color:'rgba(255,255,255,.6)'}}>No community photos yet</span></div>)}
+          {photoTab==='community'&&(hasCommunity?<img src={mediumUrl(communityPhotos[0].url) ?? communityPhotos[0].url} alt={loc.name} decoding="async" onClick={()=>onOpenLightbox(communityPhotos.map((p:any)=>p.url), 0)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>:<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}}><span style={{fontSize:32}}>📷</span><span style={{fontSize:12,color:'rgba(255,255,255,.6)'}}>No community photos yet</span></div>)}
           {photoTab==='upload'&&<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:36}}>📷</span></div>}
           {photoTab!=='upload'&&<div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>}
           {photoTab==='google'&&hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
@@ -591,7 +592,7 @@ export default function ExplorePage() {
                   }}
                 >
                   {thumb
-                    ? <img src={thumb} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
+                    ? <img src={thumbUrl(thumb) ?? thumb} alt="" loading="lazy" decoding="async" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
                     : <span style={{fontSize:22,color:'var(--ink-soft)',opacity:.45}}>📍</span>
                   }
                   {loc.rating!=='—'&&<div style={{position:'absolute',bottom:3,right:3,background:'rgba(26,22,18,.75)',borderRadius:4,padding:'1px 5px',fontSize:10,fontWeight:600,color:'var(--gold)',zIndex:1}}>★{loc.rating}</div>}
