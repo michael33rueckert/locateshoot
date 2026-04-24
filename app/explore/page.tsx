@@ -15,6 +15,19 @@ import type { ExploreLocation } from '@/components/ExploreMap'
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
+// Default radius when the user drops a "Find Locations Near" pin or taps
+// "Near me". Chosen so metro searches include suburbs without flooding the list.
+const NEAR_RADIUS_MI = 50
+
+function distMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return Infinity
+  const R = 3958.7613
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
+}
 const ALL_TAGS = ['Golden Hour','Sunrise','Sunset','Forest','Urban','Waterfront','Historic','Nature','Gardens','Architecture','Romantic','Dramatic','Editorial','Meadow','Creek','Bridge','Mural','Rooftop','Barn','Ranch','Vineyard','Campus','Trail','Industrial','Rustic','Colorful','Wedding','Family']
 const SORT_OPTIONS = [{ value: 'quality', label: '⭐ Top rated' },{ value: 'rating_asc', label: '↑ Lowest rated' },{ value: 'name', label: '🔤 Name A–Z' },{ value: 'newest', label: '🕒 Newest first' },{ value: 'saves', label: '❤ Most saved' }]
 const RATING_OPTIONS = [{ value: 0, label: 'Any rating' },{ value: 4.5, label: '★ 4.5+' },{ value: 4.0, label: '★ 4.0+' },{ value: 3.5, label: '★ 3.5+' },{ value: 3.0, label: '★ 3.0+' }]
@@ -417,6 +430,13 @@ export default function ExplorePage() {
   function toggleTag(tag:string){setSelectedTags(prev=>prev.includes(tag)?prev.filter(t=>t!==tag):[...prev,tag])}
   function clearAllFilters(){setAccessFilter('All');setSelectedTags([]);setMinRating(0);setSortBy('quality')}
 
+  // When the user drops a pin via "Find Locations Near" or hits "Near me",
+  // we filter and sort the list by distance to that reference point. searchPin
+  // wins over userLocation when both are set (they chose an explicit place).
+  const nearRef = searchPin
+    ? { lat: searchPin.lat, lng: searchPin.lng }
+    : (locGranted && userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null)
+
   const filtered = useMemo(()=>{
     let result=locations.filter((loc:any)=>{
       const matchesAccess=accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Portfolio'?portfolioSources.has(loc.id):true
@@ -424,9 +444,17 @@ export default function ExplorePage() {
       const q=searchQuery.toLowerCase().trim()
       const matchesSearch=q===''||loc.name.toLowerCase().includes(q)||loc.city.toLowerCase().includes(q)||(loc.tags??[]).some((t:string)=>t.toLowerCase().includes(q))
       const matchesRating=minRating===0||(loc.ratingNum??0)>=minRating
-      return matchesAccess&&matchesTags&&matchesSearch&&matchesRating
+      const matchesNear = !nearRef || distMiles(nearRef.lat, nearRef.lng, loc.lat, loc.lng) <= NEAR_RADIUS_MI
+      return matchesAccess&&matchesTags&&matchesSearch&&matchesRating&&matchesNear
     })
     return[...result].sort((a:any,b:any)=>{
+      // When a near-reference is set, closest locations win — overrides the
+      // chosen sort mode since the user explicitly asked for proximity.
+      if (nearRef) {
+        const da = distMiles(nearRef.lat, nearRef.lng, a.lat, a.lng)
+        const db = distMiles(nearRef.lat, nearRef.lng, b.lat, b.lng)
+        if (da !== db) return da - db
+      }
       // Put locations with photos first regardless of sort mode. Blank-gradient
       // cards at the top look like the photos are broken.
       const ap=photoMap[a.id]?1:0, bp=photoMap[b.id]?1:0
@@ -440,7 +468,7 @@ export default function ExplorePage() {
         default:return 0
       }
     })
-  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap])
+  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,nearRef])
 
   const activeFilterCount=(accessFilter!=='All'?1:0)+selectedTags.length+(minRating>0?1:0)+(sortBy!=='quality'?1:0)
 
