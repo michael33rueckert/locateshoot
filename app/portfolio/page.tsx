@@ -280,10 +280,6 @@ export default function PortfolioPage() {
                       userSelect: 'none',
                       WebkitUserSelect: 'none',
                       WebkitTouchCallout: 'none',
-                      // The dragged card sits directly under the finger, so
-                      // it would otherwise win elementFromPoint and stop
-                      // reorder detection from seeing the card underneath.
-                      pointerEvents: isDragging ? 'none' : 'auto',
                     }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
                     onMouseLeave={e => { if (!reorder.draggingId) { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' } }}>

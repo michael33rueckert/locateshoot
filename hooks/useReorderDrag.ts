@@ -26,10 +26,12 @@ import { useRef, useState } from 'react'
 // helper below does this automatically) so hit-testing can identify them.
 //
 // Load-bearing details worth preserving if you refactor:
-//   1. `pointer-events:none` on the dragged card (applied via React state
-//      on the consumer's side) — without it `elementFromPoint` at the
-//      finger position returns the dragged card itself, so `overId ===
-//      draggingId` and no reorder ever fires.
+//   1. We use `document.elementsFromPoint` (plural) and skip the dragged
+//      card in the results — `elementFromPoint` (singular) would always
+//      return the dragged card itself. An earlier iteration tried to
+//      fix this by setting `pointer-events:none` on the dragged card,
+//      but that silently broke setPointerCapture on Android (events to
+//      a captured element with pointer-events:none get dropped).
 //   2. Drag-phase listeners are attached synchronously from the timer
 //      callback — not from a useEffect — so the browser doesn't get a
 //      render-cycle window where pointermoves are uncaught.
@@ -109,16 +111,22 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
 
           const handleMove = (ev: PointerEvent) => {
             ev.preventDefault()
-            const el = document.elementFromPoint(ev.clientX, ev.clientY)
-            const card = el && (el as Element).closest
-              ? (el as Element).closest('[data-reorder-id]') as HTMLElement | null
-              : null
-            const hoverId = card?.getAttribute('data-reorder-id') ?? null
-            // Hovering over the dragged card itself counts as "no target".
-            const next = hoverId && hoverId !== draggingRef.current ? hoverId : null
-            if (next !== overRef.current) {
-              overRef.current = next
-              setOverId(next)
+            // elementsFromPoint returns every element at the point in
+            // z-order. The dragged card sits on top (finger is on it), so
+            // skip past it and look for the first sibling card beneath.
+            const stack = document.elementsFromPoint
+              ? document.elementsFromPoint(ev.clientX, ev.clientY)
+              : []
+            let hoverId: string | null = null
+            for (const el of stack) {
+              const card = (el as Element).closest?.('[data-reorder-id]') as HTMLElement | null
+              if (!card) continue
+              const candidate = card.getAttribute('data-reorder-id')
+              if (candidate && candidate !== draggingRef.current) { hoverId = candidate; break }
+            }
+            if (hoverId !== overRef.current) {
+              overRef.current = hoverId
+              setOverId(hoverId)
             }
           }
 
