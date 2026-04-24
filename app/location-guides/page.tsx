@@ -19,6 +19,7 @@ const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 interface GuideRow extends GuideLinkLite {
   expires_at:       string | null
   expire_on_submit: boolean
+  cover_photo_url:  string | null
   pick_count:       number
 }
 
@@ -57,7 +58,7 @@ export default function LocationGuidesPage() {
       const [profRes, guidesRes, portRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,custom_domain,custom_domain_verified').eq('id', user.id).single(),
         supabase.from('share_links')
-          .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit')
+          .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state').eq('user_id', user.id).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
@@ -231,6 +232,7 @@ export default function LocationGuidesPage() {
                   is_full_portfolio: g.is_full_portfolio,
                   expires_at:        g.expires_at,
                   expire_on_submit:  g.expire_on_submit,
+                  cover_photo_url:   g.cover_photo_url,
                   pick_count:        g.pick_count,
                   location_count:    (g.portfolio_location_ids?.length ?? 0) + (g.location_ids?.length ?? 0),
                 }}

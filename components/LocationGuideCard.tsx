@@ -1,5 +1,7 @@
 'use client'
 
+import { thumbUrl } from '@/lib/image'
+
 // Card rendering for a single Location Guide. Used in the Dashboard's
 // Location Guides preview section and on the full /location-guides page.
 
@@ -13,6 +15,7 @@ export interface GuideCardData {
   expire_on_submit:       boolean
   pick_count:             number
   location_count:         number
+  cover_photo_url:        string | null
 }
 
 function timeAgo(d: string) {
@@ -70,9 +73,34 @@ export default function LocationGuideCard({
     }}
     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(26,22,18,.03)' }}>
-      {/* Header band — colored gradient with big emoji, mirrors the portfolio card visuals */}
-      <div className={bgClass} style={{ position: 'relative', height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ fontSize: 38, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.12))' }}>📚</span>
+      {/* Header band — cover photo if set, otherwise a colored gradient + emoji */}
+      <div
+        className={guide.cover_photo_url ? undefined : bgClass}
+        style={{
+          position: 'relative',
+          height: 90,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          background: guide.cover_photo_url ? 'var(--cream-dark)' : undefined,
+        }}
+      >
+        {guide.cover_photo_url ? (
+          <>
+            <img
+              src={thumbUrl(guide.cover_photo_url) ?? guide.cover_photo_url}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+            {/* Subtle bottom-to-top scrim so overlaid badges stay readable on bright photos */}
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,.18) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0) 100%)' }} />
+          </>
+        ) : (
+          <span style={{ fontSize: 38, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.12))' }}>📚</span>
+        )}
         <span style={{
           position: 'absolute',
           top: 8,
@@ -81,10 +109,11 @@ export default function LocationGuideCard({
           borderRadius: 999,
           fontSize: 10,
           fontWeight: 500,
-          background: exp.bg,
+          background: guide.cover_photo_url ? 'rgba(255,255,255,.92)' : exp.bg,
           color: exp.color,
           backdropFilter: 'blur(4px)',
           whiteSpace: 'nowrap',
+          zIndex: 1,
         }}>{exp.label}</span>
         {guide.is_full_portfolio && (
           <span style={{
@@ -95,9 +124,10 @@ export default function LocationGuideCard({
             borderRadius: 999,
             fontSize: 10,
             fontWeight: 500,
-            background: 'rgba(74,103,65,.15)',
+            background: guide.cover_photo_url ? 'rgba(255,255,255,.92)' : 'rgba(74,103,65,.15)',
             color: 'var(--sage)',
             backdropFilter: 'blur(4px)',
+            zIndex: 1,
           }}>🔗 Auto-syncs</span>
         )}
       </div>

@@ -15,7 +15,7 @@ import { thumbUrl } from '@/lib/image'
 interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number; preview_url: string | null }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
-interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; expires_at: string | null; expire_on_submit: boolean; picks: ClientPick[]; expanded: boolean }
+interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; expires_at: string | null; expire_on_submit: boolean; cover_photo_url: string | null; picks: ClientPick[]; expanded: boolean }
 
 function greetingTime() {
   const h = new Date().getHours()
@@ -109,7 +109,7 @@ export default function DashboardPage() {
 
       const { data: permData } = await supabase
         .from('share_links')
-        .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio,expires_at,expire_on_submit')
+        .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(6)
@@ -327,6 +327,7 @@ export default function DashboardPage() {
                         is_full_portfolio: link.is_full_portfolio,
                         expires_at:        link.expires_at,
                         expire_on_submit:  link.expire_on_submit,
+                        cover_photo_url:   link.cover_photo_url,
                         pick_count:        link.picks.length,
                         location_count:    (link.portfolio_location_ids?.length ?? 0) + (link.location_ids?.length ?? 0),
                       }}
@@ -423,7 +424,7 @@ export default function DashboardPage() {
           onAddLocation={() => setShowAddPortfolio(true)}
           onClose={() => setEditingPermLink(null)}
           onCreated={(link) => {
-            setPermanentLinks(prev => prev.map(l => l.id === link.id ? { ...l, session_name: link.session_name, portfolio_location_ids: link.portfolio_location_ids } : l))
+            setPermanentLinks(prev => prev.map(l => l.id === link.id ? { ...l, ...link } : l))
             setEditingPermLink(null)
             setToast('✓ Guide updated')
           }}

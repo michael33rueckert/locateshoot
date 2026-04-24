@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { tileUrl } from '@/lib/image'
@@ -87,22 +87,48 @@ export default function CreateLocationGuideModal({
   const [saving,         setSaving]         = useState(false)
   const [error,          setError]          = useState('')
   const [locSearch,      setLocSearch]      = useState('')
+  const [coverUrl,       setCoverUrl]       = useState<string | null>(null)
+  // Photo pool for the cover picker — keyed to portfolio_location_id so we can
+  // show only photos from locations the photographer has included in the guide.
+  const [portfolioPhotos, setPortfolioPhotos] = useState<{ pid: string; url: string }[]>([])
 
-  // Load existing message + expiration when editing
+  // Load existing message, expiration, and cover photo when editing
   useEffect(() => {
     if (!editLink) return
     supabase.from('share_links')
-      .select('message,expires_at,is_permanent,expire_on_submit')
+      .select('message,expires_at,is_permanent,expire_on_submit,cover_photo_url')
       .eq('id', editLink.id)
       .single()
       .then(({ data }) => {
         if (!data) return
         if (data.message) setMessage(data.message)
+        if (data.cover_photo_url) setCoverUrl(data.cover_photo_url)
         if (data.expire_on_submit) { setExpirationMode('on_submit') }
         else if (data.expires_at)   { setExpirationMode('date'); setExpiresDate(toInputDate(data.expires_at)) }
         else                         { setExpirationMode('never') }
       })
   }, [editLink])
+
+  // Pull photos for the whole portfolio once — cheap for typical portfolio
+  // sizes, and lets us filter the cover picker in-memory as selections change.
+  useEffect(() => {
+    const pids = portfolio.map(p => p.id)
+    if (pids.length === 0) { setPortfolioPhotos([]); return }
+    supabase.from('location_photos')
+      .select('portfolio_location_id,url,sort_order,created_at')
+      .in('portfolio_location_id', pids)
+      .eq('is_private', false)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        setPortfolioPhotos((data ?? []).map((r: any) => ({ pid: r.portfolio_location_id, url: r.url })))
+      })
+  }, [portfolio])
+
+  const coverCandidates = useMemo(
+    () => portfolioPhotos.filter(p => selectedIds.includes(p.pid)),
+    [portfolioPhotos, selectedIds],
+  )
 
   function toggleLoc(id: string) {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -121,6 +147,10 @@ export default function CreateLocationGuideModal({
       const expireOnSubmit = expirationMode === 'on_submit'
       // is_permanent means "show up in the Location Guides list" — in the
       // unified model every guide belongs there, so we always mark true.
+      // If the current cover isn't still backed by a selected location, drop
+      // it on save — otherwise the card would show a photo for a location
+      // that's no longer in the guide.
+      const keepCover = coverUrl && coverCandidates.some(p => p.url === coverUrl) ? coverUrl : null
       if (isEdit && editLink) {
         const { data, error: updateErr } = await supabase.from('share_links').update({
           session_name:           sessionName.trim(),
@@ -129,7 +159,8 @@ export default function CreateLocationGuideModal({
           expires_at:             expiresAtIso,
           expire_on_submit:       expireOnSubmit,
           is_permanent:           true,
-        }).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
+          cover_photo_url:        keepCover,
+        }).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
         if (updateErr) throw updateErr
         onCreated(data); onClose()
         return
@@ -147,7 +178,8 @@ export default function CreateLocationGuideModal({
         expires_at:             expiresAtIso,
         expire_on_submit:       expireOnSubmit,
         is_permanent:           true,
-      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
+        cover_photo_url:        keepCover,
+      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
       if (insertErr) throw insertErr
       onCreated(data); onClose()
     } catch (err: any) {
@@ -269,6 +301,55 @@ export default function CreateLocationGuideModal({
                     Explore nearby locations →
                   </Link>
                 </div>
+              </>
+            )}
+          </div>
+
+          {/* Cover photo picker — used as the card thumbnail + link preview */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={labelStyle}>Cover photo (optional)</label>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: -2, marginBottom: 8, fontWeight: 300 }}>
+              Shows on the card thumbnail and in link previews (text messages, email). Pick one of your photos from the locations in this guide.
+            </div>
+            {selectedIds.length === 0 ? (
+              <div style={{ padding: '0.75rem 1rem', fontSize: 12, color: 'var(--ink-soft)', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)', fontStyle: 'italic' }}>
+                Select at least one location above to pick a cover photo from your photos.
+              </div>
+            ) : coverCandidates.length === 0 ? (
+              <div style={{ padding: '0.75rem 1rem', fontSize: 12, color: 'var(--ink-soft)', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)', fontStyle: 'italic' }}>
+                The selected locations don&apos;t have any photos uploaded yet. Add photos to a location to use it as a cover.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(80px,1fr))', gap: 6, maxHeight: 220, overflowY: 'auto', padding: 4, border: '1px solid var(--cream-dark)', borderRadius: 8 }}>
+                  {coverCandidates.map((photo, i) => {
+                    const sel = coverUrl === photo.url
+                    const thumb = tileUrl(photo.url) ?? photo.url
+                    return (
+                      <div key={`${photo.pid}-${i}`} onClick={() => setCoverUrl(sel ? null : photo.url)} style={{
+                        position: 'relative',
+                        aspectRatio: '1',
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        border: `2.5px solid ${sel ? 'var(--gold)' : 'transparent'}`,
+                        boxShadow: sel ? '0 0 0 2px rgba(196,146,42,.25)' : 'none',
+                        transition: 'all .15s',
+                        background: 'var(--cream-dark)',
+                      }}>
+                        <img src={thumb} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        {sel && (
+                          <div style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'var(--gold)', color: 'var(--ink)', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }}>✓</div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {coverUrl && (
+                  <button type="button" onClick={() => setCoverUrl(null)} style={{ marginTop: 6, fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+                    Clear cover photo
+                  </button>
+                )}
               </>
             )}
           </div>
