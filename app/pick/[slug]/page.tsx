@@ -795,16 +795,26 @@ function PickListItem({
             className="pick-loc-photo-strip"
             onScroll={handleScroll}
           >
-            {photos.map((src, i) => (
-              <img
-                key={i}
-                src={thumbUrl(src) ?? src}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                onClick={e => { e.stopPropagation(); onOpenLightbox(photos, i) }}
-              />
-            ))}
+            {photos.map((src, i) => {
+              // Mobile shows this image full-width (~1200px on a 3× retina
+              // phone); desktop shows the same image in a 60×60 slot. srcset
+              // lets the browser pick whichever size matches the device so
+              // the mobile hero isn't upscaled from a 480-wide thumbnail.
+              const thumb  = thumbUrl(src)  ?? src
+              const medium = mediumUrl(src) ?? src
+              return (
+                <img
+                  key={i}
+                  src={thumb}
+                  srcSet={`${thumb} 480w, ${medium} 1200w`}
+                  sizes="(max-width: 768px) 100vw, 60px"
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  onClick={e => { e.stopPropagation(); onOpenLightbox(photos, i) }}
+                />
+              )
+            })}
           </div>
         )}
         <div style={{ position: 'absolute', top: 8, left: 8, width: 24, height: 24, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.92)' : 'rgba(26,22,18,.72)', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, backdropFilter: 'blur(4px)' }}>
