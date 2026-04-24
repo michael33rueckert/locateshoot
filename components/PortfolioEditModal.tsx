@@ -109,19 +109,27 @@ export default function PortfolioEditModal({
   }
 
   async function movePhoto(photoId: string, direction: -1 | 1) {
-    // Swap sort_order with the neighbor in the desired direction.
     const i = photos.findIndex(p => p.id === photoId)
     if (i < 0) return
     const j = i + direction
     if (j < 0 || j >= photos.length) return
+    const prev = photos
     const next = [...photos]
     ;[next[i], next[j]] = [next[j], next[i]]
     setPhotos(next)
+    setErr('')
     // Rewrite sort_order for every photo so the order is stable even if some
-    // rows had the same default 0 value. Fire-and-forget updates.
-    await Promise.all(next.map((p, idx) =>
+    // rows had the same default 0 value.
+    const results = await Promise.all(next.map((p, idx) =>
       supabase.from('location_photos').update({ sort_order: idx }).eq('id', p.id)
     ))
+    const firstErr = results.find(r => r.error)?.error
+    if (firstErr) {
+      // Revert the optimistic UI so users don't think a stuck reorder worked.
+      setPhotos(prev)
+      setErr(`Could not save photo order: ${firstErr.message}`)
+      console.error('movePhoto failed', firstErr)
+    }
   }
 
   async function deletePortfolio() {
