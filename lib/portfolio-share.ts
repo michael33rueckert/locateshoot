@@ -1,10 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
 
-// Shared helpers for the two permanent share-link flows off a photographer's
+// Shared helper for the "Share all as Location Guide" flow off a photographer's
 // portfolio. Used from the Dashboard and the dedicated /portfolio page so the
-// behavior (reuse-or-create for single-pick, create-new for multi-location)
-// stays consistent in both places.
+// reuse-or-create behavior stays consistent in both places.
 
 interface ProfileInfo {
   id:                        string
@@ -65,34 +64,3 @@ export async function shareFullPortfolio(profile: ProfileInfo): Promise<{ ok: tr
   return { ok: true, url }
 }
 
-/**
- * Create a new multi-location full-portfolio link (always new — different
- * maxPicks / maxMiles per session produces a different link).
- */
-export async function createMultiLocationLink(
-  profile: ProfileInfo,
-  settings: { maxPicks: number; maxMiles: number | null },
-): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const slug = `${cleanSlug(profile.full_name || 'photographer')}-portfolio-${settings.maxPicks}loc-${Date.now().toString(36)}`
-  const sessionName = `My portfolio — ${settings.maxPicks}-location session`
-  const { data: inserted, error } = await supabase.from('share_links').insert({
-    user_id:                 profile.id,
-    slug,
-    session_name:            sessionName,
-    message:                 null,
-    photographer_name:       profile.full_name ?? null,
-    portfolio_location_ids:  null,
-    location_ids:            [],
-    secret_ids:              [],
-    expires_at:              null,
-    is_permanent:            true,
-    is_full_portfolio:       true,
-    max_picks:               settings.maxPicks,
-    max_pick_distance_miles: settings.maxMiles,
-  }).select('slug').single()
-  if (error || !inserted) return { ok: false, error: error?.message ?? 'Could not create multi-location link' }
-
-  const url = urlFor(inserted.slug, profile)
-  try { await navigator.clipboard?.writeText(url) } catch { /* noop */ }
-  return { ok: true, url }
-}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { tileUrl } from '@/lib/image'
 
 // Unified Location Guide creation/edit modal. Used on the dashboard and on the
 // /location-guides page. Supports three expiration modes:
@@ -14,10 +15,11 @@ import { supabase } from '@/lib/supabase'
 // Guide name is required; message is optional.
 
 export interface PortfolioLocationLite {
-  id:    string
-  name:  string
-  city:  string | null
-  state: string | null
+  id:         string
+  name:       string
+  city:       string | null
+  state:      string | null
+  photo_url?: string | null
 }
 
 export interface GuideLinkLite {
@@ -58,6 +60,7 @@ export default function CreateLocationGuideModal({
   editLink,
   onClose,
   onCreated,
+  onAddLocation,
 }: {
   portfolio:         PortfolioLocationLite[]
   preselectAll:      boolean
@@ -67,6 +70,8 @@ export default function CreateLocationGuideModal({
   editLink?:         GuideLinkLite | null
   onClose:           () => void
   onCreated:         (link: any) => void
+  /** When provided, the modal shows an "Add new location" button that calls this. Parent owns the nested AddPortfolioLocationModal and refreshes `portfolio` afterwards. */
+  onAddLocation?:    () => void
 }) {
   const isEdit = !!editLink
   const [sessionName,    setSessionName]    = useState(editLink?.session_name ?? (preselectAll ? 'My portfolio' : ''))
@@ -234,15 +239,18 @@ export default function CreateLocationGuideModal({
             ) : (
               <>
                 <input type="text" value={locSearch} onChange={e => setLocSearch(e.target.value)} placeholder="Search your portfolio…" style={{ ...inputStyle, marginBottom: 8, fontSize: 13 }} />
-                <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8 }}>
                   {filteredLocs.length === 0 && <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No portfolio locations match &quot;{locSearch}&quot;</div>}
                   {filteredLocs.map((loc, i) => {
                     const sel = isSelected(loc.id)
                     const cityLine = [loc.city, loc.state].filter(Boolean).join(', ')
+                    const thumb = tileUrl(loc.photo_url ?? null) ?? loc.photo_url ?? null
                     return (
                       <div key={loc.id} onClick={() => toggleLoc(loc.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', borderBottom: i < filteredLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}>
                         <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--sand)'}`, background: sel ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>{sel ? '✓' : ''}</div>
-                        <div className={BG_CYCLE[i % BG_CYCLE.length]} style={{ width: 34, height: 34, borderRadius: 6, flexShrink: 0 }} />
+                        <div className={thumb ? undefined : BG_CYCLE[i % BG_CYCLE.length]} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0, overflow: 'hidden', position: 'relative', background: thumb ? 'var(--cream-dark)' : undefined }}>
+                          {thumb && <img src={thumb} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
                           <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {cityLine || '—'}</div>
@@ -251,9 +259,15 @@ export default function CreateLocationGuideModal({
                     )
                   })}
                 </div>
-                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span>Not in your portfolio yet?</span>
-                  <Link href="/explore" style={{ color: 'var(--gold)', fontWeight: 500, textDecoration: 'none' }}>Add locations from Explore →</Link>
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {onAddLocation && (
+                    <button type="button" onClick={onAddLocation} style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      + Add new location
+                    </button>
+                  )}
+                  <Link href="/explore" style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
+                    Explore nearby locations →
+                  </Link>
                 </div>
               </>
             )}

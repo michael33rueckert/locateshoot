@@ -4,8 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import AppNav from '@/components/AppNav'
 import CreateLocationGuideModal, { type GuideLinkLite, type PortfolioLocationLite } from '@/components/CreateLocationGuideModal'
+import LocationGuideCard from '@/components/LocationGuideCard'
+import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
+
+const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
 // Full-screen management page for every Location Guide the photographer has
 // created. Replaces the old "Recent share links" + "Permanent Links" split —
@@ -25,30 +29,6 @@ interface ProfileLite {
   custom_domain_verified: boolean
 }
 
-function timeAgo(d: string) {
-  const diff  = Date.now() - new Date(d).getTime()
-  const mins  = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days  = Math.floor(diff / 86400000)
-  if (mins < 2)   return 'just now'
-  if (mins < 60)  return `${mins} minutes ago`
-  if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`
-  return `${days} day${days !== 1 ? 's' : ''} ago`
-}
-
-function expirationSummary(g: GuideRow): { label: string; color: string; bg: string } {
-  if (g.expire_on_submit) {
-    if (g.pick_count > 0) return { label: '⏱ Used — expired', color: 'var(--ink-soft)', bg: 'var(--cream-dark)' }
-    return { label: '🔂 Single-use', color: 'var(--sky)', bg: 'rgba(61,110,140,.1)' }
-  }
-  if (g.expires_at) {
-    const past = new Date(g.expires_at) < new Date()
-    if (past) return { label: '⏱ Expired', color: 'var(--ink-soft)', bg: 'var(--cream-dark)' }
-    return { label: `Expires ${new Date(g.expires_at).toLocaleDateString()}`, color: 'var(--rust)', bg: 'rgba(181,75,42,.08)' }
-  }
-  return { label: '♾ Saved for reuse', color: 'var(--sage)', bg: 'rgba(74,103,65,.1)' }
-}
-
 export default function LocationGuidesPage() {
   const [profile,      setProfile]      = useState<ProfileLite | null>(null)
   const [guides,       setGuides]       = useState<GuideRow[]>([])
@@ -61,6 +41,7 @@ export default function LocationGuidesPage() {
   const [copiedId,     setCopiedId]     = useState<string | null>(null)
   const [toast,        setToast]        = useState<string | null>(null)
   const [preselectIds, setPreselectIds] = useState<string[]>([])
+  const [showAdd,      setShowAdd]      = useState(false)
 
   useEffect(() => {
     if (!toast) return
@@ -79,10 +60,42 @@ export default function LocationGuidesPage() {
           .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
-        supabase.from('portfolio_locations').select('id,name,city,state').eq('user_id', user.id).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
+        supabase.from('portfolio_locations').select('id,source_location_id,name,city,state').eq('user_id', user.id).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
       ])
       if (profRes.data) setProfile(profRes.data as any)
-      if (portRes.data) setPortfolio(portRes.data as any)
+      if (portRes.data && portRes.data.length > 0) {
+        // Resolve one representative photo per portfolio location so the
+        // picker inside CreateLocationGuideModal can show real thumbnails
+        // instead of the placeholder BG_CYCLE blocks.
+        const pIds = portRes.data.map((p: any) => p.id)
+        const sourceIds = portRes.data.map((p: any) => p.source_location_id).filter(Boolean) as string[]
+        const { data: summary } = await supabase.rpc('portfolio_photo_summary', { pids: pIds })
+        const ownUrl: Record<string, string> = {}
+        ;(summary ?? []).forEach((r: any) => {
+          if (r.portfolio_location_id && r.first_url) ownUrl[r.portfolio_location_id] = r.first_url
+        })
+        const sourceUrl: Record<string, string> = {}
+        if (sourceIds.length > 0) {
+          const { data: srcPhotos } = await supabase
+            .from('location_photos')
+            .select('location_id,url,created_at')
+            .in('location_id', sourceIds)
+            .eq('is_private', false)
+            .order('created_at', { ascending: true })
+          ;(srcPhotos ?? []).forEach((r: any) => {
+            if (r.location_id && r.url && !sourceUrl[r.location_id]) sourceUrl[r.location_id] = r.url
+          })
+        }
+        setPortfolio(portRes.data.map((p: any) => ({
+          id:        p.id,
+          name:      p.name,
+          city:      p.city,
+          state:     p.state,
+          photo_url: ownUrl[p.id] ?? (p.source_location_id ? sourceUrl[p.source_location_id] ?? null : null),
+        })))
+      } else {
+        setPortfolio([])
+      }
       if (guidesRes.data && guidesRes.data.length > 0) {
         const ids = guidesRes.data.map((g: any) => g.id)
         const { data: picks } = await supabase
@@ -205,34 +218,29 @@ export default function LocationGuidesPage() {
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>No guide name contains &quot;{search}&quot;.</div>
           </div>
         ) : (
-          <div style={{ background: 'white', borderRadius: 12, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-            {filtered.map((g, i) => {
-              const url = buildShareUrl(g.slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
-              const expSummary = expirationSummary(g)
-              const locCount = (g.portfolio_location_ids?.length ?? 0) + (g.location_ids?.length ?? 0)
-              return (
-                <div key={g.id} style={{ padding: '1rem 1.25rem', borderBottom: i < filtered.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        {g.session_name}
-                        {g.is_full_portfolio && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.2)' }}>🔗 Auto-syncs with portfolio</span>}
-                        <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: expSummary.bg, color: expSummary.color }}>{expSummary.label}</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                        {locCount} location{locCount !== 1 ? 's' : ''} · {g.pick_count} pick{g.pick_count !== 1 ? 's' : ''} · Created {timeAgo(g.created_at)}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--sky)', fontFamily: 'monospace', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.replace(/^https?:\/\//, '')}</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                      <button onClick={() => copyLink(g.slug, g.id)} style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: copiedId === g.id ? 'var(--sage)' : 'var(--ink-soft)' }}>{copiedId === g.id ? '✓ Copied' : 'Copy link'}</button>
-                      {!g.is_full_portfolio && <button onClick={() => setEditing(g)} style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)' }}>Edit</button>}
-                      <button onClick={() => deleteGuide(g.id)} onBlur={() => setDeleteId(null)} style={{ padding: '6px 12px', borderRadius: 4, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', background: deleteId === g.id ? 'var(--rust)' : 'rgba(181,75,42,.08)', color: deleteId === g.id ? 'white' : 'var(--rust)' }}>{deleteId === g.id ? 'Confirm' : 'Delete'}</button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+            {filtered.map((g, i) => (
+              <LocationGuideCard
+                key={g.id}
+                bgClass={BG_CYCLE[i % BG_CYCLE.length]}
+                guide={{
+                  id:                g.id,
+                  session_name:      g.session_name,
+                  slug:              g.slug,
+                  created_at:        g.created_at,
+                  is_full_portfolio: g.is_full_portfolio,
+                  expires_at:        g.expires_at,
+                  expire_on_submit:  g.expire_on_submit,
+                  pick_count:        g.pick_count,
+                  location_count:    (g.portfolio_location_ids?.length ?? 0) + (g.location_ids?.length ?? 0),
+                }}
+                copyState={copiedId === g.id ? 'copied' : 'idle'}
+                deleteState={deleteId === g.id ? 'confirming' : 'idle'}
+                onCopy={() => copyLink(g.slug, g.id)}
+                onEdit={g.is_full_portfolio ? undefined : () => setEditing(g)}
+                onDelete={() => deleteGuide(g.id)}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -244,6 +252,7 @@ export default function LocationGuidesPage() {
           preselectIds={preselectIds}
           userId={profile?.id ?? ''}
           photographerName={profile?.full_name ?? ''}
+          onAddLocation={() => setShowAdd(true)}
           onClose={() => { setShowCreate(false); setPreselectIds([]) }}
           onCreated={() => { setShowCreate(false); setPreselectIds([]); load(); setToast('📚 Guide created!') }}
         />
@@ -256,8 +265,17 @@ export default function LocationGuidesPage() {
           userId={profile?.id ?? ''}
           photographerName={profile?.full_name ?? ''}
           editLink={editing}
+          onAddLocation={() => setShowAdd(true)}
           onClose={() => setEditing(null)}
           onCreated={() => { setEditing(null); load(); setToast('✓ Guide updated') }}
+        />
+      )}
+
+      {showAdd && profile && (
+        <AddPortfolioLocationModal
+          userId={profile.id}
+          onClose={() => setShowAdd(false)}
+          onCreated={() => { setShowAdd(false); load(); setToast('✓ Added to your portfolio') }}
         />
       )}
 

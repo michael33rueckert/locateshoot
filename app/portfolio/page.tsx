@@ -6,11 +6,7 @@ import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
-import MultiLocationModal from '@/components/MultiLocationModal'
-import {
-  shareFullPortfolio as shareFullPortfolioFn,
-  createMultiLocationLink as createMultiLocationLinkFn,
-} from '@/lib/portfolio-share'
+import { shareFullPortfolio as shareFullPortfolioFn } from '@/lib/portfolio-share'
 import { thumbUrl } from '@/lib/image'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
@@ -47,7 +43,6 @@ export default function PortfolioPage() {
   const [filter,   setFilter]   = useState<'all' | 'with-photos' | 'needs-photos'>('all')
   const [editing,  setEditing]  = useState<string | null>(null)
   const [showAdd,  setShowAdd]  = useState(false)
-  const [showMultiLocModal, setShowMultiLocModal] = useState(false)
   const [toast,    setToast]    = useState<string | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
@@ -133,14 +128,6 @@ export default function PortfolioPage() {
     setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
   }
 
-  async function handleCreateMultiLocation({ maxPicks, maxMiles }: { maxPicks: number; maxMiles: number | null }) {
-    if (!profile) return
-    const result = await createMultiLocationLinkFn(profile, { maxPicks, maxMiles })
-    if (!result.ok) { setToast(`⚠ ${result.error}`); return }
-    setShowMultiLocModal(false)
-    setToast(`🔗 ${maxPicks}-location link copied`)
-  }
-
   // Reorder portfolio locations via HTML5 drag-and-drop. Writes sort_order on
   // every row so the order is stable. Touch devices should use the arrow
   // buttons below each tile instead (drag events are flaky on touch).
@@ -192,10 +179,7 @@ export default function PortfolioPage() {
             <Link href="/explore" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>+ Add from Explore</Link>
             <Link href="/location-guides" style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>📚 Location Guides</Link>
             {locs.length > 0 && (
-              <>
-                <button onClick={handleShareFullPortfolio} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🔗 Share entire portfolio</button>
-                <button onClick={() => setShowMultiLocModal(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🧭 Multi-location link</button>
-              </>
+              <button onClick={handleShareFullPortfolio} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🔗 Share all as Location Guide</button>
             )}
           </div>
         </div>
@@ -352,13 +336,6 @@ export default function PortfolioPage() {
           onCreated={() => { setShowAdd(false); load(); setToast('✓ Added to your portfolio') }}
         />
       )}
-      {showMultiLocModal && (
-        <MultiLocationModal
-          onClose={() => setShowMultiLocModal(false)}
-          onCreate={handleCreateMultiLocation}
-        />
-      )}
-
       {toast && (
         <div style={{ position: 'fixed', bottom: '5rem', right: '1.25rem', background: 'var(--ink)', color: 'var(--cream)', padding: '10px 18px', borderRadius: 10, fontSize: 13, border: '1px solid rgba(255,255,255,.1)', zIndex: 9999, boxShadow: '0 8px 32px rgba(0,0,0,.3)' }}>
           {toast}
