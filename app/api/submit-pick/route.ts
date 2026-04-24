@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, escapeHtml } from '@/lib/email'
+import { sendPushToUser } from '@/lib/server-push'
 
 // Client-facing submit endpoint for /pick/[slug]. RLS blocks anonymous writes
 // to client_picks, so this route uses the service role to insert + email
@@ -176,6 +177,27 @@ export async function POST(request: Request) {
   } catch (e: any) {
     emailResult = { ok: false, error: e?.message ?? 'email send threw' }
     console.error('submit-pick email failure', e)
+  }
+
+  // Fire a push notification alongside the email. Non-fatal — photographer
+  // may simply not have any devices subscribed yet. Tapping the push deep-
+  // links to /dashboard so they land on the new pick.
+  try {
+    const clientDisplay = [firstName, lastName].filter(Boolean).join(' ').trim()
+      || email
+      || 'Your client'
+    const title = names.length === 1
+      ? `📍 ${clientDisplay} picked a location`
+      : `📍 ${clientDisplay} picked ${names.length} locations`
+    const body = names.length === 1 ? names[0] : names.join(' · ')
+    await sendPushToUser(admin, link.user_id, {
+      title,
+      body,
+      url: '/dashboard',
+      tag: `pick-${inserted.id}`,
+    })
+  } catch (e: any) {
+    console.error('submit-pick push failure', e)
   }
 
   return NextResponse.json({ ok: true, pickId: inserted.id, emailSent: emailResult.ok })

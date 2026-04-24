@@ -3,6 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import {
+  pushSupported,
+  pushPermission,
+  subscribeToPush,
+  unsubscribeFromPush,
+  isCurrentlySubscribed,
+} from '@/lib/push'
 
 // In-app notification bell. Counts client_picks created after the signed-in
 // photographer's last "seen" timestamp (stored in profiles.preferences as
@@ -23,8 +30,42 @@ export default function NotificationBell() {
   const [userId,  setUserId]  = useState<string | null>(null)
   const [lastSeen, setLastSeen] = useState<string | null>(null)
   const [unread,  setUnread]  = useState<PickPreview[]>([])
+  // Dropdown renders a snapshot taken at open time so it persists even
+  // after `unread` refetches with the new last-seen filter and goes
+  // empty — which is what was making the list vanish immediately on tap.
+  const [snapshot, setSnapshot] = useState<PickPreview[]>([])
   const [open,    setOpen]    = useState(false)
+  const [pushStatus, setPushStatus] = useState<'unknown' | 'unsupported' | 'subscribed' | 'unsubscribed' | 'blocked'>('unknown')
+  const [pushBusy, setPushBusy]     = useState(false)
+  const [pushError, setPushError]   = useState<string | null>(null)
   const timerRef = useRef<any>(null)
+
+  // Refresh the push status whenever the dropdown opens so the button
+  // reflects whatever state the browser is actually in (e.g. user
+  // changed permission from site settings).
+  const refreshPushStatus = useCallback(async () => {
+    if (!pushSupported()) { setPushStatus('unsupported'); return }
+    const perm = pushPermission()
+    if (perm === 'denied') { setPushStatus('blocked'); return }
+    const subscribed = await isCurrentlySubscribed()
+    setPushStatus(subscribed ? 'subscribed' : 'unsubscribed')
+  }, [])
+  useEffect(() => { if (open) refreshPushStatus() }, [open, refreshPushStatus])
+  useEffect(() => { refreshPushStatus() }, [refreshPushStatus])
+
+  async function togglePush() {
+    setPushBusy(true); setPushError(null)
+    try {
+      if (pushStatus === 'subscribed') {
+        const r = await unsubscribeFromPush()
+        if (!r.ok) setPushError(r.error)
+      } else {
+        const r = await subscribeToPush()
+        if (!r.ok) setPushError(r.error)
+      }
+      await refreshPushStatus()
+    } finally { setPushBusy(false) }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +106,10 @@ export default function NotificationBell() {
   }, [userId, refresh])
 
   async function openAndMarkSeen() {
+    // Snapshot the list up front — the server update below changes
+    // `lastSeen`, which refetches and clears `unread`, so the dropdown
+    // needs its own copy that doesn't disappear on the user.
+    setSnapshot(unread)
     setOpen(true)
     if (!userId || unread.length === 0) return
     const now = new Date().toISOString()
@@ -73,9 +118,13 @@ export default function NotificationBell() {
     const prefs = { ...(profile?.preferences ?? {}), last_picks_seen_at: now }
     await supabase.from('profiles').update({ preferences: prefs }).eq('id', userId)
     setLastSeen(now)
-    // Clear the local unread count; the dropdown still shows the picks it
-    // rendered on open until it's closed.
-    setTimeout(() => setUnread([]), 0)
+  }
+
+  function closeDropdown() {
+    setOpen(false)
+    // Let the user reopen a fresh empty dropdown on their next tap. (If
+    // a new pick arrives in the meantime, it'll show up via the poll.)
+    setSnapshot([])
   }
 
   if (!userId) return null
@@ -85,7 +134,7 @@ export default function NotificationBell() {
   return (
     <div style={{ position: 'relative' }}>
       <button
-        onClick={() => (open ? setOpen(false) : openAndMarkSeen())}
+        onClick={() => (open ? closeDropdown() : openAndMarkSeen())}
         aria-label={`Notifications (${count} unread)`}
         style={{
           position: 'relative',
@@ -113,21 +162,21 @@ export default function NotificationBell() {
 
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9500, background: 'transparent' }} />
+          <div onClick={closeDropdown} style={{ position: 'fixed', inset: 0, zIndex: 9500, background: 'transparent' }} />
           <div style={{ position: 'absolute', top: 44, right: 0, zIndex: 9600, width: 320, maxWidth: '94vw', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, boxShadow: '0 16px 40px rgba(0,0,0,.25)', overflow: 'hidden' }}>
             <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--cream-dark)', fontFamily: 'var(--font-playfair),serif', fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
               Notifications
             </div>
-            {unread.length === 0 ? (
+            {snapshot.length === 0 ? (
               <div style={{ padding: '20px 14px', fontSize: 13, color: 'var(--ink-soft)', textAlign: 'center', fontStyle: 'italic' }}>
                 You&apos;re all caught up.
               </div>
             ) : (
               <div style={{ maxHeight: 360, overflowY: 'auto' }}>
-                {unread.map(p => (
+                {snapshot.map(p => (
                   <div
                     key={p.id}
-                    onClick={() => { setOpen(false); router.push('/dashboard') }}
+                    onClick={() => { closeDropdown(); router.push('/dashboard') }}
                     style={{ padding: '10px 14px', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer' }}
                   >
                     <div style={{ fontSize: 13, color: 'var(--ink)', marginBottom: 2 }}>
@@ -140,8 +189,33 @@ export default function NotificationBell() {
                 ))}
               </div>
             )}
+            {/* Push notification toggle — installing the PWA and enabling
+                this lets the photographer get native notifications when a
+                client picks, even when the app isn't open. */}
+            {pushStatus !== 'unknown' && pushStatus !== 'unsupported' && (
+              <div style={{ padding: '10px 14px', borderTop: '1px solid var(--cream-dark)', background: 'var(--cream)', fontSize: 12 }}>
+                {pushStatus === 'blocked' ? (
+                  <div style={{ color: 'var(--ink-soft)', lineHeight: 1.5 }}>
+                    🔕 Push notifications are blocked for this site. Re-enable them in your browser settings.
+                  </div>
+                ) : (
+                  <button
+                    onClick={togglePush}
+                    disabled={pushBusy}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 6, background: pushStatus === 'subscribed' ? 'white' : 'var(--ink)', color: pushStatus === 'subscribed' ? 'var(--ink-soft)' : 'var(--cream)', border: pushStatus === 'subscribed' ? '1px solid var(--cream-dark)' : 'none', fontSize: 12, fontWeight: 500, cursor: pushBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: pushBusy ? 0.6 : 1 }}
+                  >
+                    {pushBusy        ? 'Working…'
+                      : pushStatus === 'subscribed'   ? '🔕 Turn off push notifications'
+                      : '🔔 Get push notifications for new picks'}
+                  </button>
+                )}
+                {pushError && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: 'var(--rust)', lineHeight: 1.5 }}>{pushError}</div>
+                )}
+              </div>
+            )}
             <div
-              onClick={() => { setOpen(false); router.push('/dashboard') }}
+              onClick={() => { closeDropdown(); router.push('/dashboard') }}
               style={{ padding: '10px 14px', fontSize: 12, color: 'var(--gold)', cursor: 'pointer', textAlign: 'center', background: 'var(--cream)' }}
             >
               Open dashboard →
