@@ -653,17 +653,14 @@ export default function ClientPickerPage() {
         .pick-map-col { position: relative; }
         .pick-mobile-toggle { display: none; }
 
-        /* Tablet 769–1023: narrower sidebar so the map still breathes, and
-           bump list cards up from desktop's 60px thumb to something closer
-           to the mobile feel. Still a horizontal row — vertical hero stays
-           phone-only. */
+        /* Tablet 769–1023: narrower sidebar so the map still breathes. The
+           card layout itself inherits the mobile vertical-hero treatment
+           below (the shared ≤1023px block), just with a tweaked sidebar
+           width and slightly smaller hero so desktop-sized tablets don't
+           feel dominated by photos. */
         @media (max-width: 1023px) and (min-width: 769px) {
-          .pick-body      { grid-template-columns: 380px 1fr !important; }
-          .pick-loc-card  { gap: 14px !important; padding: 14px 1.25rem !important; }
-          .pick-loc-photo { width: 96px !important; height: 96px !important; border-radius: 10px !important; }
-          .pick-loc-name  { font-size: 15px !important; margin-bottom: 3px !important; }
-          .pick-loc-city  { font-size: 12.5px !important; margin-bottom: 6px !important; }
-          .pick-loc-cta   { font-size: 12px !important; }
+          .pick-body   { grid-template-columns: 420px 1fr !important; }
+          .pick-loc-photo { height: 210px !important; }
         }
 
         /* Default (desktop ≥769): compact horizontal list item. */
@@ -677,10 +674,11 @@ export default function ClientPickerPage() {
         .pick-loc-city       { font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
         .pick-loc-cta        { font-size: 11px; flex-shrink: 0; align-self: center; }
 
-        /* Mobile ≤768: photo goes full-width + swipeable, text stacks below.
-           Taller card, bigger name, more breathing room. Matches how Airbnb /
-           booking apps show one hero per card in a vertical feed. */
-        @media (max-width: 768px) {
+        /* Mobile + tablet ≤1023: photo goes full-width + swipeable, text
+           stacks below. Taller card, bigger name, more breathing room.
+           Matches how Airbnb / booking apps show one hero per card in a
+           vertical feed. */
+        @media (max-width: 1023px) {
           .pick-loc-card     { flex-direction: column !important; gap: 0 !important; padding: 0 !important; align-items: stretch !important; }
           .pick-loc-photo    {
             width: 100% !important; height: 240px !important;

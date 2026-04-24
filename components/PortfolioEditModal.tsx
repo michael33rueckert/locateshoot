@@ -358,6 +358,9 @@ export default function PortfolioEditModal({
                               opacity: isDragging ? 0.4 : 1,
                               touchAction: 'manipulation',
                               userSelect: 'none',
+                              // Dragged tile is transparent to hit-testing
+                              // so elementFromPoint reaches the tile below.
+                              pointerEvents: isDragging ? 'none' : 'auto',
                             }}
                           >
                             <img src={thumbUrl(p.url) ?? p.url} alt="" loading="lazy" decoding="async" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
