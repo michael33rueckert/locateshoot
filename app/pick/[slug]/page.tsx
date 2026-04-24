@@ -448,28 +448,16 @@ export default function ClientPickerPage() {
               const isActive   = String(activeId) === String(loc.id)
               const isDisabled = !isChosen && disabledSet.has(String(loc.id))
               return (
-                <div key={String(loc.id)} onClick={() => { setDetailLoc(loc); setActiveId(loc.id) }}
-                  style={{ display: 'flex', gap: 12, padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', cursor: 'pointer', background: isActive ? 'rgba(196,146,42,.06)' : 'white', borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`, transition: 'all .15s', opacity: isDisabled ? 0.45 : 1 }}>
-                  <div className={loc.bg} style={{ width: 60, height: 60, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-                    {loc.photoUrl && <img src={thumbUrl(loc.photoUrl) ?? loc.photoUrl} alt="" loading="lazy" decoding="async" onClick={e => { e.stopPropagation(); setLightboxSrc(loc.photoUrl!) }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
-                    <div style={{ position: 'absolute', top: 4, left: 4, width: 22, height: 22, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.9)' : 'rgba(26,22,18,.6)', color: 'white', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
-                      {isChosen ? '✓' : i + 1}
-                    </div>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 4 }}>📍 {loc.city}</div>
-                    <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
-                        {loc.access === 'public' ? '● Public' : '🔒 Private'}
-                      </span>
-                      {isDisabled && <span style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic' }}>Too far from your other pick</span>}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, color: isChosen ? 'var(--sage)' : 'var(--sky)', flexShrink: 0, alignSelf: 'center' }}>
-                    {isChosen ? '✓ Selected' : 'View →'}
-                  </div>
-                </div>
+                <PickListItem
+                  key={String(loc.id)}
+                  loc={loc}
+                  index={i}
+                  isChosen={isChosen}
+                  isActive={isActive}
+                  isDisabled={isDisabled}
+                  onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
+                  onOpenLightbox={(imgs, start) => { setLightboxSrc(imgs[start]); setLightboxStart(start) }}
+                />
               )
             })}
             <div style={{ height: 80 }} />
@@ -670,9 +658,51 @@ export default function ClientPickerPage() {
           .pick-body { grid-template-columns: 340px 1fr !important; }
         }
 
-        /* Mobile ≤768: list fills the screen by default; a floating
-           "View Map" pill toggles to a full-screen map view. Matches the
-           Explore page pattern so clients feel at home. */
+        /* Default (desktop ≥769): compact horizontal list item. */
+        .pick-loc-card       { display: flex; gap: 12px; align-items: center; padding: 12px 1.25rem; }
+        .pick-loc-photo      { width: 60px; height: 60px; flex-shrink: 0; border-radius: 8px; overflow: hidden; position: relative; }
+        .pick-loc-photo-strip{ position: absolute; inset: 0; display: flex; overflow: hidden; }
+        .pick-loc-photo-strip > img { width: 100%; height: 100%; flex-shrink: 0; object-fit: cover; display: block; }
+        .pick-loc-photo-counter { display: none; }
+        .pick-loc-body       { flex: 1; min-width: 0; }
+        .pick-loc-name       { font-size: 14px; font-weight: 500; color: var(--ink); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pick-loc-city       { font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
+        .pick-loc-cta        { font-size: 11px; flex-shrink: 0; align-self: center; }
+
+        /* Mobile ≤768: photo goes full-width + swipeable, text stacks below.
+           Taller card, bigger name, more breathing room. Matches how Airbnb /
+           booking apps show one hero per card in a vertical feed. */
+        @media (max-width: 768px) {
+          .pick-loc-card     { flex-direction: column !important; gap: 0 !important; padding: 0 !important; align-items: stretch !important; }
+          .pick-loc-photo    {
+            width: 100% !important; height: 240px !important;
+            border-radius: 0 !important;
+          }
+          .pick-loc-photo-strip {
+            overflow-x: auto !important;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+          }
+          .pick-loc-photo-strip::-webkit-scrollbar { display: none; }
+          .pick-loc-photo-strip > img { scroll-snap-align: start; scroll-snap-stop: always; }
+          .pick-loc-photo-counter {
+            display: block !important;
+            position: absolute; bottom: 10px; right: 10px;
+            padding: 3px 9px; border-radius: 999px;
+            background: rgba(26,22,18,.72);
+            color: white;
+            font-size: 11px; font-weight: 600;
+            backdrop-filter: blur(4px);
+            z-index: 2;
+          }
+          .pick-loc-body     { padding: 14px 1.25rem 16px !important; }
+          .pick-loc-name     { font-size: 17px !important; margin-bottom: 4px !important; }
+          .pick-loc-city     { font-size: 13px !important; margin-bottom: 8px !important; }
+          .pick-loc-cta      { align-self: flex-start !important; padding-left: 1.25rem; padding-bottom: 12px; font-size: 13px !important; font-weight: 600 !important; }
+        }
+
+        /* Mobile map toggle (below, unchanged). */
         @media (max-width: 768px) {
           .pick-body { display: flex !important; flex-direction: column !important; }
           .pick-sidebar { flex: 1 !important; min-height: 0 !important; border-right: none !important; }
@@ -707,6 +737,96 @@ export default function ClientPickerPage() {
         }
       `}</style>
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={() => setLightboxSrc(null)} />
+    </div>
+  )
+}
+
+// One row in the left sidebar's location list. On desktop this renders as a
+// compact horizontal row (60px thumbnail + text). On mobile the same JSX
+// reflows via CSS into a tall card with a full-width swipeable photo
+// carousel — see the `.pick-loc-*` rules in the <style> block above.
+function PickListItem({
+  loc,
+  index,
+  isChosen,
+  isActive,
+  isDisabled,
+  onSelect,
+  onOpenLightbox,
+}: {
+  loc:            FullLocation
+  index:          number
+  isChosen:       boolean
+  isActive:       boolean
+  isDisabled:     boolean
+  onSelect:       () => void
+  onOpenLightbox: (imgs: string[], start: number) => void
+}) {
+  const photos = loc.photoUrls.length > 0
+    ? loc.photoUrls
+    : (loc.photoUrl ? [loc.photoUrl] : [])
+  const [photoIdx, setPhotoIdx] = useState(0)
+  const stripRef = useRef<HTMLDivElement>(null)
+
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget
+    if (el.clientWidth === 0) return
+    const next = Math.round(el.scrollLeft / el.clientWidth)
+    if (next !== photoIdx) setPhotoIdx(next)
+  }
+
+  return (
+    <div
+      onClick={onSelect}
+      className="pick-loc-card"
+      style={{
+        borderBottom: '1px solid var(--cream-dark)',
+        cursor: 'pointer',
+        background: isActive ? 'rgba(196,146,42,.06)' : 'white',
+        borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`,
+        transition: 'all .15s',
+        opacity: isDisabled ? 0.45 : 1,
+      }}
+    >
+      <div className={`pick-loc-photo${photos.length === 0 ? ' ' + loc.bg : ''}`}>
+        {photos.length > 0 && (
+          <div
+            ref={stripRef}
+            className="pick-loc-photo-strip"
+            onScroll={handleScroll}
+          >
+            {photos.map((src, i) => (
+              <img
+                key={i}
+                src={thumbUrl(src) ?? src}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                onClick={e => { e.stopPropagation(); onOpenLightbox(photos, i) }}
+              />
+            ))}
+          </div>
+        )}
+        <div style={{ position: 'absolute', top: 8, left: 8, width: 24, height: 24, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.92)' : 'rgba(26,22,18,.72)', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, backdropFilter: 'blur(4px)' }}>
+          {isChosen ? '✓' : index + 1}
+        </div>
+        {photos.length > 1 && (
+          <span className="pick-loc-photo-counter">{photoIdx + 1} / {photos.length}</span>
+        )}
+      </div>
+      <div className="pick-loc-body">
+        <div className="pick-loc-name">{loc.name}</div>
+        <div className="pick-loc-city">📍 {loc.city}</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
+            {loc.access === 'public' ? '● Public' : '🔒 Private'}
+          </span>
+          {isDisabled && <span style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic' }}>Too far from your other pick</span>}
+        </div>
+      </div>
+      <div className="pick-loc-cta" style={{ color: isChosen ? 'var(--sage)' : 'var(--sky)' }}>
+        {isChosen ? '✓ Selected' : 'View →'}
+      </div>
     </div>
   )
 }

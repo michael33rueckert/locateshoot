@@ -78,7 +78,10 @@ export default function ClientMap({
         shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
       })
 
-      const map = L.map(container, { zoomControl: false })
+      // attributionControl:false here — we add our own at bottomleft below so
+      // the default bottom-right placement doesn't tuck up under the
+      // "View List" pill on mobile.
+      const map = L.map(container, { zoomControl: false, attributionControl: false })
         .setView([39.09, -94.58], 11)
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -86,6 +89,7 @@ export default function ClientMap({
         attribution: '© OpenStreetMap © CARTO',
       }).addTo(map)
 
+      L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map)
       L.control.zoom({ position: 'bottomright' }).addTo(map)
 
       mapRef.current = map
