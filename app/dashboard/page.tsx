@@ -252,8 +252,8 @@ export default function DashboardPage() {
           {[
             { label: 'Portfolio',       value: portfolioLocs.length,           sub: 'your curated set' },
             { label: 'Share links',     value: shareLinks.length,              sub: 'total created'    },
-            { label: 'Permanent links', value: permanentLinks.length,          sub: 'booking-workflow' },
-            { label: 'Client picks',    value: permanentLinks.reduce((s,l) => s + l.picks.length, 0), sub: 'from permanent links' },
+            { label: 'Location guides', value: permanentLinks.length,          sub: 'regional collections' },
+            { label: 'Client picks',    value: permanentLinks.reduce((s,l) => s + l.picks.length, 0), sub: 'from your guides' },
           ].map(stat => (
             <div key={stat.label} style={{ background: 'white', borderRadius: 10, padding: '1rem 1.25rem', border: '1px solid var(--cream-dark)' }}>
               <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 6 }}>{stat.label}</div>
@@ -337,24 +337,24 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* PERMANENT SHARE LINKS */}
+            {/* LOCATION GUIDES (formerly "Permanent Links") */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    📌 Permanent Links
+                    📚 Location Guides
                     {permanentLinks.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(61,110,140,.1)', color: 'var(--sky)', border: '1px solid rgba(61,110,140,.2)' }}>{permanentLinks.length}</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Reusable links that never expire. Clients enter their email when they pick.</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>A curated set of locations for each city or type of session you shoot — one reusable link per guide.</div>
                 </div>
-                <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>+ Create link</button>
+                <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>+ New guide</button>
               </div>
               {permanentLinks.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 10 }}>📌</div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>No permanent links yet</div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 16, lineHeight: 1.5 }}>Create a reusable link for your go-to locations. Clients enter their email when they pick.</div>
-                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '9px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Create your first permanent link</button>
+                  <div style={{ fontSize: 28, marginBottom: 10 }}>📚</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>No guides yet</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 16, lineHeight: 1.55, maxWidth: 420, margin: '0 auto 16px' }}>Think of a guide as a mini-portfolio for one city or theme. Make a <em>Kansas City</em> guide, an <em>Overland Park</em> guide, a <em>Golden Hour</em> guide — send each client the one that matches their session.</div>
+                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '9px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Create your first guide</button>
                 </div>
               ) : permanentLinks.map((link, i) => {
                 const url = buildShareUrl(link.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
@@ -451,7 +451,7 @@ export default function DashboardPage() {
               <div style={{ padding: '.75rem' }}>
                 {[
                   { icon: '🔗', label: 'New client share link',  href: '/share',             desc: 'Send locations to a client'  },
-                  { icon: '📌', label: 'New permanent link',      href: '#',                  desc: 'Reusable link, never expires', onClick: () => { setPreselectAllPortfolio(false); setShowCreatePermanent(true) } },
+                  { icon: '📚', label: 'New location guide',      href: '#',                  desc: 'A reusable link for a city or theme', onClick: () => { setPreselectAllPortfolio(false); setShowCreatePermanent(true) } },
                   { icon: '📍', label: 'Browse the map',         href: '/explore',           desc: 'Add locations to your portfolio' },
                   { icon: '✉️',  label: 'Edit message templates', href: '/profile#templates', desc: 'Manage your saved messages'  },
                   { icon: '⚙',  label: 'Profile settings',       href: '/profile',           desc: 'Update your info & branding' },
@@ -507,7 +507,7 @@ export default function DashboardPage() {
           onClose={() => { setShowCreatePermanent(false); setPreselectAllPortfolio(false) }}
           onCreated={(link) => {
             setPermanentLinks(prev => [{ ...link, picks: [], expanded: false }, ...prev])
-            setToast('📌 Permanent link created!')
+            setToast('📚 Guide created!')
           }}
         />
       )}
@@ -535,7 +535,7 @@ export default function DashboardPage() {
           onCreated={(link) => {
             setPermanentLinks(prev => prev.map(l => l.id === link.id ? { ...l, session_name: link.session_name, portfolio_location_ids: link.portfolio_location_ids } : l))
             setEditingPermLink(null)
-            setToast('✓ Permanent link updated')
+            setToast('✓ Guide updated')
           }}
         />
       )}
@@ -571,7 +571,7 @@ export default function DashboardPage() {
   )
 }
 
-// ── Create Permanent Link Modal ───────────────────────────────────────────────
+// ── Create Location Guide Modal (internal: "permanent link" share link) ──────
 
 function CreatePermanentLinkModal({
   portfolio, preselectAll, userId, photographerName, editLink, onClose, onCreated,
@@ -655,15 +655,15 @@ function CreatePermanentLinkModal({
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📌 {isEdit ? 'Edit permanent link' : preselectAll ? 'Share entire portfolio' : 'Create permanent link'}</div>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📚 {isEdit ? 'Edit location guide' : preselectAll ? 'Share entire portfolio' : 'New location guide'}</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>A reusable link that never expires. Drop it in your booking workflow to send clients every time.</div>
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
           </div>
           <div style={{ marginBottom: '1rem' }}>
-            <label style={labelStyle}>Link name *</label>
-            <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. My portfolio · 2026" autoFocus />
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Clients see this as the session name on their page.</div>
+            <label style={labelStyle}>Guide name *</label>
+            <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. Kansas City Guide · Overland Park Guide · Golden Hour" autoFocus />
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Clients see this at the top of their location picker.</div>
           </div>
           <div style={{ marginBottom: '1.25rem' }}>
             <label style={labelStyle}>Message to clients (optional)</label>
@@ -707,7 +707,7 @@ function CreatePermanentLinkModal({
           {error && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={create} disabled={saving || !sessionName.trim() || selectedIds.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !sessionName.trim() || selectedIds.length === 0 ? 0.5 : 1 }}>
-              {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save changes' : 'Create permanent link →')}
+              {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save changes' : 'Create guide →')}
             </button>
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>

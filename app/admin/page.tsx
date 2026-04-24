@@ -297,7 +297,7 @@ export default function AdminPage() {
               <MetricCard label="Total users" value={metrics.users.total} sub={`+${metrics.users.new_this_week} this week`} />
               <MetricCard label="Paid plans" value={Object.entries(metrics.users.by_plan).filter(([p]) => p !== 'free').reduce((s,[,v]) => s+v, 0)} sub={`${metrics.users.by_plan['free'] ?? 0} free`} />
               <MetricCard label="Share links" value={metrics.share_links.total} sub={`+${metrics.share_links.new_this_week} this week`} />
-              <MetricCard label="Permanent links" value={metrics.share_links.permanent} sub="booking integration" />
+              <MetricCard label="Location guides" value={metrics.share_links.permanent} sub="reusable share links" />
               <MetricCard label="Client picks" value={metrics.client_picks.total} sub="lifetime" />
               <MetricCard label="Map locations" value={metrics.locations.total} sub={`${metrics.locations.by_status['pending'] ?? 0} pending`} />
               <MetricCard label="Portfolio rows" value={metrics.portfolio.total_rows} sub={`${metrics.portfolio.active_users} active users`} />
