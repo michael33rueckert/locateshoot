@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // Leaflet throws "Invalid LatLng object: (NaN, NaN)" when flyTo/setView/fitBounds
 // run while the map container has zero width/height. On mobile the map column is
@@ -52,6 +52,10 @@ export default function ClientMap({
   const mapRef       = useRef<any>(null)
   const markersRef   = useRef<Record<number, any>>({})
   const didInitialFitRef = useRef(false)
+  // React state (not ref) so the fit-bounds effect below re-runs when the
+  // leaflet dynamic import resolves. Using a ref here would miss the transition
+  // and leave the map parked on the fallback center.
+  const [mapReady, setMapReady] = useState(false)
 
   // ── Init map ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -80,13 +84,7 @@ export default function ClientMap({
       L.control.zoom({ position: 'bottomright' }).addTo(map)
 
       mapRef.current = map
-
-      // Fit map to all locations on load
-      const valid = locations.filter(l => isFiniteLatLng(l.lat, l.lng))
-      if (valid.length > 0 && mapHasSize(map)) {
-        const bounds = L.latLngBounds(valid.map(l => [l.lat, l.lng] as [number, number]))
-        map.fitBounds(bounds, { padding: [48, 48] })
-      }
+      setMapReady(true)
     })
 
     return () => {
@@ -94,27 +92,49 @@ export default function ClientMap({
         mapRef.current.remove()
         mapRef.current = null
       }
+      setMapReady(false)
+      didInitialFitRef.current = false
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fit bounds once the locations arrive ──────────────────────────────────
-  // The init effect runs before the /api/pick-data fetch resolves, so the
-  // initial fitBounds has nothing to fit and the map stays zoomed on the
-  // fallback center (markers exist but scroll off-screen). This separate
-  // effect catches the first non-empty locations update and zooms to show
-  // every pin, so clients see all the dots immediately.
+  // ── Fit bounds when the map is ready, has size, and locations are loaded ──
+  //
+  // Three things race on this page: the leaflet dynamic import, the
+  // /api/pick-data fetch, and on mobile the map container going from
+  // `display:none` to `display:block` when the user taps "View Map". This
+  // effect waits for all three and then fits the bounds exactly once, which
+  // is what makes clients land on a view that shows every pin.
+  //
+  // The ResizeObserver is the mobile piece: `display:none` → block leaves
+  // leaflet sized 0×0 until the container actually gains dimensions, so we
+  // re-trigger on the first real size event and also call `invalidateSize`
+  // so tiles render against the correct viewport.
   useEffect(() => {
-    if (!mapRef.current || didInitialFitRef.current) return
+    if (!mapReady || !mapRef.current || !containerRef.current) return
+    const map = mapRef.current
     const valid = locations.filter(l => isFiniteLatLng(l.lat, l.lng))
     if (valid.length === 0) return
-    import('leaflet').then(L => {
-      const map = mapRef.current
-      if (!map || !mapHasSize(map)) return
-      const bounds = L.latLngBounds(valid.map(l => [l.lat, l.lng] as [number, number]))
-      map.fitBounds(bounds, { padding: [48, 48] })
-      didInitialFitRef.current = true
-    })
-  }, [locations])
+
+    function attemptFit() {
+      if (didInitialFitRef.current) return
+      if (!mapHasSize(map)) return
+      import('leaflet').then(L => {
+        map.invalidateSize()
+        const bounds = L.latLngBounds(valid.map(l => [l.lat, l.lng] as [number, number]))
+        map.fitBounds(bounds, { padding: [48, 48], maxZoom: 15, animate: true })
+        didInitialFitRef.current = true
+      })
+    }
+
+    attemptFit()
+    if (didInitialFitRef.current) return
+
+    // Container might be 0×0 right now (hidden on mobile). Watch for the
+    // transition to non-zero and re-try.
+    const ro = new ResizeObserver(() => attemptFit())
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [mapReady, locations])
 
   // ── Redraw markers ─────────────────────────────────────────────────────────
   useEffect(() => {
