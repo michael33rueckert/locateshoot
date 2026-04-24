@@ -187,7 +187,7 @@ export default function PortfolioPage() {
               Your curated locations. These are what clients see on every share link you send — keep each one loaded up with your best photos and notes.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+          <div className="portfolio-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
             <button onClick={() => setShowAdd(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
             <Link href="/explore" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>+ Add from Explore</Link>
             {locs.length > 0 && (
@@ -198,6 +198,18 @@ export default function PortfolioPage() {
             )}
           </div>
         </div>
+
+        <style>{`
+          /* When the header wraps to a second row on narrow screens, the action
+             cluster would otherwise sit right-aligned because of the outer
+             space-between. Stretch it to full width + left-align the buttons. */
+          @media (max-width: 760px) {
+            .portfolio-header-actions {
+              width: 100%;
+              justify-content: flex-start;
+            }
+          }
+        `}</style>
 
         {/* Summary row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, marginBottom: '1.5rem' }}>
