@@ -653,9 +653,17 @@ export default function ClientPickerPage() {
         .pick-map-col { position: relative; }
         .pick-mobile-toggle { display: none; }
 
-        /* Tablet 768–1023: narrower sidebar so the map still breathes. */
+        /* Tablet 769–1023: narrower sidebar so the map still breathes, and
+           bump list cards up from desktop's 60px thumb to something closer
+           to the mobile feel. Still a horizontal row — vertical hero stays
+           phone-only. */
         @media (max-width: 1023px) and (min-width: 769px) {
-          .pick-body { grid-template-columns: 340px 1fr !important; }
+          .pick-body      { grid-template-columns: 380px 1fr !important; }
+          .pick-loc-card  { gap: 14px !important; padding: 14px 1.25rem !important; }
+          .pick-loc-photo { width: 96px !important; height: 96px !important; border-radius: 10px !important; }
+          .pick-loc-name  { font-size: 15px !important; margin-bottom: 3px !important; }
+          .pick-loc-city  { font-size: 12.5px !important; margin-bottom: 6px !important; }
+          .pick-loc-cta   { font-size: 12px !important; }
         }
 
         /* Default (desktop ≥769): compact horizontal list item. */
