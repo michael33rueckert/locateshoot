@@ -93,9 +93,10 @@ export default function DashboardPage() {
         // Count of photographer's own photos per portfolio copy + first-photo preview
         const { data: ownPhotos } = await supabase
           .from('location_photos')
-          .select('portfolio_location_id,url,created_at')
+          .select('portfolio_location_id,url,created_at,sort_order')
           .in('portfolio_location_id', pIds)
           .eq('is_private', false)
+          .order('sort_order', { ascending: true })
           .order('created_at', { ascending: true })
         const ownCount: Record<string, number> = {}
         const ownUrl:   Record<string, string> = {}

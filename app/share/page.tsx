@@ -96,9 +96,19 @@ export default function SharePage() {
         const portfolioIds = portfolioRes.data.map((p: any) => p.id)
         const sourceIds    = portfolioRes.data.map((p: any) => p.source_location_id).filter(Boolean) as string[]
         const [{ data: ownPhotos }, { data: sourcePhotos }] = await Promise.all([
-          supabase.from('location_photos').select('portfolio_location_id,url').in('portfolio_location_id', portfolioIds).eq('is_private', false),
+          supabase.from('location_photos')
+            .select('portfolio_location_id,url,sort_order,created_at')
+            .in('portfolio_location_id', portfolioIds)
+            .eq('is_private', false)
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: true }),
           sourceIds.length > 0
-            ? supabase.from('location_photos').select('location_id,url').in('location_id', sourceIds).eq('is_private', false)
+            ? supabase.from('location_photos')
+                .select('location_id,url,sort_order,created_at')
+                .in('location_id', sourceIds)
+                .eq('is_private', false)
+                .order('sort_order', { ascending: true })
+                .order('created_at', { ascending: true })
             : Promise.resolve({ data: [] as any[] }),
         ])
         const ownMap: Record<string, string> = {}
