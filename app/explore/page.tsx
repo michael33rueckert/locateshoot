@@ -166,10 +166,14 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
   const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
   const { photos: communityPhotos } = useCommunityPhotos(loc.id, user?.id ?? null)
   const [activePhoto, setActivePhoto] = useState(0)
-  const [photoTab,    setPhotoTab]    = useState<'google'|'community'|'upload'>('google')
+  const [photoTab,    setPhotoTab]    = useState<'google'|'community'|'upload'>(communityPhotos.length > 0 ? 'community' : 'google')
   const [showReport,  setShowReport]  = useState(false)
 
-  useEffect(() => { setActivePhoto(0); setPhotoTab('google') }, [loc.id])
+  useEffect(() => {
+    setActivePhoto(0)
+    // Photographer photos take priority; fall back to Google when none exist yet.
+    setPhotoTab(communityPhotos.length > 0 ? 'community' : 'google')
+  }, [loc.id, communityPhotos.length])
   useEffect(() => {
     if (!googleLoading && !googlePhotos.length && communityPhotos.length) setPhotoTab('community')
   }, [googleLoading, googlePhotos.length, communityPhotos.length])
@@ -191,7 +195,7 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
         <button onClick={onClose} style={{position:'absolute',top:14,right:14,width:32,height:32,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:16,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10}}>✕</button>
 
         {/* Photo area */}
-        <div style={{position:'relative',height:220,background:'#1a1612',overflow:'hidden'}}>
+        <div style={{position:'relative',height:'clamp(260px, 44vw, 380px)',background:'#1a1612',overflow:'hidden'}}>
           {photoTab==='google'&&(googleLoading
             ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
             :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} onClick={()=>onOpenLightbox(googlePhotos.map(p=>p.url), activePhoto)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>

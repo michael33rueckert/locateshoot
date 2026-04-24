@@ -65,7 +65,7 @@ export async function GET(request: Request, context: any) {
     // New path — share references portfolio copies
     const { data: portfolioRows, error: portfolioErr } = await admin
       .from('portfolio_locations')
-      .select('id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret')
+      .select('id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,hide_google_photos')
       .in('id', portfolioIds)
     if (portfolioErr) console.error('portfolio query error:', portfolioErr)
 
@@ -73,12 +73,14 @@ export async function GET(request: Request, context: any) {
       .map(p => p.source_location_id)
       .filter((x): x is string => !!x)
 
-    // Photos attached directly to the portfolio copy
+    // Photos attached directly to the portfolio copy — honor photographer's
+    // custom ordering (sort_order), fall back to created_at.
     const { data: portfolioPhotos } = await admin
       .from('location_photos')
-      .select('portfolio_location_id,url,created_at')
+      .select('portfolio_location_id,url,created_at,sort_order')
       .in('portfolio_location_id', portfolioIds)
       .eq('is_private', false)
+      .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true })
 
     // Fallback: photos + real rating/permit data on the source public location
@@ -131,11 +133,12 @@ export async function GET(request: Request, context: any) {
         permit_fee:       src?.permit_fee       ?? null,
         permit_website:   src?.permit_website   ?? null,
         permit_certainty: src?.permit_certainty ?? 'unknown',
-        rating:           src?.rating           ?? null,
-        quality_score:    src?.quality_score    ?? null,
-        save_count:       src?.save_count       ?? 0,
-        photo_url:        urls[0] ?? null,
-        photo_urls:       urls,
+        rating:             src?.rating           ?? null,
+        quality_score:      src?.quality_score    ?? null,
+        save_count:         src?.save_count       ?? 0,
+        photo_url:          urls[0] ?? null,
+        photo_urls:         urls,
+        hide_google_photos: !!p.hide_google_photos,
       }
     })
   } else {
@@ -151,9 +154,10 @@ export async function GET(request: Request, context: any) {
 
       const { data: photoData } = await admin
         .from('location_photos')
-        .select('location_id,url,created_at')
+        .select('location_id,url,created_at,sort_order')
         .in('location_id', locIds)
         .eq('is_private', false)
+        .order('sort_order', { ascending: true })
         .order('created_at', { ascending: true })
       const photoMap: Record<string, string[]> = {}
       ;(photoData ?? []).forEach((p: any) => {

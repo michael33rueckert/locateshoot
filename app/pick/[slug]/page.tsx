@@ -34,6 +34,7 @@ type FullLocation = ClientLocation & {
   saves: number
   photoUrl: string | null
   photoUrls: string[]
+  hideGooglePhotos: boolean
 }
 
 export default function ClientPickerPage() {
@@ -116,6 +117,7 @@ export default function ClientPickerPage() {
             saves:  loc.save_count ?? 0,
             photoUrl: loc.photo_url ?? null,
             photoUrls: loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : []),
+            hideGooglePhotos: !!loc.hide_google_photos,
           })
         })
 
@@ -130,6 +132,7 @@ export default function ClientPickerPage() {
             permitRequired: null, permitNotes: null, permitFee: null,
             permitWebsite: null, permitCertainty: 'unknown',
             saves: 0,
+            hideGooglePhotos: true,
             photoUrl: null,
             photoUrls: [],
           })
@@ -687,9 +690,9 @@ export default function ClientPickerPage() {
   )
 }
 
-// Photo hero + thumbnail strip for the pick-page detail panel. Shows the full gallery
-// returned by /api/pick-data (portfolio uploads preferred, source-location photos as fallback).
-// Tapping the hero opens the shared multi-image lightbox at the current index.
+// Photo hero + thumbnail strip + Photographer/Google tabs for the pick-page
+// detail panel. Photographer's uploaded photos always take the default tab.
+// When loc.hideGooglePhotos is true, the Google tab is hidden entirely.
 function DetailPhotoGallery({
   loc,
   onOpenLightbox,
@@ -697,37 +700,53 @@ function DetailPhotoGallery({
   loc: FullLocation
   onOpenLightbox: (imgs: string[], start: number) => void
 }) {
-  // Live Google Places photos (up to 10) — higher quality than the single seeded
-  // thumbnail. Merge: Google first (for variety), then any seeded/community
-  // photos that aren't already duplicates.
-  const { photos: googlePhotos, loading: googleLoading } = useServerPlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
-  const seeded = loc.photoUrls.length > 0 ? loc.photoUrls : (loc.photoUrl ? [loc.photoUrl] : [])
-  const photos = (() => {
-    if (googlePhotos.length === 0) return seeded
-    const g = googlePhotos.map((p: { url: string }) => p.url)
-    const seen = new Set(g)
-    const extra = seeded.filter(u => !seen.has(u))
-    return [...g, ...extra]
-  })()
+  // Photographer-uploaded photos (already ordered by sort_order on the server).
+  const photographerPhotos = loc.photoUrls.length > 0
+    ? loc.photoUrls
+    : (loc.photoUrl ? [loc.photoUrl] : [])
+
+  // Only fetch Google photos when the photographer hasn't opted out per location.
+  const { photos: googleFetch, loading: googleLoading } = useServerPlacePhotos(
+    loc.hideGooglePhotos ? '' : loc.name,
+    loc.hideGooglePhotos ? '' : loc.city,
+    loc.lat,
+    loc.lng,
+  )
+  const googlePhotos = loc.hideGooglePhotos ? [] : googleFetch.map(p => p.url)
+
+  const hasPhotographer = photographerPhotos.length > 0
+  const hasGoogle       = !loc.hideGooglePhotos && googlePhotos.length > 0
+
+  type Tab = 'photographer' | 'google'
+  const [tab, setTab] = useState<Tab>(hasPhotographer ? 'photographer' : 'google')
   const [idx, setIdx] = useState(0)
 
-  useEffect(() => { setIdx(0) }, [loc.id])
+  // Re-seed the default tab + active index whenever the location changes.
+  useEffect(() => { setIdx(0); setTab(hasPhotographer ? 'photographer' : 'google') }, [loc.id, hasPhotographer])
 
-  const hasPhotos = photos.length > 0
-  const hasMultiple = photos.length > 1
-  const current = photos[idx]
+  // If the photographer-tab is selected but no photographer photos exist and
+  // Google photos arrive, auto-flip so we show something.
+  useEffect(() => {
+    if (tab === 'photographer' && !hasPhotographer && hasGoogle) setTab('google')
+  }, [tab, hasPhotographer, hasGoogle])
+
+  const activePhotos = tab === 'photographer' ? photographerPhotos : googlePhotos
+  const hasPhotos    = activePhotos.length > 0
+  const hasMultiple  = activePhotos.length > 1
+  const current      = activePhotos[Math.min(idx, Math.max(0, activePhotos.length - 1))]
+  const heroHeight   = 'clamp(260px, 44vw, 380px)' // closer to a natural photo aspect ratio
 
   return (
     <>
-      <div className={hasPhotos ? undefined : loc.bg} style={{ height: 220, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
+      <div className={hasPhotos ? undefined : loc.bg} style={{ height: heroHeight, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
         {hasPhotos ? (
           <img
             src={current}
             alt={loc.name}
-            onClick={() => onOpenLightbox(photos, idx)}
+            onClick={() => onOpenLightbox(activePhotos, idx)}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
           />
-        ) : googleLoading ? (
+        ) : googleLoading && !hasPhotographer ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,.2)', borderTop: '2px solid rgba(255,255,255,.7)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
           </div>
@@ -738,24 +757,50 @@ function DetailPhotoGallery({
         {hasMultiple && (
           <>
             <button
-              onClick={e => { e.stopPropagation(); setIdx(i => (i - 1 + photos.length) % photos.length) }}
+              onClick={e => { e.stopPropagation(); setIdx(i => (i - 1 + activePhotos.length) % activePhotos.length) }}
               aria-label="Previous photo"
               style={{ position: 'absolute', top: '50%', left: 10, transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', zIndex: 2 }}
             >‹</button>
             <button
-              onClick={e => { e.stopPropagation(); setIdx(i => (i + 1) % photos.length) }}
+              onClick={e => { e.stopPropagation(); setIdx(i => (i + 1) % activePhotos.length) }}
               aria-label="Next photo"
               style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', zIndex: 2 }}
             >›</button>
             <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(26,22,18,.7)', borderRadius: 20, padding: '3px 10px', fontSize: 11, color: 'rgba(255,255,255,.85)', fontVariantNumeric: 'tabular-nums', zIndex: 2 }}>
-              {idx + 1} / {photos.length}
+              {idx + 1} / {activePhotos.length}
             </div>
           </>
         )}
       </div>
+
+      {/* Tab row — only shown when both sources have photos available. */}
+      {(hasPhotographer || hasGoogle) && (hasPhotographer && hasGoogle) && (
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--cream-dark)' }}>
+          {([
+            { key: 'photographer' as const, label: `Photographer${hasPhotographer ? ` (${photographerPhotos.length})` : ''}` },
+            { key: 'google'       as const, label: `Google${hasGoogle ? ` (${googlePhotos.length})` : ''}` },
+          ]).map(t => (
+            <button
+              key={t.key}
+              onClick={() => { setTab(t.key); setIdx(0) }}
+              style={{
+                padding: '9px 16px', fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
+                border: 'none',
+                borderBottom: `2px solid ${tab === t.key ? 'var(--gold)' : 'transparent'}`,
+                background: 'white',
+                color: tab === t.key ? 'var(--ink)' : 'var(--ink-soft)',
+                cursor: 'pointer',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {hasMultiple && (
         <div style={{ display: 'flex', gap: 5, padding: '8px 1.25rem', overflowX: 'auto', borderBottom: '1px solid var(--cream-dark)' }}>
-          {photos.map((url, i) => (
+          {activePhotos.map((url, i) => (
             <div
               key={i}
               onClick={() => setIdx(i)}

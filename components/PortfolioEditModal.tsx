@@ -19,7 +19,7 @@ interface PortfolioRow {
   is_secret: boolean; source_location_id: string | null
 }
 
-interface PhotoRow { id: string; url: string; storage_path: string; caption: string | null }
+interface PhotoRow { id: string; url: string; storage_path: string; caption: string | null; sort_order?: number | null }
 
 export default function PortfolioEditModal({
   portfolioId, userId, onClose, onSaved, onDeleted,
@@ -41,6 +41,7 @@ export default function PortfolioEditModal({
   const [bestTime,       setBestTime]       = useState('')
   const [parkingInfo,    setParkingInfo]    = useState('')
   const [isSecret,setIsSecret]= useState(false)
+  const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
   const [photos,  setPhotos]  = useState<PhotoRow[]>([])
   const [saving,  setSaving]  = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -53,8 +54,8 @@ export default function PortfolioEditModal({
     let cancelled = false
     async function load() {
       const [rowRes, photosRes] = await Promise.all([
-        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,source_location_id').eq('id', portfolioId).single(),
-        supabase.from('location_photos').select('id,url,storage_path,caption').eq('portfolio_location_id', portfolioId).order('created_at', { ascending: true }),
+        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
+        supabase.from('location_photos').select('id,url,storage_path,caption,sort_order').eq('portfolio_location_id', portfolioId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       ])
       if (cancelled) return
       if (rowRes.data) {
@@ -70,6 +71,7 @@ export default function PortfolioEditModal({
         setBestTime(rowRes.data.best_time ?? '')
         setParkingInfo(rowRes.data.parking_info ?? '')
         setIsSecret(!!rowRes.data.is_secret)
+        setHideGooglePhotos(!!rowRes.data.hide_google_photos)
       }
       if (photosRes.data) setPhotos(photosRes.data)
       setLoading(false)
@@ -88,21 +90,38 @@ export default function PortfolioEditModal({
     if (!name.trim()) { setErr('Name is required.'); return }
     setSaving(true); setErr('')
     const { error } = await supabase.from('portfolio_locations').update({
-      name:            name.trim(),
-      description:     desc.trim() || null,
-      city:            city.trim() || null,
-      state:           state.trim() || null,
-      access_type:     access,
-      tags:            tags.length > 0 ? tags : null,
-      permit_required: permitRequired,
-      permit_notes:    permitNotes.trim() || null,
-      best_time:       bestTime.trim() || null,
-      parking_info:    parkingInfo.trim() || null,
-      is_secret:       isSecret,
+      name:               name.trim(),
+      description:        desc.trim() || null,
+      city:               city.trim() || null,
+      state:              state.trim() || null,
+      access_type:        access,
+      tags:               tags.length > 0 ? tags : null,
+      permit_required:    permitRequired,
+      permit_notes:       permitNotes.trim() || null,
+      best_time:          bestTime.trim() || null,
+      parking_info:       parkingInfo.trim() || null,
+      is_secret:          isSecret,
+      hide_google_photos: hideGooglePhotos,
     }).eq('id', portfolioId)
     setSaving(false)
     if (error) { setErr(error.message); return }
     onSaved()
+  }
+
+  async function movePhoto(photoId: string, direction: -1 | 1) {
+    // Swap sort_order with the neighbor in the desired direction.
+    const i = photos.findIndex(p => p.id === photoId)
+    if (i < 0) return
+    const j = i + direction
+    if (j < 0 || j >= photos.length) return
+    const next = [...photos]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setPhotos(next)
+    // Rewrite sort_order for every photo so the order is stable even if some
+    // rows had the same default 0 value. Fire-and-forget updates.
+    await Promise.all(next.map((p, idx) =>
+      supabase.from('location_photos').update({ sort_order: idx }).eq('id', p.id)
+    ))
   }
 
   async function deletePortfolio() {
@@ -128,6 +147,8 @@ export default function PortfolioEditModal({
     setUploading(true)
     const { data: p } = await supabase.from('profiles').select('full_name').eq('id', userId).single()
     const uploaded: PhotoRow[] = []
+    // Start new photos at the end of the current order.
+    let nextOrder = photos.length
     for (const f of files) {
       try {
         const ext = f.name.split('.').pop()
@@ -142,7 +163,8 @@ export default function PortfolioEditModal({
           storage_path: path,
           is_private: false,
           photographer_name: p?.full_name ?? null,
-        }).select('id,url,storage_path,caption').single()
+          sort_order: nextOrder++,
+        }).select('id,url,storage_path,caption,sort_order').single()
         if (ie) { console.error(ie); continue }
         if (inserted) uploaded.push(inserted)
       } catch (e) { console.error(e) }
@@ -243,11 +265,19 @@ export default function PortfolioEditModal({
                 )}
               </div>
 
-              <div onClick={() => setIsSecret(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer', background: isSecret ? 'rgba(124,92,191,.05)' : 'var(--cream)', border: `1px solid ${isSecret ? 'rgba(124,92,191,.3)' : 'var(--cream-dark)'}` }}>
+              <div onClick={() => setIsSecret(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: 10, cursor: 'pointer', background: isSecret ? 'rgba(124,92,191,.05)' : 'var(--cream)', border: `1px solid ${isSecret ? 'rgba(124,92,191,.3)' : 'var(--cream-dark)'}` }}>
                 <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${isSecret ? '#7c5cbf' : 'var(--sand)'}`, background: isSecret ? '#7c5cbf' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{isSecret ? '✓' : ''}</div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Mark as secret</div>
                   <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Private portfolio spot — still shows on your share links.</div>
+                </div>
+              </div>
+
+              <div onClick={() => setHideGooglePhotos(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer', background: hideGooglePhotos ? 'rgba(61,110,140,.06)' : 'var(--cream)', border: `1px solid ${hideGooglePhotos ? 'rgba(61,110,140,.3)' : 'var(--cream-dark)'}` }}>
+                <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${hideGooglePhotos ? 'var(--sky)' : 'var(--sand)'}`, background: hideGooglePhotos ? 'var(--sky)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{hideGooglePhotos ? '✓' : ''}</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Do not show photos from Google</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Clients will only see your uploaded photos for this location.</div>
                 </div>
               </div>
 
@@ -265,14 +295,38 @@ export default function PortfolioEditModal({
                     <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Clients will see Google Photos until you add your own.</div>
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(90px,1fr))', gap: 6 }}>
-                    {photos.map(p => (
-                      <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}>
-                        <img src={p.url} alt="" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
-                        <button onClick={() => deletePhoto(p)} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 6 }}>
+                      Drag order with the arrows — the first photo is what clients see first.
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 8 }}>
+                      {photos.map((p, i) => {
+                        const isFirst = i === 0
+                        const isLast  = i === photos.length - 1
+                        return (
+                          <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--cream-dark)' }}>
+                            <img src={p.url} alt="" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
+                            <div style={{ position: 'absolute', top: 4, left: 4, padding: '1px 6px', borderRadius: 10, background: 'rgba(26,22,18,.75)', color: 'white', fontSize: 10, fontWeight: 600 }}>{i + 1}</div>
+                            <button onClick={() => deletePhoto(p)} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                            <div style={{ position: 'absolute', bottom: 4, left: 4, right: 4, display: 'flex', gap: 4, justifyContent: 'space-between' }}>
+                              <button
+                                onClick={() => movePhoto(p.id, -1)}
+                                disabled={isFirst}
+                                aria-label="Move left"
+                                style={{ flex: 1, padding: '4px 0', borderRadius: 4, background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: isFirst ? 'default' : 'pointer', fontSize: 13, opacity: isFirst ? 0.35 : 1 }}
+                              >‹</button>
+                              <button
+                                onClick={() => movePhoto(p.id, 1)}
+                                disabled={isLast}
+                                aria-label="Move right"
+                                style={{ flex: 1, padding: '4px 0', borderRadius: 4, background: 'rgba(26,22,18,.75)', color: 'white', border: 'none', cursor: isLast ? 'default' : 'pointer', fontSize: 13, opacity: isLast ? 0.35 : 1 }}
+                              >›</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
 

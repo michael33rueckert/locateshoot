@@ -49,7 +49,6 @@ export default function SharePage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('')
   const [photographerName, setPhotographerName] = useState('')
   const [expiry,           setExpiry]           = useState('14')
-  const [myPhotosOnly,     setMyPhotosOnly]     = useState(false)
   const [generatedSlug,    setGeneratedSlug]    = useState<string | null>(null)
   const [customDomain,     setCustomDomain]     = useState<string | null>(null)
   const [customVerified,   setCustomVerified]   = useState(false)
@@ -216,7 +215,6 @@ export default function SharePage() {
         session_name:           sessionName.trim(),
         message:                message.trim() || null,
         photographer_name:      photographerName.trim() || null,
-        my_photos_only:         myPhotosOnly,
         portfolio_location_ids: portfolioLocationIds,
         location_ids:           [],
         secret_ids:             [],
@@ -237,7 +235,7 @@ export default function SharePage() {
   }
 
   function resetAll() {
-    setStep(1); setPin(null); setSelected(new Set()); setMyPhotosOnly(false)
+    setStep(1); setPin(null); setSelected(new Set())
     setGeneratedSlug(null); setSessionName(''); setMessage(''); setSelectedTemplate('')
   }
 
@@ -494,18 +492,6 @@ export default function SharePage() {
                   <option value="30">30 days</option>
                   <option value="0">Never</option>
                 </select>
-              </div>
-              <div
-                onClick={() => setMyPhotosOnly(prev => !prev)}
-                style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', background: myPhotosOnly ? 'rgba(196,146,42,.06)' : 'var(--cream)', border: `1px solid ${myPhotosOnly ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}`, borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer' }}
-              >
-                <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `1.5px solid ${myPhotosOnly ? 'var(--gold)' : 'var(--sand)'}`, background: myPhotosOnly ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--ink)' }}>
-                  {myPhotosOnly ? '✓' : ''}
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>Only show photos I uploaded</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Client will only see your personal photos.</div>
-                </div>
               </div>
               <div style={{ padding: '12px 14px', background: 'var(--cream-dark)', borderRadius: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>

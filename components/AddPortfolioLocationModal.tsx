@@ -27,6 +27,7 @@ export default function AddPortfolioLocationModal({
   const [permitRequired, setPermitRequired] = useState(false)
   const [permitNotes,    setPermitNotes]    = useState('')
   const [isSecret,setIsSecret]= useState(false)
+  const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
   const [pin,     setPin]     = useState<AddressResult | null>(null)
   const [photos,  setPhotos]  = useState<PendingPhoto[]>([])
   const [saving,  setSaving]  = useState(false)
@@ -85,6 +86,7 @@ export default function AddPortfolioLocationModal({
       best_time:          bestTime.trim() || null,
       parking_info:       parkingInfo.trim() || null,
       is_secret:          isSecret,
+      hide_google_photos: hideGooglePhotos,
     }).select('id').single()
 
     if (error || !inserted) { setSaving(false); setErr(error?.message ?? 'Could not add location.'); return }
@@ -220,11 +222,19 @@ export default function AddPortfolioLocationModal({
             )}
           </div>
 
-          <div onClick={() => setIsSecret(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer', background: isSecret ? 'rgba(124,92,191,.05)' : 'var(--cream)', border: `1px solid ${isSecret ? 'rgba(124,92,191,.3)' : 'var(--cream-dark)'}` }}>
+          <div onClick={() => setIsSecret(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: 10, cursor: 'pointer', background: isSecret ? 'rgba(124,92,191,.05)' : 'var(--cream)', border: `1px solid ${isSecret ? 'rgba(124,92,191,.3)' : 'var(--cream-dark)'}` }}>
             <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${isSecret ? '#7c5cbf' : 'var(--sand)'}`, background: isSecret ? '#7c5cbf' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{isSecret ? '✓' : ''}</div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Mark as secret</div>
               <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Shown on share links with only a general area — exact coords stay private.</div>
+            </div>
+          </div>
+
+          <div onClick={() => setHideGooglePhotos(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: '1.25rem', cursor: 'pointer', background: hideGooglePhotos ? 'rgba(61,110,140,.06)' : 'var(--cream)', border: `1px solid ${hideGooglePhotos ? 'rgba(61,110,140,.3)' : 'var(--cream-dark)'}` }}>
+            <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${hideGooglePhotos ? 'var(--sky)' : 'var(--sand)'}`, background: hideGooglePhotos ? 'var(--sky)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{hideGooglePhotos ? '✓' : ''}</div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Do not show photos from Google</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Clients will only see your uploaded photos for this location.</div>
             </div>
           </div>
 
