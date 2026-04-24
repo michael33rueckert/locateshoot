@@ -135,8 +135,12 @@ export default function ClientMap({
   }, [visible, mapReady, locations])
 
   // ── Redraw markers ─────────────────────────────────────────────────────────
+  // Including `mapReady` in deps is load-bearing: when `locations` arrive
+  // before leaflet's dynamic import resolves, this effect would otherwise
+  // skip (mapRef.current is still null) and never re-run, leaving the map
+  // blank until some other state change (like a marker click) forced it.
   useEffect(() => {
-    if (!mapRef.current) return
+    if (!mapReady || !mapRef.current) return
 
     import('leaflet').then(L => {
       const map = mapRef.current
@@ -214,7 +218,7 @@ export default function ClientMap({
         markersRef.current[loc.id] = marker
       })
     })
-  }, [locations, activeId, chosenIds, disabledIds, onMarkerClick]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapReady, locations, activeId, chosenIds, disabledIds, onMarkerClick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fly to active location ─────────────────────────────────────────────────
   useEffect(() => {
