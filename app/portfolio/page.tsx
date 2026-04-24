@@ -275,6 +275,8 @@ export default function PortfolioPage() {
                       position: 'relative',
                       touchAction: canReorder ? 'manipulation' : 'auto',
                       userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      WebkitTouchCallout: 'none',
                       // The dragged card sits directly under the finger, so
                       // it would otherwise win elementFromPoint and stop
                       // reorder detection from seeing the card underneath.

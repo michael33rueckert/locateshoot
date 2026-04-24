@@ -41,6 +41,13 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
   function bindItem(id: string) {
     return {
       'data-reorder-id': id,
+      // Swallow the native long-press context menu (Android Chrome shows
+      // "Copy / Open in new tab" on any long-pressed element by default,
+      // and it interrupts our drag before pointermove can fire). Swallow
+      // dragstart too so the images inside the card don't kick off the
+      // browser's own HTML5 drag operation.
+      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+      onDragStart:   (e: React.DragEvent)  => e.preventDefault(),
       onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
         // Only primary button for mouse; any touch/pen counts.
         if (e.pointerType === 'mouse' && e.button !== 0) return

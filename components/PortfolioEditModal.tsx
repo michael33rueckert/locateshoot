@@ -358,6 +358,8 @@ export default function PortfolioEditModal({
                               opacity: isDragging ? 0.4 : 1,
                               touchAction: 'manipulation',
                               userSelect: 'none',
+                              WebkitUserSelect: 'none',
+                              WebkitTouchCallout: 'none',
                               // Dragged tile is transparent to hit-testing
                               // so elementFromPoint reaches the tile below.
                               pointerEvents: isDragging ? 'none' : 'auto',
