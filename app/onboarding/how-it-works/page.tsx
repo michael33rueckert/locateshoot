@@ -22,30 +22,19 @@ const SECTIONS = [
   },
   {
     eyebrow: 'Step 2',
-    icon:    '🔗',
-    title:   'Send a session share link',
-    body:    `When a client books a specific session, create a one-off share link from /share. Pick which locations from your portfolio to show them, drop a pin if they’re traveling to you, and send the link over text or email. They tap one spot, enter their name + email, and you get notified instantly.`,
+    icon:    '📚',
+    title:   'Create Location Guides — reusable or single-use, you choose',
+    body:    `A Location Guide is a curated set of portfolio locations you send to a client. Name it, pick the spots, and choose how it should expire. Photographers who shoot in multiple areas typically build a saved-for-reuse guide per city — a "Kansas City Guide," an "Overland Park Guide," a "Downtown St. Joseph Guide" — and drop the same link into every booking for that region. For one-off sessions, you can name the guide for the specific client ("Smith Family Fall Photos") and have it expire on a date or after the first pick.`,
     bullets: [
-      `Set a radius so they only see locations within X miles of the pin.`,
-      `Write a custom message so the link feels personal.`,
-      `Expires after a set date if you want, or leave it open-ended.`,
+      `♾ Save for future use — never expires. Perfect for city-specific or theme-specific guides you send over and over.`,
+      `📅 Expire on a specific date — good when a client has a deadline to make a decision.`,
+      `🔂 Expire after the client picks — single-use. The moment they submit, the link burns out.`,
+      `🧭 Multi-location picks and "max miles apart" caps still work inside any guide.`,
     ],
-    cta:     { href: '/share', label: 'Try creating one →' },
+    cta:     { href: '/location-guides', label: 'Create your first guide →' },
   },
   {
     eyebrow: 'Step 3',
-    icon:    '📚',
-    title:   'Build a Location Guide for each city or theme',
-    body:    `A Location Guide is a mini-portfolio for one city or shoot style — one reusable link you send every client booking that kind of session. Photographers who shoot in multiple areas make a guide per city: a "Kansas City Guide," an "Overland Park Guide," a "Downtown St. Joseph Guide." Photographers who shoot different session types make one per theme: a "Golden Hour Guide," an "Indoor Studio Guide," a "Family Sessions Guide."`,
-    bullets: [
-      `🔗 Share entire portfolio — one auto-syncing link with everything you shoot. Perfect if your whole portfolio fits one region.`,
-      `🧭 Multi-location link — same auto-sync, but lets clients pick 2+ spots with an optional "max miles apart" cap so they stay inside your session window.`,
-      `📚 Custom guide — hand-pick a subset of your portfolio (e.g. just your Kansas City locations) and reuse the link across every KC client.`,
-    ],
-    cta:     { href: '/dashboard', label: 'Create your first guide →' },
-  },
-  {
-    eyebrow: 'Step 4',
     icon:    '⚙',
     title:   'Wire your guides into HoneyBook, Dubsado, or any booking tool',
     body:    `Every Location Guide is just a URL — which means it drops into anything. Put the city-specific guide in your HoneyBook project page for that session, link it from a Dubsado workflow email, or stick it in your Calendly confirmation. When a client picks, you get an email and they show up in your dashboard.`,
@@ -72,7 +61,7 @@ export default function HowItWorksPage() {
             Here&apos;s how it works
           </h1>
           <p style={{ fontSize: 15, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, maxWidth: 520, margin: '0 auto' }}>
-            A quick tour of the three things that matter — your portfolio, share links, and how to plug this into the booking tools you already use.
+            A quick tour of the three things that matter — your portfolio, your Location Guides, and how to plug this into the booking tools you already use.
           </p>
         </div>
 

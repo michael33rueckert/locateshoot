@@ -42,12 +42,23 @@ export async function POST(request: Request) {
   // creating junk rows.
   const { data: link, error: linkErr } = await admin
     .from('share_links')
-    .select('id,user_id,session_name,expires_at,max_picks,is_permanent')
+    .select('id,user_id,session_name,expires_at,max_picks,is_permanent,expire_on_submit')
     .eq('id', shareLinkId)
     .single()
   if (linkErr || !link) return NextResponse.json({ error: 'share link not found' }, { status: 404 })
   if (link.expires_at && new Date(link.expires_at) < new Date()) {
     return NextResponse.json({ error: 'share link expired' }, { status: 410 })
+  }
+  // Single-use guides: if any client has already submitted a pick, the link
+  // has burned out and subsequent submissions are rejected.
+  if (link.expire_on_submit) {
+    const { count } = await admin
+      .from('client_picks')
+      .select('id', { count: 'exact', head: true })
+      .eq('share_link_id', link.id)
+    if ((count ?? 0) > 0) {
+      return NextResponse.json({ error: 'share link expired' }, { status: 410 })
+    }
   }
 
   // Custom-domain ownership check — mirrors /api/pick-data.

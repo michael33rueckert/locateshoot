@@ -11,7 +11,7 @@ export async function GET(request: Request, context: any) {
 
   const { data: share, error: shareErr } = await admin
     .from('share_links')
-    .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio,max_picks,max_pick_distance_miles')
+    .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio,max_picks,max_pick_distance_miles,expire_on_submit')
     .eq('slug', slug)
     .single()
 
@@ -34,6 +34,16 @@ export async function GET(request: Request, context: any) {
 
   if (share.expires_at && new Date(share.expires_at) < new Date()) {
     return NextResponse.json({ error: 'expired' }, { status: 410 })
+  }
+  // Single-use guides burn out after the first client submission.
+  if (share.expire_on_submit) {
+    const { count } = await admin
+      .from('client_picks')
+      .select('id', { count: 'exact', head: true })
+      .eq('share_link_id', share.id)
+    if ((count ?? 0) > 0) {
+      return NextResponse.json({ error: 'expired' }, { status: 410 })
+    }
   }
 
   let branding = null

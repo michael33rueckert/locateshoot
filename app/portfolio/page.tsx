@@ -190,9 +190,10 @@ export default function PortfolioPage() {
           <div className="portfolio-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
             <button onClick={() => setShowAdd(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
             <Link href="/explore" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>+ Add from Explore</Link>
+            <Link href="/location-guides" style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>📚 Location Guides</Link>
             {locs.length > 0 && (
               <>
-                <button onClick={handleShareFullPortfolio} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🔗 Share entire portfolio</button>
+                <button onClick={handleShareFullPortfolio} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🔗 Share entire portfolio</button>
                 <button onClick={() => setShowMultiLocModal(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🧭 Multi-location link</button>
               </>
             )}

@@ -107,7 +107,7 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
     { href: '/dashboard',                label: 'Dashboard' },
     { href: '/portfolio',                label: 'Portfolio' },
     { href: '/explore',                  label: 'Explore map' },
-    { href: '/share',                    label: 'New share' },
+    { href: '/location-guides',          label: 'Location Guides' },
     { href: '/profile',                  label: 'Profile' },
     { href: '/onboarding/how-it-works',  label: 'Getting Started' },
     ...(isAdmin ? [{ href: '/admin', label: 'Admin' }] : []),

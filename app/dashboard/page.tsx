@@ -3,12 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
-import ImageLightbox from '@/components/ImageLightbox'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import MultiLocationModal from '@/components/MultiLocationModal'
+import CreateLocationGuideModal from '@/components/CreateLocationGuideModal'
 import { buildShareUrl } from '@/lib/custom-domain'
 import {
   shareFullPortfolio as shareFullPortfolioFn,
@@ -17,10 +16,9 @@ import {
 import { thumbUrl } from '@/lib/image'
 
 interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
-interface ShareLink         { id: string; session_name: string; created_at: string; expires_at: string | null; location_ids: string[] | null; secret_ids: string[] | null; portfolio_location_ids: string[] | null; slug: string }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number; preview_url: string | null }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
-interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; picks: ClientPick[]; expanded: boolean }
+interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; expires_at: string | null; expire_on_submit: boolean; picks: ClientPick[]; expanded: boolean }
 
 function timeAgo(d: string) {
   const diff  = Date.now() - new Date(d).getTime()
@@ -40,23 +38,31 @@ function greetingTime() {
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
-const STATUS_CONFIG = {
-  active:  { label: '🔗 Active',  bg: 'rgba(61,110,140,.1)',  color: 'var(--sky)',      border: 'rgba(61,110,140,.2)'  },
-  expired: { label: '⏱ Expired', bg: 'var(--cream-dark)',    color: 'var(--ink-soft)', border: 'var(--sand)'          },
+function expirationBadge(l: PermanentLink): { label: string; color: string; bg: string } | null {
+  if (l.expire_on_submit) {
+    const used = l.picks.length > 0
+    return used
+      ? { label: '⏱ Used — expired', color: 'var(--ink-soft)', bg: 'var(--cream-dark)' }
+      : { label: '🔂 Single-use',   color: 'var(--sky)',      bg: 'rgba(61,110,140,.1)' }
+  }
+  if (l.expires_at) {
+    const past = new Date(l.expires_at) < new Date()
+    return past
+      ? { label: '⏱ Expired',                                 color: 'var(--ink-soft)', bg: 'var(--cream-dark)' }
+      : { label: `Expires ${new Date(l.expires_at).toLocaleDateString()}`, color: 'var(--rust)',     bg: 'rgba(181,75,42,.08)' }
+  }
+  return null
 }
 
 export default function DashboardPage() {
   const [profile,             setProfile]             = useState<Profile | null>(null)
-  const [shareLinks,          setShareLinks]           = useState<ShareLink[]>([])
   const [portfolioLocs,       setPortfolioLocs]        = useState<PortfolioLocation[]>([])
   const [permanentLinks,      setPermanentLinks]       = useState<PermanentLink[]>([])
   const [loading,             setLoading]              = useState(true)
   const [toast,               setToast]                = useState<string | null>(null)
-  const [copiedId,            setCopiedId]             = useState<string | null>(null)
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
   const [showMultiLocModal,     setShowMultiLocModal]     = useState(false)
   const [preselectAllPortfolio, setPreselectAllPortfolio] = useState(false)
-  const [deleteShareId,       setDeleteShareId]        = useState<string | null>(null)
   const [editingPortfolioId,  setEditingPortfolioId]   = useState<string | null>(null)
   const [editingPermLink,     setEditingPermLink]      = useState<PermanentLink | null>(null)
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
@@ -73,9 +79,8 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/'; return }
 
-      const [profileRes, sharesRes, portfolioRes] = await Promise.all([
+      const [profileRes, portfolioRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email,custom_domain,custom_domain_verified,preferences').eq('id', user.id).single(),
-        supabase.from('share_links').select('id,session_name,created_at,expires_at,location_ids,secret_ids,portfolio_location_ids,slug').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10),
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,is_secret,created_at,sort_order').eq('user_id', user.id).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
       ])
 
@@ -90,7 +95,6 @@ export default function DashboardPage() {
       }
 
       if (profileRes.data)            setProfile(profileRes.data)
-      if (sharesRes.data)             setShareLinks(sharesRes.data)
 
       if (portfolioRes.data && portfolioRes.data.length > 0) {
         const pIds = portfolioRes.data.map((p: any) => p.id)
@@ -134,10 +138,10 @@ export default function DashboardPage() {
 
       const { data: permData } = await supabase
         .from('share_links')
-        .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio')
+        .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio,expires_at,expire_on_submit')
         .eq('user_id', user.id)
-        .eq('is_permanent', true)
         .order('created_at', { ascending: false })
+        .limit(6)
 
       if (permData && permData.length > 0) {
         const linksWithPicks = await Promise.all(permData.map(async (link: any) => {
@@ -194,32 +198,12 @@ export default function DashboardPage() {
     setPermanentLinks(prev => prev.map(l => l.id === id ? { ...l, expanded: !l.expanded } : l))
   }
 
-  async function deleteShareLink(id: string) {
-    if (deleteShareId !== id) { setDeleteShareId(id); return }
-    const { error } = await supabase.from('share_links').delete().eq('id', id)
-    if (error) { setToast('⚠ Could not delete — please try again'); console.error(error); return }
-    setShareLinks(prev => prev.filter(s => s.id !== id))
-    setDeleteShareId(null); setToast('Share link deleted')
-  }
-
-
-  function copyLink(slug: string, id: string) {
-    const url = buildShareUrl(slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
-    navigator.clipboard?.writeText(url).catch(() => {})
-    setCopiedId(id); setToast('📋 Link copied!')
-    setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  function linkStatus(s: ShareLink) {
-    return s.expires_at && new Date(s.expires_at) < new Date() ? 'expired' : 'active'
-  }
-
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, color: 'var(--ink-soft)', marginBottom: 8 }}>Loading your dashboard…</div>
-          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Fetching your locations and share links</div>
+          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Fetching your portfolio and guides</div>
         </div>
       </div>
     )
@@ -238,21 +222,20 @@ export default function DashboardPage() {
             <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,5vw,30px)', fontWeight: 900, color: 'var(--ink)', marginBottom: 4 }}>{greetingTime()}, {firstName} ☀</h1>
             <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300 }}>
               {portfolioLocs.length > 0
-                ? `You have ${portfolioLocs.length} location${portfolioLocs.length !== 1 ? 's' : ''} in your portfolio and ${shareLinks.length} share link${shareLinks.length !== 1 ? 's' : ''}.`
-                : 'Welcome! Build your portfolio from Explore, then send clients a share link.'}
+                ? `You have ${portfolioLocs.length} location${portfolioLocs.length !== 1 ? 's' : ''} in your portfolio and ${permanentLinks.length} Location Guide${permanentLinks.length !== 1 ? 's' : ''}.`
+                : 'Welcome! Build your portfolio from Explore, then bundle locations into Location Guides to share with clients.'}
             </p>
           </div>
-          <Link href="/share" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, fontWeight: 500, textDecoration: 'none', flexShrink: 0 }}>
-            🔗 New client share
-          </Link>
+          <button onClick={() => { setPreselectAllPortfolio(false); setShowCreatePermanent(true) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, fontWeight: 500, border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+            📚 New Location Guide
+          </button>
         </div>
 
         {/* Stats — className enables mobile 2-col grid */}
-        <div className="dash-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: '2rem' }}>
+        <div className="dash-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: '2rem' }}>
           {[
             { label: 'Portfolio',       value: portfolioLocs.length,           sub: 'your curated set' },
-            { label: 'Share links',     value: shareLinks.length,              sub: 'total created'    },
-            { label: 'Location guides', value: permanentLinks.length,          sub: 'regional collections' },
+            { label: 'Location guides', value: permanentLinks.length,          sub: 'reusable + single-use' },
             { label: 'Client picks',    value: permanentLinks.reduce((s,l) => s + l.picks.length, 0), sub: 'from your guides' },
           ].map(stat => (
             <div key={stat.label} style={{ background: 'white', borderRadius: 10, padding: '1rem 1.25rem', border: '1px solid var(--cream-dark)' }}>
@@ -347,7 +330,10 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>A curated set of locations for each city or type of session you shoot — one reusable link per guide.</div>
                 </div>
-                <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>+ New guide</button>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <Link href="/location-guides" style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>View all →</Link>
+                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ New guide</button>
+                </div>
               </div>
               {permanentLinks.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -358,6 +344,7 @@ export default function DashboardPage() {
                 </div>
               ) : permanentLinks.map((link, i) => {
                 const url = buildShareUrl(link.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
+                const expBadge = expirationBadge(link)
                 return (
                   <div key={link.id} style={{ borderBottom: i < permanentLinks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
                     <div style={{ padding: '1rem 1.25rem' }}>
@@ -366,6 +353,7 @@ export default function DashboardPage() {
                           <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                             {link.session_name}
                             {link.is_full_portfolio && <span style={{ padding: '1px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.2)' }}>🔗 Auto-syncs with portfolio</span>}
+                            {expBadge && <span style={{ padding: '1px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: expBadge.bg, color: expBadge.color }}>{expBadge.label}</span>}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--sky)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.replace('https://', '')}</div>
                         </div>
@@ -399,49 +387,6 @@ export default function DashboardPage() {
               })}
             </div>
 
-            {/* SHARE LINKS */}
-            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)' }}>Recent share links</div>
-                <Link href="/share" style={{ fontSize: 12, color: 'var(--gold)', textDecoration: 'none', fontWeight: 500 }}>+ New share</Link>
-              </div>
-              {shareLinks.length === 0 ? (
-                <div style={{ padding: '2.5rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>🔗</div>
-                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>No share links yet</div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 16 }}>Create your first share link to send clients a list of location options.</div>
-                  <Link href="/share" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>Create your first share link →</Link>
-                </div>
-              ) : shareLinks.map((share, i) => {
-                const status = linkStatus(share)
-                const cfg    = STATUS_CONFIG[status]
-                const count  = (share.portfolio_location_ids?.length ?? 0) + (share.location_ids?.length ?? 0) + (share.secret_ids?.length ?? 0)
-                const url    = buildShareUrl(share.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
-                return (
-                  <div key={share.id} style={{ padding: '1rem 1.25rem', borderBottom: i < shareLinks.length - 1 ? '1px solid var(--cream-dark)' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>{share.session_name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{count} location{count !== 1 ? 's' : ''} · {timeAgo(share.created_at)}{share.expires_at && ` · Expires ${new Date(share.expires_at).toLocaleDateString()}`}</div>
-                      </div>
-                      <span style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, flexShrink: 0, whiteSpace: 'nowrap' }}>{cfg.label}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 11, color: 'var(--sky)', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url.replace('https://', '')}</span>
-                      {status === 'active' && (
-                        <button onClick={() => copyLink(share.slug, share.id)} style={{ padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, border: '1px solid var(--cream-dark)', background: 'white', color: copiedId === share.id ? 'var(--sage)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                          {copiedId === share.id ? '✓ Copied' : 'Copy link'}
-                        </button>
-                      )}
-                      <button onClick={() => deleteShareLink(share.id)} onBlur={() => setDeleteShareId(null)} style={{ padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500, border: 'none', background: deleteShareId === share.id ? 'var(--rust)' : 'rgba(181,75,42,.08)', color: deleteShareId === share.id ? 'white' : 'var(--rust)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                        {deleteShareId === share.id ? 'Confirm' : 'Delete'}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
           </div>
 
           {/* ── RIGHT COLUMN — className enables mobile stacking ── */}
@@ -450,8 +395,8 @@ export default function DashboardPage() {
               <div style={{ padding: '.9rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Quick actions</div>
               <div style={{ padding: '.75rem' }}>
                 {[
-                  { icon: '🔗', label: 'New client share link',  href: '/share',             desc: 'Send locations to a client'  },
-                  { icon: '📚', label: 'New location guide',      href: '#',                  desc: 'A reusable link for a city or theme', onClick: () => { setPreselectAllPortfolio(false); setShowCreatePermanent(true) } },
+                  { icon: '📚', label: 'New Location Guide',     href: '#',                  desc: 'Pick locations from your portfolio', onClick: () => { setPreselectAllPortfolio(false); setShowCreatePermanent(true) } },
+                  { icon: '📖', label: 'All Location Guides',    href: '/location-guides',   desc: 'Manage every guide in one place' },
                   { icon: '📍', label: 'Browse the map',         href: '/explore',           desc: 'Add locations to your portfolio' },
                   { icon: '✉️',  label: 'Edit message templates', href: '/profile#templates', desc: 'Manage your saved messages'  },
                   { icon: '⚙',  label: 'Profile settings',       href: '/profile',           desc: 'Update your info & branding' },
@@ -499,7 +444,7 @@ export default function DashboardPage() {
 
       {/* CREATE PERMANENT LINK MODAL */}
       {showCreatePermanent && (
-        <CreatePermanentLinkModal
+        <CreateLocationGuideModal
           portfolio={portfolioLocs}
           preselectAll={preselectAllPortfolio}
           userId={profile?.id ?? ''}
@@ -525,7 +470,7 @@ export default function DashboardPage() {
 
       {/* EDIT PERMANENT LINK MODAL */}
       {editingPermLink && (
-        <CreatePermanentLinkModal
+        <CreateLocationGuideModal
           portfolio={portfolioLocs}
           preselectAll={false}
           userId={profile?.id ?? ''}
@@ -568,152 +513,6 @@ export default function DashboardPage() {
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
-  )
-}
-
-// ── Create Location Guide Modal (internal: "permanent link" share link) ──────
-
-function CreatePermanentLinkModal({
-  portfolio, preselectAll, userId, photographerName, editLink, onClose, onCreated,
-}: {
-  portfolio: PortfolioLocation[]; preselectAll: boolean
-  userId: string; photographerName: string; editLink?: PermanentLink | null
-  onClose: () => void; onCreated: (link: any) => void
-}) {
-  const isEdit = !!editLink
-  const [sessionName,    setSessionName]    = useState(editLink?.session_name ?? (preselectAll ? 'My portfolio' : ''))
-  const [selectedIds,    setSelectedIds]    = useState<string[]>(
-    editLink?.portfolio_location_ids ?? (preselectAll ? portfolio.map(p => p.id) : [])
-  )
-  const [message,        setMessage]        = useState('')
-  const [saving,         setSaving]         = useState(false)
-  const [error,          setError]          = useState('')
-  const [locSearch,      setLocSearch]      = useState('')
-
-  // Load the existing message when editing
-  useEffect(() => {
-    if (!editLink) return
-    supabase.from('share_links').select('message').eq('id', editLink.id).single().then(({ data }) => {
-      if (data?.message) setMessage(data.message)
-    })
-  }, [editLink])
-
-  function toggleLoc(id: string) {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
-
-  function isSelected(id: string) { return selectedIds.includes(id) }
-
-  function generateSlug(name: string, photographer: string) {
-    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,25)
-    return `${clean(photographer)}-${clean(name)}-${Date.now().toString(36)}`
-  }
-
-  async function create() {
-    if (!sessionName.trim()) { setError('Please enter a name for this link.'); return }
-    if (selectedIds.length === 0) { setError('Select at least one location.'); return }
-    setSaving(true); setError('')
-    try {
-      if (isEdit && editLink) {
-        // Update in place — slug stays the same so existing shared URLs keep working.
-        const { data, error: updateErr } = await supabase.from('share_links').update({
-          session_name:           sessionName.trim(),
-          message:                message.trim() || null,
-          portfolio_location_ids: selectedIds,
-        }).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
-        if (updateErr) throw updateErr
-        onCreated(data); onClose()
-        return
-      }
-      const slug = generateSlug(sessionName, photographerName || 'photographer')
-      const { data, error: insertErr } = await supabase.from('share_links').insert({
-        user_id: userId, slug, session_name: sessionName.trim(),
-        message: message.trim() || null, photographer_name: photographerName || null,
-        portfolio_location_ids: selectedIds,
-        location_ids: [], secret_ids: [],
-        expires_at: null, is_permanent: true,
-      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio').single()
-      if (insertErr) throw insertErr
-      onCreated(data); onClose()
-    } catch (err: any) { setError(isEdit ? 'Could not save changes — please try again.' : 'Could not create link — please try again.'); console.error(err) }
-    finally { setSaving(false) }
-  }
-
-  const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
-  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
-  const filteredLocs = portfolio.filter(l => {
-    if (!locSearch.trim()) return true
-    const q = locSearch.toLowerCase()
-    const city = [l.city, l.state].filter(Boolean).join(', ').toLowerCase()
-    return l.name.toLowerCase().includes(q) || city.includes(q)
-  })
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
-        <div style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <div>
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📚 {isEdit ? 'Edit location guide' : preselectAll ? 'Share entire portfolio' : 'New location guide'}</div>
-              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>A reusable link that never expires. Drop it in your booking workflow to send clients every time.</div>
-            </div>
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
-          </div>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={labelStyle}>Guide name *</label>
-            <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. Kansas City Guide · Overland Park Guide · Golden Hour" autoFocus />
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Clients see this at the top of their location picker.</div>
-          </div>
-          <div style={{ marginBottom: '1.25rem' }}>
-            <label style={labelStyle}>Message to clients (optional)</label>
-            <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="Hi! Here are my go-to locations. Take a look and pick your favorite!" style={{ ...inputStyle, resize: 'vertical' }} />
-          </div>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Portfolio locations * <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({selectedIds.length} of {portfolio.length} selected)</span></label>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {selectedIds.length < portfolio.length && <button onClick={() => setSelectedIds(portfolio.map(p => p.id))} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Select all</button>}
-                {selectedIds.length > 0 && <button onClick={() => setSelectedIds([])} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>}
-              </div>
-            </div>
-            {portfolio.length === 0 ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)' }}>
-                Your portfolio is empty. <Link href="/explore" style={{ color: 'var(--gold)', fontWeight: 500 }}>Browse Explore →</Link>
-              </div>
-            ) : (
-              <>
-                <input type="text" value={locSearch} onChange={e => setLocSearch(e.target.value)} placeholder="Search your portfolio…" style={{ ...inputStyle, marginBottom: 8, fontSize: 13 }} />
-                <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
-                  {filteredLocs.length === 0 && <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No portfolio locations match &quot;{locSearch}&quot;</div>}
-                  {filteredLocs.map((loc, i) => {
-                    const sel = isSelected(loc.id)
-                    const cityLine = [loc.city, loc.state].filter(Boolean).join(', ')
-                    return (
-                      <div key={loc.id} onClick={() => toggleLoc(loc.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', borderBottom: i < filteredLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}>
-                        <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--sand)'}`, background: sel ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>{sel ? '✓' : ''}</div>
-                        <div className={BG_CYCLE[i % BG_CYCLE.length]} style={{ width: 34, height: 34, borderRadius: 6, flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {cityLine || '—'}</div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-          {error && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{error}</div>}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={create} disabled={saving || !sessionName.trim() || selectedIds.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !sessionName.trim() || selectedIds.length === 0 ? 0.5 : 1 }}>
-              {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save changes' : 'Create guide →')}
-            </button>
-            <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    </>
   )
 }
 

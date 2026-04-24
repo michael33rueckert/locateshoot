@@ -7,9 +7,9 @@ import { supabase } from '@/lib/supabase'
 
 // Compact footer shown on signed-in internal pages. Anonymous visitors see
 // the dedicated marketing footer on / instead; client-facing /pick/* links
-// don't show either. Full-screen working screens (explore/share) skip it too.
+// don't show either. Full-screen working screens (explore) skip it too.
 
-const HIDE_FOOTER_PREFIXES = ['/pick', '/explore', '/share']
+const HIDE_FOOTER_PREFIXES = ['/pick', '/explore']
 const HIDE_FOOTER_EXACT = ['/']
 
 export default function SiteFooter() {

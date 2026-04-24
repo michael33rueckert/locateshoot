@@ -198,7 +198,7 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
 
   function shareWithClient() {
     sessionStorage.setItem('sharePreselectedLocation', JSON.stringify({ id:loc.id, name:loc.name, city:loc.city, lat:loc.lat, lng:loc.lng, access:loc.access, rating:loc.rating, bg:loc.bg, type:'favorite' }))
-    router.push('/share?step=3')
+    router.push('/location-guides?new=1')
   }
 
   return (

@@ -192,8 +192,8 @@ export default function HomePage() {
           <div className="hero-actions">
             {user ? (
               <>
-                <Link href="/share"   className="btn btn-gold btn-lg">🔗 New Client Share</Link>
-                <Link href="/explore" className="btn btn-ghost btn-lg">Browse the Map</Link>
+                <Link href="/location-guides" className="btn btn-gold btn-lg">📚 New Location Guide</Link>
+                <Link href="/explore"          className="btn btn-ghost btn-lg">Browse the Map</Link>
               </>
             ) : (
               <>
@@ -230,7 +230,7 @@ export default function HomePage() {
 
         <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
           {user
-            ? <Link href="/share" className="btn btn-gold btn-lg">🔗 Create your first share link →</Link>
+            ? <Link href="/location-guides" className="btn btn-gold btn-lg">📚 Create your first Location Guide →</Link>
             : <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>See how it works — Join free →</button>
           }
           <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 10 }}>
