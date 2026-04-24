@@ -11,24 +11,31 @@ import { useRef, useState } from 'react'
 //   - Press (pointerdown) on an item starts a ~320ms long-press timer.
 //   - Any significant movement before the timer fires = it was a scroll,
 //     so we cancel and get out of the way (no reorder, normal scroll).
-//   - Timer completes without movement = drag mode on. Subsequent
-//     pointermoves do hit-testing via elementFromPoint to find the
-//     hovered sibling, preventDefault to block page scrolling, and
-//     update the drop target for visual feedback. Pointerup applies the
-//     reorder.
+//   - Timer completes without movement = drag mode on:
+//       • setPointerCapture(pointerId) — routes all subsequent events for
+//         this pointer to our element, and (critically on Android) blocks
+//         the browser from firing a gratuitous pointercancel when its own
+//         long-press heuristic decides the gesture should become a
+//         context-menu.
+//       • element.style.touchAction = 'none' — flips the element out of
+//         pan-y mode so pointermoves no longer scroll the page.
+//       • haptic buzz, visual state.
+//     Pointerup applies the reorder; pointercancel aborts cleanly.
 //
 // Cards using this hook must set `data-reorder-id={id}` (the `bindItem`
 // helper below does this automatically) so hit-testing can identify them.
 //
-// Two subtleties worth preserving if you refactor this:
-//   1. `pointer-events:none` on the dragged card is load-bearing. Without
-//      it `elementFromPoint` at the finger position would return the
-//      dragged card itself (since it sits directly under the pointer),
-//      so `overId === draggingId` and no reorder ever fires.
+// Load-bearing details worth preserving if you refactor:
+//   1. `pointer-events:none` on the dragged card (applied via React state
+//      on the consumer's side) — without it `elementFromPoint` at the
+//      finger position returns the dragged card itself, so `overId ===
+//      draggingId` and no reorder ever fires.
 //   2. Drag-phase listeners are attached synchronously from the timer
 //      callback — not from a useEffect — so the browser doesn't get a
-//      render-cycle window where pointermoves are uncaught and a scroll
-//      could start.
+//      render-cycle window where pointermoves are uncaught.
+//   3. Consumers style the card with `touch-action: pan-y` up front;
+//      this hook flips it to `none` on pickup. Starting at pan-y is what
+//      lets the user scroll the page normally before a long-press.
 
 export function useReorderDrag(reorder: (fromId: string, toId: string) => void) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -41,23 +48,25 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
   function bindItem(id: string) {
     return {
       'data-reorder-id': id,
-      // Swallow the native long-press context menu (Android Chrome shows
-      // "Copy / Open in new tab" on any long-pressed element by default,
-      // and it interrupts our drag before pointermove can fire). Swallow
-      // dragstart too so the images inside the card don't kick off the
-      // browser's own HTML5 drag operation.
+      // Swallow native long-press / drag behaviors that would otherwise
+      // hijack the gesture before we can enter drag mode. onContextMenu
+      // kills the Android "Copy / Open in new tab" sheet; onDragStart
+      // kills the HTML5 drag that `<img>` children kick off by default.
       onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
       onDragStart:   (e: React.DragEvent)  => e.preventDefault(),
       onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
         // Only primary button for mouse; any touch/pen counts.
         if (e.pointerType === 'mouse' && e.button !== 0) return
 
-        const startX = e.clientX
-        const startY = e.clientY
+        const startX    = e.clientX
+        const startY    = e.clientY
+        const pointerId = e.pointerId
+        const target    = e.currentTarget as HTMLElement
+        const origTouchAction = target.style.touchAction
         let moved = false
 
-        // Phase 1: long-press detection. We watch for pointer movement or
-        // release before the timer fires so a scroll gesture doesn't
+        // Phase 1: long-press detection. We watch for pointer movement
+        // or release before the timer fires so a scroll gesture doesn't
         // accidentally start a drag.
         const checkMove = (ev: PointerEvent) => {
           if (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8) {
@@ -78,12 +87,17 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
         const timerId = window.setTimeout(() => {
           if (moved) { cancelPress(); return }
 
-          // Phase 2: drag. Swap press-phase listeners for drag-phase
-          // listeners synchronously — if we deferred to a useEffect the
-          // browser could slip a scroll into the render-cycle gap.
+          // Phase 2 bookkeeping — swap listeners synchronously.
           window.removeEventListener('pointermove', checkMove)
           window.removeEventListener('pointerup', cancelPress)
           window.removeEventListener('pointercancel', cancelPress)
+
+          // Lock the pointer and the element to us. Doing this in the
+          // same synchronous tick as setDraggingId prevents the browser's
+          // own long-press / context-menu logic from stealing the
+          // gesture between now and the next render.
+          try { target.setPointerCapture(pointerId) } catch {}
+          target.style.touchAction = 'none'
 
           draggingRef.current = id
           overRef.current = null
@@ -94,17 +108,13 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
           }
 
           const handleMove = (ev: PointerEvent) => {
-            // Non-passive via addEventListener options below, so this
-            // preventDefault actually stops the page from scrolling.
             ev.preventDefault()
             const el = document.elementFromPoint(ev.clientX, ev.clientY)
             const card = el && (el as Element).closest
               ? (el as Element).closest('[data-reorder-id]') as HTMLElement | null
               : null
             const hoverId = card?.getAttribute('data-reorder-id') ?? null
-            // Treat hovering over the dragged card itself as "no target"
-            // — the `pointer-events:none` applied to the dragged card's
-            // style should already prevent this, but this is the belt.
+            // Hovering over the dragged card itself counts as "no target".
             const next = hoverId && hoverId !== draggingRef.current ? hoverId : null
             if (next !== overRef.current) {
               overRef.current = next
@@ -112,22 +122,26 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
             }
           }
 
-          const handleUp = () => {
+          const finish = (commit: boolean) => {
             const from = draggingRef.current
             const to   = overRef.current
-            if (from && to && from !== to) reorder(from, to)
+            if (commit && from && to && from !== to) reorder(from, to)
             draggingRef.current = null
             overRef.current = null
             setDraggingId(null)
             setOverId(null)
+            target.style.touchAction = origTouchAction
+            try { target.releasePointerCapture(pointerId) } catch {}
             window.removeEventListener('pointermove', handleMove)
             window.removeEventListener('pointerup', handleUp)
-            window.removeEventListener('pointercancel', handleUp)
+            window.removeEventListener('pointercancel', handleCancel)
           }
+          const handleUp     = () => finish(true)
+          const handleCancel = () => finish(false)
 
           window.addEventListener('pointermove', handleMove, { passive: false })
           window.addEventListener('pointerup', handleUp)
-          window.addEventListener('pointercancel', handleUp)
+          window.addEventListener('pointercancel', handleCancel)
         }, 320)
       },
     }

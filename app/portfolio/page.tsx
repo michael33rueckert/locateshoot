@@ -273,7 +273,10 @@ export default function PortfolioPage() {
                       transition: 'all .15s',
                       opacity: isDragging ? 0.4 : 1,
                       position: 'relative',
-                      touchAction: canReorder ? 'manipulation' : 'auto',
+                      // pan-y pre-drag lets the user scroll the page by
+                      // dragging a card up/down; the hook flips this to
+                      // 'none' the instant long-press commits.
+                      touchAction: canReorder ? 'pan-y' : 'auto',
                       userSelect: 'none',
                       WebkitUserSelect: 'none',
                       WebkitTouchCallout: 'none',

@@ -356,7 +356,7 @@ export default function PortfolioEditModal({
                               border: `1px solid ${isOver ? 'var(--gold)' : 'var(--cream-dark)'}`,
                               cursor: 'grab',
                               opacity: isDragging ? 0.4 : 1,
-                              touchAction: 'manipulation',
+                              touchAction: 'pan-y',
                               userSelect: 'none',
                               WebkitUserSelect: 'none',
                               WebkitTouchCallout: 'none',
