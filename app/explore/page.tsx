@@ -630,7 +630,17 @@ export default function ExplorePage() {
                   }}
                 >
                   {thumb
-                    ? <img src={thumbUrl(thumb) ?? thumb} alt="" loading="lazy" decoding="async" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
+                    ? <img
+                        src={thumbUrl(thumb) ?? thumb}
+                        alt=""
+                        decoding="async"
+                        // Render-endpoint fallback — see notes on the
+                        // dashboard portfolio tile. Without this, a flaky
+                        // /render/image/ response leaves the tile sitting
+                        // on its background-color placeholder forever.
+                        onError={e => { if (e.currentTarget.src !== thumb) e.currentTarget.src = thumb }}
+                        style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
+                      />
                     : <span style={{fontSize:22,color:'var(--ink-soft)',opacity:.45}}>📍</span>
                   }
                   {loc.rating!=='—'&&<div style={{position:'absolute',bottom:3,right:3,background:'rgba(26,22,18,.75)',borderRadius:4,padding:'1px 5px',fontSize:10,fontWeight:600,color:'var(--gold)',zIndex:1}}>★{loc.rating}</div>}

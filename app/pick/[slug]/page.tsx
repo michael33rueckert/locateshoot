@@ -464,7 +464,14 @@ export default function ClientPickerPage() {
           </div>
           <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
             <div className={chosenLoc.bg} style={{ width: 56, height: 56, borderRadius: 8, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-              {chosenLoc.photoUrl && <img src={thumbUrl(chosenLoc.photoUrl) ?? chosenLoc.photoUrl} alt="" loading="lazy" decoding="async" onClick={() => setLightboxSrc(chosenLoc.photoUrl!)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />}
+              {chosenLoc.photoUrl && <img
+                src={thumbUrl(chosenLoc.photoUrl) ?? chosenLoc.photoUrl}
+                alt=""
+                decoding="async"
+                onClick={() => setLightboxSrc(chosenLoc.photoUrl!)}
+                onError={e => { if (e.currentTarget.src !== chosenLoc.photoUrl!) e.currentTarget.src = chosenLoc.photoUrl! }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
+              />}
             </div>
             <div>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 700, color: 'var(--ink)' }}>{chosenLoc.name}</div>
@@ -988,8 +995,11 @@ function PickListItem({
                   srcSet={`${thumb} 480w, ${medium} 1200w`}
                   sizes="(max-width: 768px) 100vw, 420px"
                   alt=""
-                  loading="lazy"
                   decoding="async"
+                  // Render-endpoint fallback — see other thumbnails in this
+                  // file. Both thumb + medium go through /render/image/, so
+                  // when the picked variant fails we point at the original.
+                  onError={e => { if (e.currentTarget.src !== src) { e.currentTarget.removeAttribute('srcset'); e.currentTarget.src = src } }}
                 />
               )
             })}
@@ -1120,6 +1130,7 @@ function DetailPhotoGallery({
                 decoding="async"
                 loading={i === 0 ? 'eager' : 'lazy'}
                 onClick={() => onOpenLightbox(activePhotos, i)}
+                onError={e => { if (e.currentTarget.src !== src) e.currentTarget.src = src }}
                 style={{
                   width: '100%', height: '100%',
                   flexShrink: 0,
@@ -1179,7 +1190,13 @@ function DetailPhotoGallery({
               onClick={() => goToIdx(i)}
               style={{ width: 56, height: 56, borderRadius: 6, flexShrink: 0, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${idx === i ? 'var(--gold)' : 'transparent'}` }}
             >
-              <img src={thumbUrl(url) ?? url} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img
+                src={thumbUrl(url) ?? url}
+                alt=""
+                decoding="async"
+                onError={e => { if (e.currentTarget.src !== url) e.currentTarget.src = url }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             </div>
           ))}
         </div>

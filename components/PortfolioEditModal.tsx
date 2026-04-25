@@ -402,7 +402,17 @@ export default function PortfolioEditModal({
                               WebkitTouchCallout: 'none',
                             }}
                           >
-                            <img src={thumbUrl(p.url) ?? p.url} alt="" loading="lazy" decoding="async" onClick={() => setLightboxSrc(p.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
+                            <img
+                              src={thumbUrl(p.url) ?? p.url}
+                              alt=""
+                              decoding="async"
+                              onClick={() => setLightboxSrc(p.url)}
+                              // Fall back to original URL when /render/image/
+                              // fails — modal grid would otherwise show a
+                              // blank box where the photo should be.
+                              onError={e => { if (e.currentTarget.src !== p.url) e.currentTarget.src = p.url }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
+                            />
                             <div style={{ position: 'absolute', top: 4, left: 4, padding: '1px 6px', borderRadius: 10, background: 'rgba(26,22,18,.75)', color: 'white', fontSize: 10, fontWeight: 600 }}>{i + 1}</div>
                             <button onClick={e => { e.stopPropagation(); deletePhoto(p) }} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                           </div>
