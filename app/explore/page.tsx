@@ -436,20 +436,24 @@ export default function ExplorePage() {
     setToast('Deleted')
   }
 
-  // Reference point for proximity filtering, in priority order:
-  //   1. Explicit search pin ("Find Locations Near …") — user's most direct intent
-  //   2. Browser geolocation when the user opted in via "Near me"
-  //   3. Saved home city from profile preferences — quiet personalization
-  //   4. None — falls through to the trending-six fallback below
-  const nearRef = searchPin
+  // Two kinds of "where am I" references, on purpose:
+  //   • strictNearRef — searchPin or geolocation. Both are explicit user
+  //     actions ("show me locations around here"), so we keep the strict
+  //     50-mile filter — far-away spots are noise.
+  //   • homeLocation — quiet personalization from profile prefs. Used only
+  //     for *sort priority*; we don't drop far locations from either the
+  //     map or the list, so a user in KC zooming out can still see Denver.
+  const strictNearRef = searchPin
     ? { lat: searchPin.lat, lng: searchPin.lng }
-    : (locGranted && userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : (homeLocation ?? null))
+    : (locGranted && userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null)
 
-  // True when the user has applied any explicit search/filter — we use this
-  // to decide whether to short-circuit the empty state into "trending six"
-  // mode. If they're actively searching for "barn", they want every barn,
-  // not a curated highlight reel.
-  const hasUserFilter = searchQuery.trim() !== '' || selectedTags.length > 0 || accessFilter !== 'All' || minRating > 0 || sortBy !== 'quality'
+  // "Default state" = the user hasn't typed a search, picked tags, changed
+  // access/rating, or swapped the sort. This is the just-opened-the-page
+  // state where our smart defaults kick in (distance-from-home sort, or
+  // pin-trending-six-to-top). Once they touch anything we get out of the
+  // way and respect their choices.
+  const isDefaultState = searchQuery.trim() === '' && selectedTags.length === 0 && accessFilter === 'All' && minRating === 0 && sortBy === 'quality'
+  const homeOnly       = !!homeLocation && !strictNearRef
 
   const filtered = useMemo(()=>{
     let result=locations.filter((loc:any)=>{
@@ -458,15 +462,26 @@ export default function ExplorePage() {
       const q=searchQuery.toLowerCase().trim()
       const matchesSearch=q===''||loc.name.toLowerCase().includes(q)||loc.city.toLowerCase().includes(q)||(loc.tags??[]).some((t:string)=>t.toLowerCase().includes(q))
       const matchesRating=minRating===0||(loc.ratingNum??0)>=minRating
-      const matchesNear = !nearRef || distMiles(nearRef.lat, nearRef.lng, loc.lat, loc.lng) <= NEAR_RADIUS_MI
+      // Only strict-near filters out distant pins. Home-city is sort-only.
+      const matchesNear = !strictNearRef || distMiles(strictNearRef.lat, strictNearRef.lng, loc.lat, loc.lng) <= NEAR_RADIUS_MI
       return matchesAccess&&matchesTags&&matchesSearch&&matchesRating&&matchesNear
     })
     let sorted = [...result].sort((a:any,b:any)=>{
-      // When a near-reference is set, closest locations win — overrides the
-      // chosen sort mode since the user explicitly asked for proximity.
-      if (nearRef) {
-        const da = distMiles(nearRef.lat, nearRef.lng, a.lat, a.lng)
-        const db = distMiles(nearRef.lat, nearRef.lng, b.lat, b.lng)
+      // Strict-near (searchPin / Near me): closest first, overrides sort mode
+      // since the user explicitly asked for proximity.
+      if (strictNearRef) {
+        const da = distMiles(strictNearRef.lat, strictNearRef.lng, a.lat, a.lng)
+        const db = distMiles(strictNearRef.lat, strictNearRef.lng, b.lat, b.lng)
+        if (da !== db) return da - db
+      }
+      // Home-city + default state: closest-to-home rises to the top, the
+      // rest fall in by distance. The user's saved city locations naturally
+      // bubble up first; spots in the next metro come below; coast-to-coast
+      // tail still appears below that. If the user picked a non-default
+      // sort we respect that instead.
+      if (homeOnly && isDefaultState && homeLocation) {
+        const da = distMiles(homeLocation.lat, homeLocation.lng, a.lat, a.lng)
+        const db = distMiles(homeLocation.lat, homeLocation.lng, b.lat, b.lng)
         if (da !== db) return da - db
       }
       // Put locations with photos first regardless of sort mode. Blank-gradient
@@ -482,16 +497,20 @@ export default function ExplorePage() {
         default:return 0
       }
     })
-    // Empty-state default: when the user has no saved home, hasn't dropped
-    // a search pin, hasn't enabled geolocation, and hasn't applied any
-    // filter, fall back to the same trending six the marketing home page
-    // uses (top curated locations by quality_score). Better landing
-    // experience than a 500-row firehose sorted by something arbitrary.
-    if (!nearRef && !hasUserFilter) {
-      sorted = sorted.filter((l:any) => l.source === 'curated').slice(0, 6)
+    // No reference at all + default state → pin the same six curated
+    // highlights the marketing home page shows to the very top, then let
+    // the rest of the catalog flow below by quality_score (popularity).
+    // This gives signed-in users with no home set the same "what's
+    // hot right now" landing as anonymous visitors, plus the long tail
+    // they need for actual exploration.
+    if (!strictNearRef && !homeOnly && isDefaultState) {
+      const trending = sorted.filter((l:any) => l.source === 'curated').slice(0, 6)
+      const trendingIds = new Set(trending.map((l:any) => l.id))
+      const rest = sorted.filter((l:any) => !trendingIds.has(l.id))
+      sorted = [...trending, ...rest]
     }
     return sorted
-  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,nearRef,hasUserFilter])
+  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,strictNearRef,homeLocation,homeOnly,isDefaultState])
 
   const activeFilterCount=(accessFilter!=='All'?1:0)+selectedTags.length+(minRating>0?1:0)+(sortBy!=='quality'?1:0)
 
