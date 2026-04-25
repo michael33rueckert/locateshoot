@@ -154,6 +154,20 @@ export default function DashboardPage() {
     setCopiedGuideId(id); setToast('📋 URL copied!')
     setTimeout(() => setCopiedGuideId(null), 2000)
   }
+  function previewGuide(slug: string) {
+    const url = buildShareUrl(slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+  function previewFullPortfolio() {
+    // Open synchronously so popup blockers don't fire, then redirect to
+    // the materialized share URL once the row exists.
+    const win = window.open('about:blank', '_blank')
+    if (!win) { setToast('⚠ Popup blocked — allow popups for this site to use Preview.'); return }
+    ensureFullPortfolioPermLink().then(g => {
+      if (!g) { win.close(); return }
+      win.location.href = buildShareUrl(g.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
+    })
+  }
 
   async function deleteGuide(id: string) {
     if (deleteGuideId !== id) { setDeleteGuideId(id); return }
@@ -304,6 +318,7 @@ export default function DashboardPage() {
                     deleteState="idle"
                     onCopy={copyFullPortfolio}
                     onEdit={editFullPortfolio}
+                    onPreview={previewFullPortfolio}
                   />
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 6, lineHeight: 1.5 }}>
@@ -344,6 +359,7 @@ export default function DashboardPage() {
                       onCopy={() => copyGuideUrl(link.slug, link.id)}
                       onEdit={() => setEditingPermLink(link)}
                       onDelete={() => deleteGuide(link.id)}
+                      onPreview={() => previewGuide(link.slug)}
                     />
                   ))}
                 </div>

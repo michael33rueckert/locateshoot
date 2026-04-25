@@ -159,6 +159,21 @@ export default function LocationGuidesPage() {
     setCopiedId(id); setToast('📋 Link copied!')
     setTimeout(() => setCopiedId(null), 2000)
   }
+  function previewGuide(slug: string) {
+    const url = buildShareUrl(slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+  // Static portfolio-share card may not have a materialized share_link
+  // yet. Open about:blank synchronously (so popup blockers don't fire),
+  // lazy-create, then redirect the new tab to the real URL.
+  function previewFullPortfolio() {
+    const win = window.open('about:blank', '_blank')
+    if (!win) { setToast('⚠ Popup blocked — allow popups for this site to use Preview.'); return }
+    ensureFullPortfolioGuide().then(g => {
+      if (!g) { win.close(); return }
+      win.location.href = buildShareUrl(g.slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
+    })
+  }
 
   // The "Your portfolio share" card is rendered up top regardless of
   // whether the photographer has actually generated the full-portfolio
@@ -249,6 +264,7 @@ export default function LocationGuidesPage() {
                 deleteState="idle"
                 onCopy={copyFullPortfolio}
                 onEdit={editFullPortfolio}
+                onPreview={previewFullPortfolio}
               />
             </div>
             <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 8, lineHeight: 1.5 }}>
@@ -313,6 +329,7 @@ export default function LocationGuidesPage() {
                 onCopy={() => copyLink(g.slug, g.id)}
                 onEdit={g.is_full_portfolio ? undefined : () => setEditing(g)}
                 onDelete={() => deleteGuide(g.id)}
+                onPreview={() => previewGuide(g.slug)}
               />
             ))}
           </div>

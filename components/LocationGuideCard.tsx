@@ -50,6 +50,7 @@ export default function LocationGuideCard({
   onCopy,
   onEdit,
   onDelete,
+  onPreview,
 }: {
   guide:       GuideCardData
   bgClass:     string
@@ -58,6 +59,11 @@ export default function LocationGuideCard({
   onCopy:      () => void
   onEdit?:     () => void
   onDelete?:   () => void
+  /** Open the share URL in a new tab so the photographer can see what
+   *  their client will see. Parents that need lazy-create (e.g. the
+   *  full-portfolio card before the row exists) handle the open + create
+   *  themselves to avoid popup-blocker issues. */
+  onPreview?:  () => void
 }) {
   const exp = expirationSummary(guide)
   return (
@@ -165,6 +171,11 @@ export default function LocationGuideCard({
           >
             {copyState === 'copied' ? '✓ Copied!' : '📋 Copy URL'}
           </button>
+          {onPreview && (
+            <button onClick={onPreview} style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', color: 'var(--ink)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              👁 Preview
+            </button>
+          )}
           {onEdit && (
             <button onClick={onEdit} style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', color: 'var(--ink-soft)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
               Edit
