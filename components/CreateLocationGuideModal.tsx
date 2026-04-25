@@ -74,12 +74,19 @@ export default function CreateLocationGuideModal({
   onAddLocation?:    () => void
 }) {
   const isEdit = !!editLink
+  // Full-portfolio guides ("My Portfolio" / Share all) auto-sync against
+  // the photographer's whole portfolio — there's no static location list
+  // to pick, no expiration to set. We still let the user edit name,
+  // message, cover photo, and multi-pick options.
+  const isFullPortfolio = !!editLink?.is_full_portfolio
   const [sessionName,    setSessionName]    = useState(editLink?.session_name ?? (preselectAll ? 'My portfolio' : ''))
   const [selectedIds,    setSelectedIds]    = useState<string[]>(
-    editLink?.portfolio_location_ids
-      ?? (preselectAll     ? portfolio.map(p => p.id)
-      :  (preselectIds     ? preselectIds
-      :  []))
+    isFullPortfolio
+      ? portfolio.map(p => p.id)
+      : (editLink?.portfolio_location_ids
+          ?? (preselectAll     ? portfolio.map(p => p.id)
+          :  (preselectIds     ? preselectIds
+          :  [])))
   )
   const [message,        setMessage]        = useState('')
   const [expirationMode, setExpirationMode] = useState<ExpirationMode>('never')
@@ -88,15 +95,22 @@ export default function CreateLocationGuideModal({
   const [error,          setError]          = useState('')
   const [locSearch,      setLocSearch]      = useState('')
   const [coverUrl,       setCoverUrl]       = useState<string | null>(null)
+  // Multi-pick: when true, clients can pick maxPicks locations instead of
+  // just one. Optional maxMiles caps how spread out the picks can be —
+  // useful when the photographer is willing to do a multi-stop session
+  // but not drive across town.
+  const [multipick,      setMultipick]      = useState(false)
+  const [maxPicks,       setMaxPicks]       = useState(2)
+  const [maxMiles,       setMaxMiles]       = useState<string>('')  // input string so the field can be empty
   // Photo pool for the cover picker — keyed to portfolio_location_id so we can
   // show only photos from locations the photographer has included in the guide.
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ pid: string; url: string }[]>([])
 
-  // Load existing message, expiration, and cover photo when editing
+  // Load existing message, expiration, cover photo, multi-pick when editing.
   useEffect(() => {
     if (!editLink) return
     supabase.from('share_links')
-      .select('message,expires_at,is_permanent,expire_on_submit,cover_photo_url')
+      .select('message,expires_at,is_permanent,expire_on_submit,cover_photo_url,max_picks,max_pick_distance_miles')
       .eq('id', editLink.id)
       .single()
       .then(({ data }) => {
@@ -106,8 +120,22 @@ export default function CreateLocationGuideModal({
         if (data.expire_on_submit) { setExpirationMode('on_submit') }
         else if (data.expires_at)   { setExpirationMode('date'); setExpiresDate(toInputDate(data.expires_at)) }
         else                         { setExpirationMode('never') }
+        const mp = data.max_picks ?? 1
+        if (mp > 1) {
+          setMultipick(true)
+          setMaxPicks(mp)
+          if (data.max_pick_distance_miles != null) setMaxMiles(String(data.max_pick_distance_miles))
+        }
       })
   }, [editLink])
+
+  // For full-portfolio guides, keep selectedIds in sync with the live
+  // portfolio so the cover picker shows photos from every saved location
+  // (the picker filters by selectedIds).
+  useEffect(() => {
+    if (!isFullPortfolio) return
+    setSelectedIds(portfolio.map(p => p.id))
+  }, [isFullPortfolio, portfolio])
 
   // Pull photos for the whole portfolio once — cheap for typical portfolio
   // sizes, and lets us filter the cover picker in-memory as selections change.
@@ -137,48 +165,58 @@ export default function CreateLocationGuideModal({
 
   async function create() {
     if (!sessionName.trim()) { setError('Please give this guide a name.'); return }
-    if (selectedIds.length === 0) { setError('Select at least one location from your portfolio.'); return }
-    if (expirationMode === 'date' && !expiresDate) { setError('Pick an expiration date or choose another option.'); return }
+    if (!isFullPortfolio && selectedIds.length === 0) { setError('Select at least one location from your portfolio.'); return }
+    if (!isFullPortfolio && expirationMode === 'date' && !expiresDate) { setError('Pick an expiration date or choose another option.'); return }
+    if (multipick && (!Number.isFinite(maxPicks) || maxPicks < 2)) { setError('Allow at least 2 picks when multi-pick is on.'); return }
     setSaving(true); setError('')
     try {
-      const expiresAtIso = expirationMode === 'date' && expiresDate
+      // Full-portfolio guides skip expiration UI entirely (they're always
+      // saved-for-reuse), so force the never-expire shape regardless of
+      // whatever expirationMode happens to be in state.
+      const expiresAtIso = !isFullPortfolio && expirationMode === 'date' && expiresDate
         ? new Date(`${expiresDate}T23:59:59`).toISOString()
         : null
-      const expireOnSubmit = expirationMode === 'on_submit'
-      // is_permanent means "show up in the Location Guides list" — in the
-      // unified model every guide belongs there, so we always mark true.
-      // If the current cover isn't still backed by a selected location, drop
-      // it on save — otherwise the card would show a photo for a location
-      // that's no longer in the guide.
+      const expireOnSubmit = !isFullPortfolio && expirationMode === 'on_submit'
       const keepCover = coverUrl && coverCandidates.some(p => p.url === coverUrl) ? coverUrl : null
+      const finalMaxPicks = multipick ? Math.max(2, Math.min(20, Math.floor(maxPicks))) : 1
+      const milesNum = parseFloat(maxMiles)
+      const finalMaxMiles = multipick && Number.isFinite(milesNum) && milesNum > 0 ? milesNum : null
       if (isEdit && editLink) {
-        const { data, error: updateErr } = await supabase.from('share_links').update({
-          session_name:           sessionName.trim(),
-          message:                message.trim() || null,
-          portfolio_location_ids: selectedIds,
-          expires_at:             expiresAtIso,
-          expire_on_submit:       expireOnSubmit,
-          is_permanent:           true,
-          cover_photo_url:        keepCover,
-        }).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
+        // Full-portfolio guides keep portfolio_location_ids = null so the
+        // pick-data route resolves the live portfolio; static guides write
+        // their hand-picked list.
+        const updatePayload: Record<string, any> = {
+          session_name:            sessionName.trim(),
+          message:                 message.trim() || null,
+          expires_at:              expiresAtIso,
+          expire_on_submit:        expireOnSubmit,
+          is_permanent:            true,
+          cover_photo_url:         keepCover,
+          max_picks:               finalMaxPicks,
+          max_pick_distance_miles: finalMaxMiles,
+        }
+        if (!isFullPortfolio) updatePayload.portfolio_location_ids = selectedIds
+        const { data, error: updateErr } = await supabase.from('share_links').update(updatePayload).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
         if (updateErr) throw updateErr
         onCreated(data); onClose()
         return
       }
       const slug = generateSlug(sessionName, photographerName || 'photographer')
       const { data, error: insertErr } = await supabase.from('share_links').insert({
-        user_id:                userId,
+        user_id:                 userId,
         slug,
-        session_name:           sessionName.trim(),
-        message:                message.trim() || null,
-        photographer_name:      photographerName || null,
-        portfolio_location_ids: selectedIds,
-        location_ids:           [],
-        secret_ids:             [],
-        expires_at:             expiresAtIso,
-        expire_on_submit:       expireOnSubmit,
-        is_permanent:           true,
-        cover_photo_url:        keepCover,
+        session_name:            sessionName.trim(),
+        message:                 message.trim() || null,
+        photographer_name:       photographerName || null,
+        portfolio_location_ids:  selectedIds,
+        location_ids:            [],
+        secret_ids:              [],
+        expires_at:              expiresAtIso,
+        expire_on_submit:        expireOnSubmit,
+        is_permanent:            true,
+        cover_photo_url:         keepCover,
+        max_picks:               finalMaxPicks,
+        max_pick_distance_miles: finalMaxMiles,
       }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
       if (insertErr) throw insertErr
       onCreated(data); onClose()
@@ -205,8 +243,8 @@ export default function CreateLocationGuideModal({
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📚 {isEdit ? 'Edit Location Guide' : preselectAll ? 'Share entire portfolio' : 'New Location Guide'}</div>
-              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Pick locations from your portfolio, give the guide a name, and choose whether to save it for reuse or have it expire.</div>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>📚 {isFullPortfolio ? 'Edit your portfolio share' : isEdit ? 'Edit Location Guide' : preselectAll ? 'Share entire portfolio' : 'New Location Guide'}</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>{isFullPortfolio ? 'This guide auto-syncs with your whole portfolio. Update the name, message, or cover photo here.' : 'Pick locations from your portfolio, give the guide a name, and choose whether to save it for reuse or have it expire.'}</div>
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
           </div>
@@ -224,8 +262,39 @@ export default function CreateLocationGuideModal({
             <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="Hi! Here are my go-to locations. Take a look and pick your favorite!" style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
 
-          {/* Expiration mode */}
+          {/* Multi-pick options — let the client choose 2+ locations and
+              optionally cap how far apart they can be. */}
           <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'flex', gap: 10, padding: '10px 12px', borderRadius: 6, cursor: 'pointer', border: `1.5px solid ${multipick ? 'var(--gold)' : 'var(--cream-dark)'}`, background: multipick ? 'rgba(196,146,42,.05)' : 'white' }}>
+              <input type="checkbox" checked={multipick} onChange={e => setMultipick(e.target.checked)} style={{ marginTop: 3, accentColor: 'var(--gold)' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>Let the client pick more than one location</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Good for multi-stop sessions. Off by default — clients pick exactly one spot.</div>
+              </div>
+            </label>
+            {multipick && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                <div>
+                  <label style={labelStyle}>Up to</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="number" min={2} max={20} value={maxPicks} onChange={e => setMaxPicks(parseInt(e.target.value, 10) || 2)} style={inputStyle} />
+                    <span style={{ fontSize: 13, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>locations</span>
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Max miles apart (optional)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="number" min={0} step={0.5} value={maxMiles} onChange={e => setMaxMiles(e.target.value)} placeholder="No limit" style={inputStyle} />
+                    <span style={{ fontSize: 13, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>miles</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Expiration mode (hidden on full-portfolio guides — they're
+              always saved-for-reuse and don't expire) */}
+          {!isFullPortfolio && <div style={{ marginBottom: '1.25rem' }}>
             <label style={labelStyle}>When should this guide expire?</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {([
@@ -251,10 +320,15 @@ export default function CreateLocationGuideModal({
                 <input type="date" value={expiresDate} onChange={e => setExpiresDate(e.target.value)} min={toInputDate(new Date().toISOString())} style={inputStyle} />
               </div>
             )}
-          </div>
+          </div>}
 
-          {/* Location picker */}
-          <div style={{ marginBottom: '1.5rem' }}>
+          {/* Location picker — hidden on full-portfolio guides; their list
+              is dynamic so there's nothing to pick. Shown as a note instead. */}
+          {isFullPortfolio ? (
+            <div style={{ padding: '12px 14px', borderRadius: 8, background: 'rgba(74,103,65,.08)', border: '1px solid rgba(74,103,65,.2)', marginBottom: '1.5rem', fontSize: 13, color: 'var(--sage)', lineHeight: 1.55 }}>
+              🔗 <strong style={{ fontWeight: 600 }}>Auto-syncs with your portfolio.</strong> Every saved location is included automatically. To change which locations are shown to clients, add or remove them from your portfolio.
+            </div>
+          ) : <div style={{ marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 }}>
               <label style={{ ...labelStyle, marginBottom: 0 }}>
                 Portfolio locations * <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({selectedIds.length} of {portfolio.length} selected)</span>
@@ -303,7 +377,7 @@ export default function CreateLocationGuideModal({
                 </div>
               </>
             )}
-          </div>
+          </div>}
 
           {/* Cover photo picker — used as the card thumbnail + link preview */}
           <div style={{ marginBottom: '1.5rem' }}>
@@ -357,9 +431,14 @@ export default function CreateLocationGuideModal({
           {error && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={create} disabled={saving || !sessionName.trim() || selectedIds.length === 0} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !sessionName.trim() || selectedIds.length === 0 ? 0.5 : 1 }}>
-              {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save changes' : 'Create guide →')}
-            </button>
+            {(() => {
+              const disabled = saving || !sessionName.trim() || (!isFullPortfolio && selectedIds.length === 0)
+              return (
+                <button onClick={create} disabled={disabled} style={{ flex: 1, padding: '12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: disabled ? 0.5 : 1 }}>
+                  {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save changes' : 'Create guide →')}
+                </button>
+              )
+            })()}
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>
         </div>

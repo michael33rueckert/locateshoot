@@ -312,7 +312,7 @@ export default function HowItWorksPage() {
           {slide.kind === 'picker' && (
             <div>
               <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, textAlign: 'center', maxWidth: 540, margin: '0 auto 1.25rem' }}>
-                Tell us your city so we can show you popular spots in your area. We use this once to suggest locations — it isn\'t saved as a setting and you can add or remove anything later.
+                Tell us your city so we can show you popular spots in your area. Quickly add popular locations to your portfolio directly from the map.
               </p>
 
               <div style={{ marginBottom: '1.25rem' }}>
@@ -356,14 +356,14 @@ export default function HowItWorksPage() {
                     <div style={{ padding: '1.5rem', textAlign: 'center', background: 'var(--cream)', borderRadius: 10, border: '1px dashed var(--cream-dark)' }}>
                       <div style={{ fontSize: 28, marginBottom: 8 }}>🌲</div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No suggestions yet for this area</div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>That\'s fine — add your own from <Link href="/portfolio" style={{ color: 'var(--gold)', fontWeight: 500 }}>your portfolio</Link>.</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>That&apos;s fine — add your own from <Link href="/portfolio" style={{ color: 'var(--gold)', fontWeight: 500 }}>your portfolio</Link>.</div>
                     </div>
                   )}
 
                   {!searching && nearby.length > 0 && (
                     <>
                       <div style={{ padding: '10px 14px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, marginBottom: 10, fontSize: 12, color: 'var(--ink)', lineHeight: 1.55 }}>
-                        💡 The preview images below are placeholder shots so you can see what each location looks like. Once you upload <em>your</em> photos to a saved location, that\'s what your clients will see — not the placeholder.
+                        💡 The preview images below are placeholder shots so you can see what each location looks like. Once you upload <em>your</em> photos to a saved location, that&apos;s what your clients will see — not the placeholder.
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
                         {nearby.map((l, i) => {
