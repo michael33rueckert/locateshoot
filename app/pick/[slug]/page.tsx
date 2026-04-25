@@ -79,6 +79,35 @@ export default function ClientPickerPage() {
   const emailRef     = useRef<HTMLInputElement>(null)
   const firstNameRef = useRef<HTMLInputElement>(null)
 
+  // Swipe-to-dismiss for the location detail panel. Only the drag handle
+  // (the small bar at the top of the bottom sheet) participates — the rest
+  // of the panel scrolls normally. `touch-action: none` on the handle stops
+  // the browser from interpreting the gesture as a pull-to-refresh.
+  const [detailDragY, setDetailDragY] = useState(0)
+  const detailDragStart = useRef<number | null>(null)
+  // Reset the drag offset when the detail panel switches to a new
+  // location, so a half-dragged dismissal doesn't leak into the next open.
+  useEffect(() => { setDetailDragY(0); detailDragStart.current = null }, [detailLoc?.id])
+  function onDetailHandlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    detailDragStart.current = e.clientY
+  }
+  function onDetailHandlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (detailDragStart.current == null) return
+    const delta = e.clientY - detailDragStart.current
+    // Allow downward drag only — upward shouldn't push the panel above
+    // its anchor at the bottom.
+    setDetailDragY(Math.max(0, delta))
+  }
+  function onDetailHandlePointerUp() {
+    if (detailDragStart.current == null) return
+    detailDragStart.current = null
+    // Threshold of ~120px to dismiss; anything less snaps back. Comfortable
+    // enough to avoid accidental closes during light scroll attempts.
+    if (detailDragY > 120) setDetailLoc(null)
+    else                   setDetailDragY(0)
+  }
+
   useEffect(() => {
     if (mobileMapVisible) setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
   }, [mobileMapVisible])
@@ -505,8 +534,31 @@ export default function ClientPickerPage() {
       {detailLoc && (
         <>
           <div onClick={() => setDetailLoc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(4px)', zIndex: 400 }} />
-          <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 580, background: 'white', borderRadius: '16px 16px 0 0', zIndex: 500, maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 -8px 48px rgba(26,22,18,.3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px' }}>
+          <div style={{
+            position: 'fixed', bottom: 0, left: '50%',
+            transform: `translate(-50%, ${detailDragY}px)`,
+            // No transition while finger is down (1:1 follow). When the
+            // user releases without crossing the threshold, detailDragY
+            // snaps back to 0 with this transition.
+            transition: detailDragStart.current != null ? 'none' : 'transform .2s ease',
+            width: '100%', maxWidth: 580, background: 'white',
+            borderRadius: '16px 16px 0 0', zIndex: 500,
+            maxHeight: '85vh', overflowY: 'auto',
+            boxShadow: '0 -8px 48px rgba(26,22,18,.3)',
+          }}>
+            <div
+              onPointerDown={onDetailHandlePointerDown}
+              onPointerMove={onDetailHandlePointerMove}
+              onPointerUp={onDetailHandlePointerUp}
+              onPointerCancel={onDetailHandlePointerUp}
+              style={{
+                display: 'flex', justifyContent: 'center',
+                padding: '12px 0 6px',
+                // Own the gesture so the browser doesn't fire pull-to-refresh.
+                touchAction: 'none',
+                cursor: detailDragStart.current != null ? 'grabbing' : 'grab',
+              }}
+            >
               <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--sand)' }} />
             </div>
             <button onClick={() => setDetailLoc(null)} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: '50%', background: 'rgba(26,22,18,.6)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>✕</button>
