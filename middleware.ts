@@ -75,8 +75,17 @@ export function middleware(request: NextRequest) {
     || pathname.startsWith('/api/pick-data/')
     || pathname === '/api/submit-pick'
     || pathname === '/api/place-photos'
+    // Share-link analytics — the client's browser fires these as the
+    // pick page renders + heartbeats. No cookie, must bypass the gate.
+    || pathname.startsWith('/api/share-views')
 
-  if (isPublicPath || isStaticFile || isPwaPath || isClientPickPath) {
+  // Stripe webhook — Stripe POSTs from its own servers, no cookies, ever.
+  // The gate would 307 it to /coming-soon and the subscription state never
+  // syncs back to the photographer's profile. Auth is handled by the
+  // route itself via signing-secret verification.
+  const isStripeWebhook = pathname === '/api/webhook/stripe'
+
+  if (isPublicPath || isStaticFile || isPwaPath || isClientPickPath || isStripeWebhook) {
     return NextResponse.next()
   }
 
