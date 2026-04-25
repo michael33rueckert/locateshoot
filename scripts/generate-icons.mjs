@@ -20,6 +20,12 @@ const targets = [
   { out: 'public/apple-touch-icon.png',  size: 180,  maskable: false },
   { out: 'public/favicon-32.png',        size: 32,   maskable: false },
   { out: 'public/favicon-16.png',        size: 16,   maskable: false },
+  // Next.js App Router serves these as the auto-generated favicon +
+  // apple-touch-icon `<link>` tags. They override anything in public/,
+  // so they must mirror the same design or browsers will keep showing
+  // the old icon until cache clears.
+  { out: 'app/icon.png',                 size: 512,  maskable: false },
+  { out: 'app/apple-icon.png',           size: 180,  maskable: false },
 ]
 
 // Maskable variants need ~10% safe-area padding on every side per the PWA
