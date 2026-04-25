@@ -42,6 +42,13 @@ export default function RootLayout({
     <html lang="en" className={`${playfair.variable} ${dmSans.variable}`}>
       <head>
         <meta name="theme-color" content="#c4922a" />
+        {/* Favicon: SVG for modern browsers (sharp at any size, themed via
+            the source file), PNG fallback for older. apple-touch-icon is
+            required for the iOS home screen. All assets generated from
+            public/icon.svg via `node scripts/generate-icons.mjs`. */}
+        <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
       </head>
       <body>
