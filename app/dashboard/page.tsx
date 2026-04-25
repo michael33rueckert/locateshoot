@@ -285,7 +285,7 @@ export default function DashboardPage() {
                   row on first Copy/Edit so a brand-new account still sees it. */}
               <div style={{ padding: '1rem 1.25rem 0' }}>
                 <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your portfolio share</div>
-                <div style={{ maxWidth: 280 }}>
+                <div className="dash-portfolio-share-card">
                   <LocationGuideCard
                     bgClass={BG_CYCLE[0]}
                     guide={{

@@ -1070,6 +1070,10 @@ body {
 .dash-main-grid  { display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; align-items: start; }
 .dash-stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 2rem; }
 .dash-right-col  { display: flex; flex-direction: column; gap: 1.25rem; }
+/* Pinned "Your portfolio share" card. Capped width on desktop/tablet so a
+   single card doesn't stretch across the whole left column; mobile gets the
+   override below to match the regular full-width guide cards. */
+.dash-portfolio-share-card { max-width: 280px; }
  
 /* ── Explore ── */
 .explore-body {
@@ -1161,6 +1165,8 @@ body {
   .dash-stats-grid    { display: none !important; }
   .dash-stats-summary { display: block !important; }
   .dash-right-col     { display: flex !important; flex-direction: column !important; gap: 1rem !important; }
+  /* Portfolio-share card matches the full-width guide cards on mobile. */
+  .dash-portfolio-share-card { max-width: none !important; }
  
   /* ── Explore ── */
   .explore-body {

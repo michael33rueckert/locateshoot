@@ -230,7 +230,7 @@ export default function LocationGuidesPage() {
         {!loading && (
           <div style={{ marginBottom: '1.5rem' }}>
             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your portfolio share</div>
-            <div style={{ maxWidth: 320 }}>
+            <div className="dash-portfolio-share-card">
               <LocationGuideCard
                 bgClass={BG_CYCLE[0]}
                 guide={{
