@@ -239,41 +239,6 @@ export default function LocationGuidesPage() {
           </div>
         </div>
 
-        {/* Always-on "Your portfolio share" card. Renders even when the
-            full-portfolio share_link doesn't exist yet — Copy and Edit
-            lazy-create it. */}
-        {!loading && (
-          <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your portfolio share</div>
-            <div className="dash-portfolio-share-card">
-              <LocationGuideCard
-                bgClass={BG_CYCLE[0]}
-                guide={{
-                  id:                fullPortfolioGuide?.id ?? 'full-portfolio',
-                  session_name:      fullPortfolioGuide?.session_name ?? 'My Portfolio',
-                  slug:              fullPortfolioGuide?.slug ?? '',
-                  created_at:        fullPortfolioGuide?.created_at ?? new Date().toISOString(),
-                  is_full_portfolio: true,
-                  expires_at:        null,
-                  expire_on_submit:  false,
-                  cover_photo_url:   fullPortfolioGuide?.cover_photo_url ?? null,
-                  pick_count:        fullPortfolioGuide?.pick_count ?? 0,
-                  location_count:    portfolio.length,
-                }}
-                copyState={fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle'}
-                deleteState="idle"
-                onCopy={copyFullPortfolio}
-                onEdit={editFullPortfolio}
-                onPreview={previewFullPortfolio}
-              />
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 8, lineHeight: 1.5 }}>
-              One link with everything in your portfolio. Auto-syncs as you add and remove locations.
-            </div>
-          </div>
-        )}
-
-        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 8 }}>Custom guides</div>
         {/* Search */}
         <div style={{ marginBottom: '1rem' }}>
           <input
@@ -291,49 +256,76 @@ export default function LocationGuidesPage() {
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Loading your guides…</div>
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           </div>
-        ) : filtered.length === 0 && !q ? (
-          <div style={{ background: 'white', borderRadius: 12, border: '1px solid var(--cream-dark)', padding: '3rem 1.5rem', textAlign: 'center' }}>
-            <div style={{ fontSize: 44, marginBottom: 14 }}>📚</div>
-            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>No custom guides yet</div>
-            <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, marginBottom: 20, maxWidth: 480, margin: '0 auto 20px' }}>
-              Use your portfolio share above for a one-link-everything option, or build a custom guide for a specific city or session theme — a <em>Kansas City</em> guide, a <em>Golden Hour</em> guide, a <em>Smith Family Fall Photos</em> guide.
+        ) : (() => {
+          // Single grid that includes the always-on portfolio guide first,
+          // followed by every custom guide. Search filters across both —
+          // hide the portfolio card if its title doesn't match the query.
+          const portfolioCardData = {
+            id:                fullPortfolioGuide?.id ?? 'full-portfolio',
+            session_name:      fullPortfolioGuide?.session_name ?? 'My Portfolio',
+            slug:              fullPortfolioGuide?.slug ?? '',
+            created_at:        fullPortfolioGuide?.created_at ?? new Date().toISOString(),
+            is_full_portfolio: true,
+            expires_at:        null as string | null,
+            expire_on_submit:  false,
+            cover_photo_url:   fullPortfolioGuide?.cover_photo_url ?? null,
+            pick_count:        fullPortfolioGuide?.pick_count ?? 0,
+            location_count:    portfolio.length,
+          }
+          const portfolioMatches = !q || portfolioCardData.session_name.toLowerCase().includes(q)
+          const cards = [
+            ...(portfolioMatches ? [{ isPortfolio: true as const, data: portfolioCardData, link: fullPortfolioGuide }] : []),
+            ...filtered.map(g => ({ isPortfolio: false as const, data: {
+              id:                g.id,
+              session_name:      g.session_name,
+              slug:              g.slug,
+              created_at:        g.created_at,
+              is_full_portfolio: g.is_full_portfolio,
+              expires_at:        g.expires_at,
+              expire_on_submit:  g.expire_on_submit,
+              cover_photo_url:   g.cover_photo_url,
+              pick_count:        g.pick_count,
+              location_count:    (g.portfolio_location_ids?.length ?? 0) + (g.location_ids?.length ?? 0),
+            }, link: g })),
+          ]
+
+          if (cards.length === 0) {
+            return (
+              <div style={{ background: 'white', borderRadius: 12, border: '1px solid var(--cream-dark)', padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No matches</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>No guide name contains &quot;{search}&quot;.</div>
+              </div>
+            )
+          }
+
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+              {cards.map((card, i) => (
+                <LocationGuideCard
+                  key={card.data.id}
+                  bgClass={BG_CYCLE[i % BG_CYCLE.length]}
+                  guide={card.data}
+                  featured={card.isPortfolio}
+                  copyState={
+                    card.isPortfolio
+                      ? (fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle')
+                      : (copiedId === card.link!.id ? 'copied' : 'idle')
+                  }
+                  deleteState={
+                    card.isPortfolio
+                      ? 'idle'
+                      : (deleteId === card.link!.id ? 'confirming' : 'idle')
+                  }
+                  onCopy={card.isPortfolio ? copyFullPortfolio : () => copyLink(card.link!.slug, card.link!.id)}
+                  onEdit={card.isPortfolio ? editFullPortfolio : () => setEditing(card.link!)}
+                  onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
+                  onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}
+                />
+              ))}
             </div>
-            <button onClick={() => setShowCreate(true)} style={{ padding: '12px 24px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Create your first custom guide →</button>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ background: 'white', borderRadius: 12, border: '1px solid var(--cream-dark)', padding: '2.5rem 1.5rem', textAlign: 'center' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No matches</div>
-            <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>No guide name contains &quot;{search}&quot;.</div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
-            {filtered.map((g, i) => (
-              <LocationGuideCard
-                key={g.id}
-                bgClass={BG_CYCLE[i % BG_CYCLE.length]}
-                guide={{
-                  id:                g.id,
-                  session_name:      g.session_name,
-                  slug:              g.slug,
-                  created_at:        g.created_at,
-                  is_full_portfolio: g.is_full_portfolio,
-                  expires_at:        g.expires_at,
-                  expire_on_submit:  g.expire_on_submit,
-                  cover_photo_url:   g.cover_photo_url,
-                  pick_count:        g.pick_count,
-                  location_count:    (g.portfolio_location_ids?.length ?? 0) + (g.location_ids?.length ?? 0),
-                }}
-                copyState={copiedId === g.id ? 'copied' : 'idle'}
-                deleteState={deleteId === g.id ? 'confirming' : 'idle'}
-                onCopy={() => copyLink(g.slug, g.id)}
-                onEdit={g.is_full_portfolio ? undefined : () => setEditing(g)}
-                onDelete={() => deleteGuide(g.id)}
-                onPreview={() => previewGuide(g.slug)}
-              />
-            ))}
-          </div>
-        )}
+          )
+        })()}
       </div>
 
       {showCreate && (

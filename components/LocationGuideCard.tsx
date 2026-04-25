@@ -51,6 +51,7 @@ export default function LocationGuideCard({
   onEdit,
   onDelete,
   onPreview,
+  featured,
 }: {
   guide:       GuideCardData
   bgClass:     string
@@ -64,21 +65,27 @@ export default function LocationGuideCard({
    *  full-portfolio card before the row exists) handle the open + create
    *  themselves to avoid popup-blocker issues. */
   onPreview?:  () => void
+  /** Highlight this card as the headline of the list (used for the
+   *  pinned "Entire Portfolio" guide). Adds a thin gold border so it
+   *  visually anchors above the custom-guide cards in the same grid. */
+  featured?:   boolean
 }) {
   const exp = expirationSummary(guide)
+  const idleBorder     = featured ? '2px solid var(--gold)'    : '1px solid var(--cream-dark)'
+  const idleShadow     = featured ? '0 4px 14px rgba(196,146,42,.18)' : '0 1px 3px rgba(26,22,18,.03)'
   return (
     <div style={{
       background: 'white',
       borderRadius: 10,
-      border: '1px solid var(--cream-dark)',
+      border: idleBorder,
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
       transition: 'all .15s',
-      boxShadow: '0 1px 3px rgba(26,22,18,.03)',
+      boxShadow: idleShadow,
     }}
     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(26,22,18,.03)' }}>
+    onMouseLeave={e => { e.currentTarget.style.border = idleBorder; e.currentTarget.style.boxShadow = idleShadow }}>
       {/* Header band — cover photo if set, otherwise a colored gradient + emoji */}
       <div
         className={guide.cover_photo_url ? undefined : bgClass}
@@ -134,7 +141,7 @@ export default function LocationGuideCard({
             color: 'var(--sage)',
             backdropFilter: 'blur(4px)',
             zIndex: 1,
-          }}>🔗 Auto-syncs</span>
+          }} title="Auto-syncs with your whole portfolio as you add or remove locations">📚 Entire Portfolio</span>
         )}
       </div>
 

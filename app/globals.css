@@ -1070,9 +1070,6 @@ body {
 .dash-main-grid  { display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; align-items: start; }
 .dash-stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 2rem; }
 .dash-right-col  { display: flex; flex-direction: column; gap: 1.25rem; }
-/* Pinned "Your portfolio share" card — always full-width within its
-   section so it reads as the headline guide on the dashboard. */
-.dash-portfolio-share-card { width: 100%; }
  
 /* ── Explore ── */
 .explore-body {
