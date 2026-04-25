@@ -72,12 +72,31 @@ export async function GET(request: Request, context: any) {
   }
 
   if (portfolioIds.length > 0) {
-    // New path — share references portfolio copies
-    const { data: portfolioRows, error: portfolioErr } = await admin
-      .from('portfolio_locations')
-      .select('id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,pinterest_url,blog_url,is_secret,hide_google_photos')
-      .in('id', portfolioIds)
-    if (portfolioErr) console.error('portfolio query error:', portfolioErr)
+    // New path — share references portfolio copies. Try the full select first
+    // (incl. pinterest_url + blog_url). When the migration hasn't been
+    // applied yet, those two columns don't exist and the whole query fails
+    // — fall back to the pre-link column set so picks still render. Once
+    // the migration is in, the first attempt succeeds and the fallback
+    // never runs.
+    const baseCols = 'id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,hide_google_photos'
+    let portfolioRows: any[] | null = null
+    {
+      const { data, error } = await admin
+        .from('portfolio_locations')
+        .select(`${baseCols},pinterest_url,blog_url`)
+        .in('id', portfolioIds)
+      if (error) {
+        console.warn('portfolio query w/ link cols failed (likely pre-migration):', error.message)
+        const fb = await admin
+          .from('portfolio_locations')
+          .select(baseCols)
+          .in('id', portfolioIds)
+        if (fb.error) console.error('portfolio query error:', fb.error)
+        portfolioRows = fb.data ?? []
+      } else {
+        portfolioRows = data ?? []
+      }
+    }
 
     const sourceIds = (portfolioRows ?? [])
       .map(p => p.source_location_id)
