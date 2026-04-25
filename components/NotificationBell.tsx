@@ -127,12 +127,30 @@ export default function NotificationBell() {
     setSnapshot([])
   }
 
+  // Click-outside-to-close. The bell lives inside AppNav's sticky stacking
+  // context (z-index 200), which clamps any nested overlay's z-index — a
+  // fixed-position backdrop *inside* the bell renders below the actual page
+  // content, so its onClick never fires for taps outside the nav. Instead
+  // we listen at document level and check if the click landed outside the
+  // bell+dropdown subtree.
+  const containerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    function handlePointerDown(e: PointerEvent) {
+      const root = containerRef.current
+      if (!root) return
+      if (!root.contains(e.target as Node)) closeDropdown()
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [open])
+
   if (!userId) return null
 
   const count = unread.length
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative' }}>
       <button
         onClick={() => (open ? closeDropdown() : openAndMarkSeen())}
         aria-label={`Notifications (${count} unread)`}
@@ -162,7 +180,6 @@ export default function NotificationBell() {
 
       {open && (
         <>
-          <div onClick={closeDropdown} style={{ position: 'fixed', inset: 0, zIndex: 9500, background: 'transparent' }} />
           <div style={{ position: 'absolute', top: 44, right: 0, zIndex: 9600, width: 320, maxWidth: '94vw', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, boxShadow: '0 16px 40px rgba(0,0,0,.25)', overflow: 'hidden' }}>
             <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--cream-dark)', fontFamily: 'var(--font-playfair),serif', fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
               Notifications
