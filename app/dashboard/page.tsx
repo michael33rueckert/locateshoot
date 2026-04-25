@@ -172,6 +172,42 @@ export default function DashboardPage() {
     setDeleteGuideId(null); setToast('Guide deleted')
   }
 
+  // Full-portfolio share — pinned at the top of the Location Guides section
+  // even before the photographer has clicked anything to materialize it.
+  // Edit/Copy lazy-create via shareFullPortfolioFn so a brand-new account
+  // sees the card immediately and the row is built on first interaction.
+  const fullPortfolioPermLink = permanentLinks.find(l => l.is_full_portfolio) ?? null
+  const customGuides          = permanentLinks.filter(l => !l.is_full_portfolio)
+
+  async function ensureFullPortfolioPermLink(): Promise<PermanentLink | null> {
+    if (fullPortfolioPermLink) return fullPortfolioPermLink
+    if (!profile) { setToast('⚠ Profile not loaded'); return null }
+    const r = await shareFullPortfolioFn(profile)
+    if (!r.ok) { setToast(`⚠ ${r.error}`); return null }
+    await loadData()
+    const { data } = await supabase
+      .from('share_links')
+      .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
+      .eq('user_id', profile.id)
+      .eq('is_full_portfolio', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    return data
+      ? { ...(data as any), picks: [], expanded: false } as PermanentLink
+      : null
+  }
+  async function copyFullPortfolio() {
+    const g = await ensureFullPortfolioPermLink()
+    if (!g) return
+    copyGuideUrl(g.slug, g.id)
+  }
+  async function editFullPortfolio() {
+    const g = await ensureFullPortfolioPermLink()
+    if (!g) return
+    setEditingPermLink(g)
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -222,6 +258,93 @@ export default function DashboardPage() {
 
           {/* ── LEFT COLUMN ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+            {/* LOCATION GUIDES — pinned above the portfolio so the things
+                photographers send to clients are the most visible thing on
+                the dashboard. */}
+            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    📚 Location Guides
+                    {customGuides.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(61,110,140,.1)', color: 'var(--sky)', border: '1px solid rgba(61,110,140,.2)' }}>{customGuides.length}</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>A curated set of portfolio locations for each city, style, or client — one reusable link per guide.</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                  <Link href="/location-guides" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>View all →</Link>
+                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ New guide</button>
+                </div>
+              </div>
+
+              {/* Always-on portfolio share card. Lazy-creates the share_links
+                  row on first Copy/Edit so a brand-new account still sees it. */}
+              <div style={{ padding: '1rem 1.25rem 0' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 8 }}>Your portfolio share</div>
+                <div style={{ maxWidth: 280 }}>
+                  <LocationGuideCard
+                    bgClass={BG_CYCLE[0]}
+                    guide={{
+                      id:                fullPortfolioPermLink?.id ?? 'full-portfolio',
+                      session_name:      fullPortfolioPermLink?.session_name ?? 'My Portfolio',
+                      slug:              fullPortfolioPermLink?.slug ?? '',
+                      created_at:        fullPortfolioPermLink?.created_at ?? new Date().toISOString(),
+                      is_full_portfolio: true,
+                      expires_at:        null,
+                      expire_on_submit:  false,
+                      cover_photo_url:   fullPortfolioPermLink?.cover_photo_url ?? null,
+                      pick_count:        fullPortfolioPermLink?.picks.length ?? 0,
+                      location_count:    portfolioLocs.length,
+                    }}
+                    copyState={fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle'}
+                    deleteState="idle"
+                    onCopy={copyFullPortfolio}
+                    onEdit={editFullPortfolio}
+                  />
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 6, lineHeight: 1.5 }}>
+                  One link with everything in your portfolio. Auto-syncs as you add and remove locations.
+                </div>
+              </div>
+
+              {/* Custom guides grid — full-portfolio is excluded since it
+                  already has the dedicated card above. */}
+              <div style={{ padding: '1.25rem 1.25rem 0' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 8 }}>Custom guides</div>
+              </div>
+              {customGuides.length === 0 ? (
+                <div style={{ padding: '1rem 1.25rem 1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 12, lineHeight: 1.55, maxWidth: 420, margin: '0 auto 12px' }}>Build a guide for one city or theme — a <em>Kansas City</em> guide, an <em>Overland Park</em> guide, a <em>Golden Hour</em> guide.</div>
+                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '8px 18px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Create your first custom guide</button>
+                </div>
+              ) : (
+                <div style={{ padding: '0 1.25rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
+                  {customGuides.map((link, i) => (
+                    <LocationGuideCard
+                      key={link.id}
+                      bgClass={BG_CYCLE[i % BG_CYCLE.length]}
+                      guide={{
+                        id:                link.id,
+                        session_name:      link.session_name,
+                        slug:              link.slug,
+                        created_at:        link.created_at,
+                        is_full_portfolio: link.is_full_portfolio,
+                        expires_at:        link.expires_at,
+                        expire_on_submit:  link.expire_on_submit,
+                        cover_photo_url:   link.cover_photo_url,
+                        pick_count:        link.picks.length,
+                        location_count:    (link.portfolio_location_ids?.length ?? 0) + (link.location_ids?.length ?? 0),
+                      }}
+                      copyState={copiedGuideId === link.id ? 'copied' : 'idle'}
+                      deleteState={deleteGuideId === link.id ? 'confirming' : 'idle'}
+                      onCopy={() => copyGuideUrl(link.slug, link.id)}
+                      onEdit={() => setEditingPermLink(link)}
+                      onDelete={() => deleteGuide(link.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* MY PORTFOLIO — primary section */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
@@ -287,57 +410,6 @@ export default function DashboardPage() {
                       View all {portfolioLocs.length > 6 ? `${portfolioLocs.length} locations` : 'in portfolio'} →
                     </Link>
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* LOCATION GUIDES */}
-            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    📚 Location Guides
-                    {permanentLinks.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(61,110,140,.1)', color: 'var(--sky)', border: '1px solid rgba(61,110,140,.2)' }}>{permanentLinks.length}</span>}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>A curated set of portfolio locations for each city, style, or client — one reusable link per guide.</div>
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                  <Link href="/location-guides" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>View all →</Link>
-                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ New guide</button>
-                </div>
-              </div>
-              {permanentLinks.length === 0 ? (
-                <div style={{ padding: '2.25rem 1.5rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: 36, marginBottom: 12 }}>📚</div>
-                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>No guides yet</div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 18, lineHeight: 1.55, maxWidth: 420, margin: '0 auto 18px' }}>Think of a guide as a mini-portfolio for one city or theme. Make a <em>Kansas City</em> guide, an <em>Overland Park</em> guide, a <em>Golden Hour</em> guide — send each client the one that matches their session.</div>
-                  <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '10px 22px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Create your first guide</button>
-                </div>
-              ) : (
-                <div style={{ padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
-                  {permanentLinks.map((link, i) => (
-                    <LocationGuideCard
-                      key={link.id}
-                      bgClass={BG_CYCLE[i % BG_CYCLE.length]}
-                      guide={{
-                        id:                link.id,
-                        session_name:      link.session_name,
-                        slug:              link.slug,
-                        created_at:        link.created_at,
-                        is_full_portfolio: link.is_full_portfolio,
-                        expires_at:        link.expires_at,
-                        expire_on_submit:  link.expire_on_submit,
-                        cover_photo_url:   link.cover_photo_url,
-                        pick_count:        link.picks.length,
-                        location_count:    (link.portfolio_location_ids?.length ?? 0) + (link.location_ids?.length ?? 0),
-                      }}
-                      copyState={copiedGuideId === link.id ? 'copied' : 'idle'}
-                      deleteState={deleteGuideId === link.id ? 'confirming' : 'idle'}
-                      onCopy={() => copyGuideUrl(link.slug, link.id)}
-                      onEdit={link.is_full_portfolio ? undefined : () => setEditingPermLink(link)}
-                      onDelete={() => deleteGuide(link.id)}
-                    />
-                  ))}
                 </div>
               )}
             </div>
