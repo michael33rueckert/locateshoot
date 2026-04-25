@@ -855,10 +855,13 @@ function PickListItem({
             onScroll={handleScroll}
           >
             {photos.map((src, i) => {
-              // Mobile shows this image full-width (~1200px on a 3× retina
-              // phone); desktop shows the same image in a 60×60 slot. srcset
-              // lets the browser pick whichever size matches the device so
-              // the mobile hero isn't upscaled from a 480-wide thumbnail.
+              // Mobile + tablet (≤1023px) show this image full-width (~1200px
+              // on a 3× retina phone); desktop shows the same image in a
+              // 60×60 slot. srcset lets the browser pick whichever size
+              // matches the device so the hero isn't upscaled from a
+              // 480-wide thumbnail. The sizes hint must match the CSS
+              // breakpoint above (≤1023px) — when these drift, browsers
+              // silently pick the small variant and the hero looks fuzzy.
               const thumb  = thumbUrl(src)  ?? src
               const medium = mediumUrl(src) ?? src
               // No onClick on the image — taps bubble up to the card's
@@ -870,7 +873,7 @@ function PickListItem({
                   key={i}
                   src={thumb}
                   srcSet={`${thumb} 480w, ${medium} 1200w`}
-                  sizes="(max-width: 768px) 100vw, 60px"
+                  sizes="(max-width: 1023px) 100vw, 60px"
                   alt=""
                   loading="lazy"
                   decoding="async"
