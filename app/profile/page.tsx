@@ -1040,15 +1040,18 @@ export default function ProfilePage() {
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>4. Add the DNS records</div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: 8 }}>
-                  Open your DNS provider's dashboard and add each record exactly as shown. The "Host" field is the subdomain part (some providers fill in your root domain automatically — if so, only enter the prefix like <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>resend._domainkey</code>, not the full <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>resend._domainkey.yoursite.com</code>).
+                  After you click <strong>Save email</strong>, the exact DNS records you need (SPF + DKIM, sometimes DMARC) appear right on this page in a copyable list — close this help and you'll see them. Each record has a <strong>Type</strong>, <strong>Host</strong>, and <strong>Value</strong>. Copy each one into your DNS provider's dashboard exactly as shown.
                 </div>
-                <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 6, padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: 'var(--ink)', lineHeight: 1.7 }}>
-                  <div><strong>SPF</strong> — tells receivers Resend may send for your domain.</div>
-                  <div><strong>DKIM</strong> — public key used to verify our signature on each email.</div>
+                <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 6, padding: '10px 14px', fontSize: 12, color: 'var(--ink)', lineHeight: 1.7 }}>
+                  <div style={{ marginBottom: 4 }}><strong>SPF</strong> — tells receivers Resend may send for your domain.</div>
+                  <div style={{ marginBottom: 4 }}><strong>DKIM</strong> — public key used to verify our signature on each email.</div>
                   <div><strong>DMARC</strong> (optional) — tells receivers what to do with messages that fail SPF/DKIM. We recommend the default Resend provides.</div>
                 </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 8, fontWeight: 300, lineHeight: 1.55 }}>
+                  <strong>Tip on the Host field:</strong> some DNS providers append your domain automatically. If yours does, enter only the prefix like <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>resend._domainkey</code>, not the full <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>resend._domainkey.yoursite.com</code>. If your provider doesn't append, paste the full Host shown.
+                </div>
                 <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontStyle: 'italic', fontWeight: 300 }}>
-                  If you already have an SPF record, don't add a second — Resend's docs explain how to merge them.
+                  Already have an SPF record at your domain? Don't add a second — Resend's docs explain how to merge them.
                 </div>
               </div>
 
