@@ -477,7 +477,23 @@ export default function DashboardPage() {
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
                           <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ aspectRatio: '4 / 3', position: 'relative', overflow: 'hidden' }}>
-                            {loc.preview_url && <img src={thumbUrl(loc.preview_url) ?? loc.preview_url} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                            {loc.preview_url && <img
+                              src={thumbUrl(loc.preview_url) ?? loc.preview_url}
+                              alt=""
+                              decoding="async"
+                              // Supabase's /render/image/ endpoint occasionally
+                              // rate-limits or cold-starts, leaving the tile
+                              // showing the colored bg-* gradient with no
+                              // image. Fall back to the original (non-resized)
+                              // file so the photo still appears even if it
+                              // costs a slightly bigger download.
+                              onError={e => {
+                                if (e.currentTarget.src !== loc.preview_url) {
+                                  e.currentTarget.src = loc.preview_url!
+                                }
+                              }}
+                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                            />}
                             {noPhotos && (
                               <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(196,146,42,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
                                 ⚠ Add your photos

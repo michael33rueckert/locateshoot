@@ -104,8 +104,16 @@ export default function LocationGuideCard({
             <img
               src={thumbUrl(guide.cover_photo_url) ?? guide.cover_photo_url}
               alt=""
-              loading="lazy"
               decoding="async"
+              // Fall back to the original URL when Supabase's render endpoint
+              // hiccups — see PortfolioEditModal/portfolio page for the same
+              // pattern. Without this the card silently shows the bg-* gradient
+              // even though the cover photo exists.
+              onError={e => {
+                if (e.currentTarget.src !== guide.cover_photo_url) {
+                  e.currentTarget.src = guide.cover_photo_url!
+                }
+              }}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
             />
             {/* Subtle bottom-to-top scrim so overlaid badges stay readable on bright photos */}
