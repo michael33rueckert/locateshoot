@@ -161,33 +161,41 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
       </nav>
 
       {open && (
-        <div className="mobile-menu" onClick={() => setOpen(false)}>
-          {signedIn && LINKS.map(l => (
-            <Link
-              key={l.href}
-              href={l.href}
-              style={{
-                color: isActive(l.href) ? 'var(--gold)' : undefined,
-                fontWeight: isActive(l.href) ? 600 : undefined,
-              }}
-            >
-              {isActive(l.href) ? '• ' : ''}{l.label}
-            </Link>
-          ))}
-          {canInstall && (
-            <button
-              onClick={e => { e.stopPropagation(); installApp() }}
-              style={{ fontSize: 15, color: canInstall === 'manual' ? 'rgba(245,240,232,.75)' : 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}
-            >
-              📲 Install app
-            </button>
-          )}
-          {signedIn ? (
-            <button onClick={signOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
-          ) : loaded ? (
-            <Link href="/">Sign in</Link>
-          ) : null}
-        </div>
+        <>
+          {/* Full-screen backdrop below the dropdown so any tap on the
+              page underneath closes the menu — without this the menu
+              only collapses when the user lands precisely on the X
+              button or on a link inside the panel. Sits below the menu
+              (z-index 499 vs 500) but above page content. */}
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 60, left: 0, right: 0, bottom: 0, zIndex: 499, background: 'transparent' }} />
+          <div className="mobile-menu" onClick={() => setOpen(false)}>
+            {signedIn && LINKS.map(l => (
+              <Link
+                key={l.href}
+                href={l.href}
+                style={{
+                  color: isActive(l.href) ? 'var(--gold)' : undefined,
+                  fontWeight: isActive(l.href) ? 600 : undefined,
+                }}
+              >
+                {isActive(l.href) ? '• ' : ''}{l.label}
+              </Link>
+            ))}
+            {canInstall && (
+              <button
+                onClick={e => { e.stopPropagation(); installApp() }}
+                style={{ fontSize: 15, color: canInstall === 'manual' ? 'rgba(245,240,232,.75)' : 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}
+              >
+                📲 Install app
+              </button>
+            )}
+            {signedIn ? (
+              <button onClick={signOut} style={{ fontSize: 15, color: 'rgba(245,240,232,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '12px 0', textAlign: 'left' }}>Sign out</button>
+            ) : loaded ? (
+              <Link href="/">Sign in</Link>
+            ) : null}
+          </div>
+        </>
       )}
 
       {installHint && (

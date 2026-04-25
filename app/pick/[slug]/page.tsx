@@ -12,6 +12,33 @@ const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false }
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
+// Open directions in whichever maps app the user prefers. iOS opens
+// Apple Maps via the universal `maps.apple.com` URL (which the OS hands
+// off to the Maps app automatically). Android uses the `geo:` URI so
+// the system shows its app picker for the user's default. Desktop —
+// where neither of those work — falls back to Google Maps in a new
+// tab. The query is name + city + lat,lng so the destination resolves
+// even if the spot's name is generic ("River trail").
+function openDirections(loc: { name: string; city: string; lat: number; lng: number }) {
+  const hasCoords = Number.isFinite(loc.lat) && Number.isFinite(loc.lng)
+  const namePart  = [loc.name, loc.city].filter(Boolean).join(', ')
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  const isIOS     = /iPhone|iPad|iPod/.test(ua)
+  const isAndroid = /Android/.test(ua)
+  let url: string
+  if (isIOS) {
+    const daddr = hasCoords ? `${loc.lat},${loc.lng}` : namePart
+    url = `https://maps.apple.com/?daddr=${encodeURIComponent(daddr)}&q=${encodeURIComponent(loc.name)}`
+  } else if (isAndroid && hasCoords) {
+    url = `geo:${loc.lat},${loc.lng}?q=${encodeURIComponent(`${loc.lat},${loc.lng}(${loc.name})`)}`
+  } else if (hasCoords) {
+    url = `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&destination_place_id=${encodeURIComponent(loc.name)}`
+  } else {
+    url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(namePart)}`
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 // Haversine distance in miles. Used to enforce the photographer's
 // max_pick_distance_miles setting on multi-location share links.
 function distMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -32,6 +59,8 @@ type FullLocation = ClientLocation & {
   permitFee: string | null
   permitWebsite: string | null
   permitCertainty: string
+  pinterestUrl: string | null
+  blogUrl: string | null
   saves: number
   photoUrl: string | null
   photoUrls: string[]
@@ -164,6 +193,8 @@ export default function ClientPickerPage() {
             permitFee:       loc.permit_fee ?? null,
             permitWebsite:   loc.permit_website ?? null,
             permitCertainty: loc.permit_certainty ?? 'unknown',
+            pinterestUrl:    loc.pinterest_url ?? null,
+            blogUrl:         loc.blog_url ?? null,
             saves:  loc.save_count ?? 0,
             photoUrl: loc.photo_url ?? null,
             photoUrls: loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : []),
@@ -181,6 +212,7 @@ export default function ClientPickerPage() {
             desc: s.description ?? '',
             permitRequired: null, permitNotes: null, permitFee: null,
             permitWebsite: null, permitCertainty: 'unknown',
+            pinterestUrl: null, blogUrl: null,
             saves: 0,
             hideGooglePhotos: true,
             photoUrl: null,
@@ -601,14 +633,32 @@ export default function ClientPickerPage() {
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 10, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([detailLoc.name, detailLoc.city].filter(Boolean).join(' '))}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}
+                <button
+                  onClick={() => openDirections(detailLoc)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
                 >
-                  🗺 Open in Google Maps
-                </a>
+                  🗺 Get Directions
+                </button>
+                {detailLoc.pinterestUrl && (
+                  <a
+                    href={detailLoc.pinterestUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}
+                  >
+                    📌 Pinterest board
+                  </a>
+                )}
+                {detailLoc.blogUrl && (
+                  <a
+                    href={detailLoc.blogUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}
+                  >
+                    ✍ Blog post
+                  </a>
+                )}
                 {detailLoc.permitWebsite && (
                   <a
                     href={detailLoc.permitWebsite}
@@ -708,59 +758,45 @@ export default function ClientPickerPage() {
         .pick-map-col { position: relative; }
         .pick-mobile-toggle { display: none; }
 
-        /* Tablet 769–1023: narrower sidebar so the map still breathes. The
-           card layout itself inherits the mobile vertical-hero treatment
-           below (the shared ≤1023px block), just with a tweaked sidebar
-           width and slightly smaller hero so desktop-sized tablets don't
-           feel dominated by photos. */
-        @media (max-width: 1023px) and (min-width: 769px) {
-          .pick-body   { grid-template-columns: 420px 1fr !important; }
-          .pick-loc-photo { height: 210px !important; }
+        /* Single vertical-hero card layout across every viewport — desktop,
+           tablet, and mobile all show one full-width photo per card with the
+           name + meta stacked below. Sidebar is 420px on desktop/tablet so
+           the rendered photo width is roughly 420px there, full viewport
+           width on mobile. The sizes hint on the <img> below must stay in
+           sync with these widths so retina screens don't pick the 480w
+           thumbnail and upscale it. */
+        .pick-loc-card     { display: flex; flex-direction: column; gap: 0; padding: 0; align-items: stretch; }
+        .pick-loc-photo    { width: 100%; height: 210px; border-radius: 0; overflow: hidden; position: relative; flex-shrink: 0; }
+        .pick-loc-photo-strip {
+          position: absolute; inset: 0;
+          display: flex;
+          overflow-x: auto;
+          scroll-snap-type: x mandatory;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
         }
+        .pick-loc-photo-strip::-webkit-scrollbar { display: none; }
+        .pick-loc-photo-strip > img { width: 100%; height: 100%; flex-shrink: 0; object-fit: cover; display: block; scroll-snap-align: start; scroll-snap-stop: always; }
+        .pick-loc-photo-counter {
+          display: block;
+          position: absolute; bottom: 10px; right: 10px;
+          padding: 3px 9px; border-radius: 999px;
+          background: rgba(26,22,18,.72);
+          color: white;
+          font-size: 11px; font-weight: 600;
+          backdrop-filter: blur(4px);
+          z-index: 2;
+        }
+        .pick-loc-body     { flex: 1; min-width: 0; padding: 14px 1.25rem 4px; }
+        .pick-loc-name     { font-family: var(--font-playfair),serif; font-size: 17px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+        .pick-loc-city     { font-size: 13px; color: var(--ink-soft); margin-bottom: 8px; }
+        .pick-loc-cta      { align-self: flex-start; padding: 0 1.25rem 14px; font-size: 13px; font-weight: 600; flex-shrink: 0; }
 
-        /* Default (desktop ≥769): compact horizontal list item. */
-        .pick-loc-card       { display: flex; gap: 12px; align-items: center; padding: 12px 1.25rem; }
-        .pick-loc-photo      { width: 60px; height: 60px; flex-shrink: 0; border-radius: 8px; overflow: hidden; position: relative; }
-        .pick-loc-photo-strip{ position: absolute; inset: 0; display: flex; overflow: hidden; }
-        .pick-loc-photo-strip > img { width: 100%; height: 100%; flex-shrink: 0; object-fit: cover; display: block; }
-        .pick-loc-photo-counter { display: none; }
-        .pick-loc-body       { flex: 1; min-width: 0; }
-        .pick-loc-name       { font-size: 14px; font-weight: 500; color: var(--ink); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .pick-loc-city       { font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
-        .pick-loc-cta        { font-size: 11px; flex-shrink: 0; align-self: center; }
-
-        /* Mobile + tablet ≤1023: photo goes full-width + swipeable, text
-           stacks below. Taller card, bigger name, more breathing room.
-           Matches how Airbnb / booking apps show one hero per card in a
-           vertical feed. */
-        @media (max-width: 1023px) {
-          .pick-loc-card     { flex-direction: column !important; gap: 0 !important; padding: 0 !important; align-items: stretch !important; }
-          .pick-loc-photo    {
-            width: 100% !important; height: 240px !important;
-            border-radius: 0 !important;
-          }
-          .pick-loc-photo-strip {
-            overflow-x: auto !important;
-            scroll-snap-type: x mandatory;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
-          }
-          .pick-loc-photo-strip::-webkit-scrollbar { display: none; }
-          .pick-loc-photo-strip > img { scroll-snap-align: start; scroll-snap-stop: always; }
-          .pick-loc-photo-counter {
-            display: block !important;
-            position: absolute; bottom: 10px; right: 10px;
-            padding: 3px 9px; border-radius: 999px;
-            background: rgba(26,22,18,.72);
-            color: white;
-            font-size: 11px; font-weight: 600;
-            backdrop-filter: blur(4px);
-            z-index: 2;
-          }
-          .pick-loc-body     { padding: 14px 1.25rem 16px !important; }
-          .pick-loc-name     { font-size: 17px !important; margin-bottom: 4px !important; }
-          .pick-loc-city     { font-size: 13px !important; margin-bottom: 8px !important; }
-          .pick-loc-cta      { align-self: flex-start !important; padding-left: 1.25rem; padding-bottom: 12px; font-size: 13px !important; font-weight: 600 !important; }
+        /* Phones get a slightly taller hero — they're holding the device
+           closer than someone at a desktop is sitting from a 27" screen,
+           so the photo can take more of the viewport without dominating. */
+        @media (max-width: 768px) {
+          .pick-loc-photo { height: 240px; }
         }
 
         /* Mobile map toggle (below, unchanged). */
@@ -855,13 +891,14 @@ function PickListItem({
             onScroll={handleScroll}
           >
             {photos.map((src, i) => {
-              // Mobile + tablet (≤1023px) show this image full-width (~1200px
-              // on a 3× retina phone); desktop shows the same image in a
-              // 60×60 slot. srcset lets the browser pick whichever size
-              // matches the device so the hero isn't upscaled from a
-              // 480-wide thumbnail. The sizes hint must match the CSS
-              // breakpoint above (≤1023px) — when these drift, browsers
-              // silently pick the small variant and the hero looks fuzzy.
+              // Every viewport now renders this image as a full-width hero
+              // — phone uses the full viewport (~1200px on a 3× retina
+              // device), tablet/desktop use the 420px sidebar (~1260px on
+              // 3× retina). srcset lets the browser pick the right size so
+              // it isn't upscaled from a 480-wide thumbnail. Keep the sizes
+              // hint in sync with the sidebar width above — when these
+              // drift, browsers silently pick the small variant and the
+              // hero looks fuzzy.
               const thumb  = thumbUrl(src)  ?? src
               const medium = mediumUrl(src) ?? src
               // No onClick on the image — taps bubble up to the card's
@@ -873,7 +910,7 @@ function PickListItem({
                   key={i}
                   src={thumb}
                   srcSet={`${thumb} 480w, ${medium} 1200w`}
-                  sizes="(max-width: 1023px) 100vw, 60px"
+                  sizes="(max-width: 768px) 100vw, 420px"
                   alt=""
                   loading="lazy"
                   decoding="async"

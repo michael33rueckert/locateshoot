@@ -24,6 +24,8 @@ export default function AddPortfolioLocationModal({
   const [tagInput,setTagInput]= useState('')
   const [bestTime,       setBestTime]       = useState('')
   const [parkingInfo,    setParkingInfo]    = useState('')
+  const [pinterestUrl,   setPinterestUrl]   = useState('')
+  const [blogUrl,        setBlogUrl]        = useState('')
   const [permitRequired, setPermitRequired] = useState(false)
   const [permitNotes,    setPermitNotes]    = useState('')
   const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
@@ -84,6 +86,8 @@ export default function AddPortfolioLocationModal({
       permit_notes:       permitNotes.trim() || null,
       best_time:          bestTime.trim() || null,
       parking_info:       parkingInfo.trim() || null,
+      pinterest_url:      pinterestUrl.trim() || null,
+      blog_url:           blogUrl.trim() || null,
       is_secret:          false,
       hide_google_photos: hideGooglePhotos,
     }).select('id').single()
@@ -205,6 +209,17 @@ export default function AddPortfolioLocationModal({
             <div>
               <label style={labelStyle}>Parking info</label>
               <input value={parkingInfo} onChange={e => setParkingInfo(e.target.value)} style={inputStyle} placeholder="Free lot, street parking…" />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
+            <div>
+              <label style={labelStyle}>📌 Pinterest board</label>
+              <input value={pinterestUrl} onChange={e => setPinterestUrl(e.target.value)} style={inputStyle} placeholder="https://pinterest.com/…" />
+            </div>
+            <div>
+              <label style={labelStyle}>✍ Blog post</label>
+              <input value={blogUrl} onChange={e => setBlogUrl(e.target.value)} style={inputStyle} placeholder="https://yoursite.com/blog/…" />
             </div>
           </div>
 

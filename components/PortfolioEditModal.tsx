@@ -19,6 +19,7 @@ interface PortfolioRow {
   tags: string[] | null
   permit_required: boolean | null; permit_notes: string | null
   best_time: string | null; parking_info: string | null
+  pinterest_url: string | null; blog_url: string | null
   is_secret: boolean; source_location_id: string | null
 }
 
@@ -43,6 +44,8 @@ export default function PortfolioEditModal({
   const [permitNotes,    setPermitNotes]    = useState('')
   const [bestTime,       setBestTime]       = useState('')
   const [parkingInfo,    setParkingInfo]    = useState('')
+  const [pinterestUrl,   setPinterestUrl]   = useState('')
+  const [blogUrl,        setBlogUrl]        = useState('')
   const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
   const [lat,     setLat]     = useState<number | null>(null)
   const [lng,     setLng]     = useState<number | null>(null)
@@ -59,7 +62,7 @@ export default function PortfolioEditModal({
     let cancelled = false
     async function load() {
       const [rowRes, photosRes] = await Promise.all([
-        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
+        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,pinterest_url,blog_url,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
         supabase.from('location_photos').select('id,url,storage_path,caption,sort_order').eq('portfolio_location_id', portfolioId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       ])
       if (cancelled) return
@@ -75,6 +78,8 @@ export default function PortfolioEditModal({
         setPermitNotes(rowRes.data.permit_notes ?? '')
         setBestTime(rowRes.data.best_time ?? '')
         setParkingInfo(rowRes.data.parking_info ?? '')
+        setPinterestUrl(rowRes.data.pinterest_url ?? '')
+        setBlogUrl(rowRes.data.blog_url ?? '')
         setHideGooglePhotos(!!rowRes.data.hide_google_photos)
         setLat(rowRes.data.latitude ?? null)
         setLng(rowRes.data.longitude ?? null)
@@ -106,6 +111,8 @@ export default function PortfolioEditModal({
       permit_notes:       permitNotes.trim() || null,
       best_time:          bestTime.trim() || null,
       parking_info:       parkingInfo.trim() || null,
+      pinterest_url:      pinterestUrl.trim() || null,
+      blog_url:           blogUrl.trim() || null,
       is_secret:          false,
       hide_google_photos: hideGooglePhotos,
       latitude:           lat,
@@ -287,6 +294,17 @@ export default function PortfolioEditModal({
                 <div>
                   <label style={labelStyle}>Parking info</label>
                   <input value={parkingInfo} onChange={e => setParkingInfo(e.target.value)} style={inputStyle} placeholder="Free lot, street parking…" />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>📌 Pinterest board</label>
+                  <input value={pinterestUrl} onChange={e => setPinterestUrl(e.target.value)} style={inputStyle} placeholder="https://pinterest.com/…" />
+                </div>
+                <div>
+                  <label style={labelStyle}>✍ Blog post</label>
+                  <input value={blogUrl} onChange={e => setBlogUrl(e.target.value)} style={inputStyle} placeholder="https://yoursite.com/blog/…" />
                 </div>
               </div>
 

@@ -1125,7 +1125,11 @@ body {
    ───────────────────────────────────────────────────────────────────────────── */
 @media (min-width: 769px) and (max-width: 1024px) {
   .dash-main-grid  { grid-template-columns: 1fr !important; }
-  .dash-stats-grid { grid-template-columns: repeat(2,1fr) !important; }
+  /* Same compact one-line stats summary as phones — three big stat cards
+     dominate the header at this width, and the grid below already gives
+     the user a much better sense of "where is my stuff." */
+  .dash-stats-grid    { display: none !important; }
+  .dash-stats-summary { display: block !important; }
   .dash-right-col  { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1rem !important; }
  
   /* Narrower sidebar so map gets more room */

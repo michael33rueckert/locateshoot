@@ -75,7 +75,7 @@ export async function GET(request: Request, context: any) {
     // New path — share references portfolio copies
     const { data: portfolioRows, error: portfolioErr } = await admin
       .from('portfolio_locations')
-      .select('id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,hide_google_photos')
+      .select('id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,pinterest_url,blog_url,is_secret,hide_google_photos')
       .in('id', portfolioIds)
     if (portfolioErr) console.error('portfolio query error:', portfolioErr)
 
@@ -143,6 +143,8 @@ export async function GET(request: Request, context: any) {
         permit_fee:       src?.permit_fee       ?? null,
         permit_website:   src?.permit_website   ?? null,
         permit_certainty: src?.permit_certainty ?? 'unknown',
+        pinterest_url:    p.pinterest_url       ?? null,
+        blog_url:         p.blog_url            ?? null,
         rating:             src?.rating           ?? null,
         quality_score:      src?.quality_score    ?? null,
         save_count:         src?.save_count       ?? 0,

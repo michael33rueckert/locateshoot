@@ -355,12 +355,15 @@ export default function HomePage() {
             <ul className="price-features">
               <li>Full access to the location map</li>
               <li>Save unlimited favorites</li>
-              <li>Add community locations</li>
               <li>Search by location &amp; category</li>
-              <li className="dim">1 client share link per month</li>
-              <li className="dim">Secret locations</li>
+              <li>1 client share link per month</li>
+              <li className="dim">Unlimited client share links</li>
+              <li className="dim">Custom domain</li>
               <li className="dim">Permit info &amp; access details</li>
+              <li className="dim">Email notification when client picks</li>
+              <li className="dim">Share analytics — views &amp; time spent</li>
               <li className="dim">White-label share pages</li>
+              <li className="dim">Custom message &amp; branding</li>
             </ul>
             <button className="btn btn-dark" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={() => openModal('signup')}>
               Get started free
