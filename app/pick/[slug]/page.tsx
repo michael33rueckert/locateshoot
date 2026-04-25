@@ -148,6 +148,71 @@ export default function ClientPickerPage() {
     return () => clearTimeout(t)
   }, [])
 
+  // Share-view analytics. Once the share link's id is known, register a
+  // view session, then tick a heartbeat every 15s while the tab is
+  // visible. Pause when hidden so we don't count time the client spent
+  // doing something else. Final beacon on unload via sendBeacon flushes
+  // the last partial interval.
+  useEffect(() => {
+    const shareLinkId = shareData?.id
+    if (!shareLinkId) return
+    let cancelled = false
+    let viewId: string | null = null
+    let lastTickAt = Date.now()
+    let intervalId: any = null
+
+    function postHeartbeat(seconds: number) {
+      if (!viewId || seconds <= 0) return
+      const url = `/api/share-views/${viewId}/heartbeat`
+      const body = JSON.stringify({ seconds })
+      // sendBeacon for reliability on tab close. Falls back to fetch
+      // when the browser doesn't support it (or returns false).
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+          const ok = navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))
+          if (ok) return
+        }
+      } catch { /* fall through */ }
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {})
+    }
+
+    function tick() {
+      if (document.visibilityState !== 'visible') { lastTickAt = Date.now(); return }
+      const now = Date.now()
+      const seconds = Math.round((now - lastTickAt) / 1000)
+      lastTickAt = now
+      postHeartbeat(seconds)
+    }
+
+    fetch('/api/share-views', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareLinkId }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (cancelled || !j?.viewId) return
+        viewId = j.viewId
+        lastTickAt = Date.now()
+        intervalId = setInterval(tick, 15000)
+      })
+      .catch(() => {})
+
+    function onUnload() { tick() }
+    window.addEventListener('pagehide', onUnload)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') lastTickAt = Date.now()
+      else tick()
+    })
+
+    return () => {
+      cancelled = true
+      if (intervalId) clearInterval(intervalId)
+      window.removeEventListener('pagehide', onUnload)
+      tick()
+    }
+  }, [shareData?.id])
+
   useEffect(() => {
     if (!slug) return
     fetch(`/api/pick-data/${slug}`)
@@ -613,18 +678,29 @@ export default function ClientPickerPage() {
               {detailLoc.desc && <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, marginBottom: '1.25rem' }}>{detailLoc.desc}</p>}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1rem' }}>
                 {(() => {
+                  // Permit info is a Pro feature — Free photographers'
+                  // shares come back with all permit_* fields nulled out
+                  // by the pick-data API. Detect that and hide the
+                  // permit cell entirely instead of showing a generic
+                  // "Ask your photographer" placeholder, which would
+                  // imply the data exists somewhere.
+                  const hasPermitData = detailLoc.permitRequired != null
+                    || detailLoc.permitNotes != null
+                    || detailLoc.permitFee != null
+                    || (detailLoc.permitCertainty && detailLoc.permitCertainty !== 'unknown')
                   const permitText =
                     detailLoc.permitRequired === true
                       ? `Permit required${detailLoc.permitNotes ? ' — ' + detailLoc.permitNotes : ''}${detailLoc.permitFee ? ' · ' + detailLoc.permitFee : ''}`
                       : detailLoc.permitRequired === false
                         ? 'No permit required'
                         : 'Ask your photographer'
-                  return [
+                  const cells: Array<{ icon: string; label: string; value: string }> = [
                     { icon: '🔒', label: 'Access', value: detailLoc.access === 'public' ? 'Free public access' : detailLoc.access === 'private' ? 'Private — booking required' : 'Ask your photographer' },
                     { icon: '⭐', label: 'Rating', value: detailLoc.rating !== '—' ? `${detailLoc.rating} / 5` : 'Not yet rated' },
-                    { icon: '📋', label: 'Permit', value: permitText },
-                    { icon: '❤',  label: 'Saves',  value: detailLoc.saves > 0 ? `${detailLoc.saves} photographers` : 'New location' },
                   ]
+                  if (hasPermitData) cells.push({ icon: '📋', label: 'Permit', value: permitText })
+                  cells.push({ icon: '❤',  label: 'Saves',  value: detailLoc.saves > 0 ? `${detailLoc.saves} photographers` : 'New location' })
+                  return cells
                 })().map(item => (
                   <div key={item.label} style={{ background: 'var(--cream)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--cream-dark)' }}>
                     <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--ink-soft)', marginBottom: 4 }}>{item.icon} {item.label}</div>

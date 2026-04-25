@@ -113,6 +113,12 @@ export default function ProfilePage() {
   const [mfaCode,      setMfaCode]      = useState('')
   const [mfaBusy,      setMfaBusy]      = useState(false)
 
+  // Stripe billing
+  const [planRenewsAt,    setPlanRenewsAt]    = useState<string | null>(null)
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState<boolean>(false)
+  const [billingBusy,     setBillingBusy]     = useState(false)
+  const [billingError,    setBillingError]    = useState<string | null>(null)
+
   // Custom domain
   const [domainInput,   setDomainInput]   = useState('')
   const [domain,        setDomain]        = useState<string | null>(null)
@@ -152,9 +158,11 @@ export default function ProfilePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { window.location.href = '/'; return }
     setUserId(user.id); setEmail(user.email ?? '')
-    const { data: profile } = await supabase.from('profiles').select('full_name,preferences,plan').eq('id', user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('full_name,preferences,plan,plan_renews_at,cancel_at_period_end').eq('id', user.id).single()
     if (profile) {
       setFullName(profile.full_name ?? ''); setPlan(profile.plan ?? 'free')
+      setPlanRenewsAt((profile as any).plan_renews_at ?? null)
+      setCancelAtPeriodEnd(!!(profile as any).cancel_at_period_end)
       const p = profile.preferences as Preferences | null
       if (p) {
         setPrefs({ ...DEFAULT_PREFS, ...p })
@@ -231,6 +239,75 @@ export default function ProfilePage() {
       setToast(data.verified ? '✓ Sending email verified!' : '✓ Saved — add the DNS records below to finish setup.')
     } finally { setSenderBusy(false) }
   }
+
+  // Stripe — start checkout for the selected cadence. Returns a hosted
+  // Stripe URL we redirect the browser to; subscription state syncs back
+  // via the webhook on completion.
+  async function startCheckout(cadence: 'monthly' | 'yearly') {
+    setBillingError(null); setBillingBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setBillingError('Sign in expired — refresh and try again.'); return }
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ cadence }),
+      })
+      const data = await res.json()
+      if (data.alreadyPro) {
+        // Edge case: somehow we think they're free but they have an
+        // active subscription — bounce them through the portal instead.
+        await openBillingPortal()
+        return
+      }
+      if (!res.ok || !data.url) {
+        setBillingError(data.message ?? data.error ?? 'Could not start checkout.')
+        return
+      }
+      window.location.href = data.url
+    } finally { setBillingBusy(false) }
+  }
+
+  async function openBillingPortal() {
+    setBillingError(null); setBillingBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setBillingError('Sign in expired — refresh and try again.'); return }
+      const res = await fetch('/api/billing-portal', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const data = await res.json()
+      if (!res.ok || !data.url) {
+        setBillingError(data.message ?? data.error ?? 'Could not open billing portal.')
+        return
+      }
+      window.location.href = data.url
+    } finally { setBillingBusy(false) }
+  }
+
+  // After Stripe redirects back from Checkout, surface a toast based on
+  // the ?checkout= query param. The webhook will have already (or shortly
+  // will have) updated profiles.plan, so the next load reflects Pro.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('checkout')
+    if (status === 'success') {
+      setToast('🎉 Welcome to Pro! Your features are active.')
+      params.delete('checkout')
+      const qs = params.toString()
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash)
+      loadProfile()
+    } else if (status === 'cancel') {
+      setToast('Checkout canceled — no charge was made.')
+      params.delete('checkout')
+      const qs = params.toString()
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash)
+    }
+    // Only run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function removeSender() {
     if (!confirm('Remove your custom sending email? Client emails will go from notifications@locateshoot.com again.')) return
@@ -887,20 +964,57 @@ export default function ProfilePage() {
             <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--cream)', marginBottom: 3 }}>{isPro ? 'Pro Plan' : 'Free Plan'}</div>
-                <div style={{ fontSize: 12, color: 'rgba(245,240,232,.45)' }}>{isPro ? 'Active subscription' : 'Upgrade to unlock all Pro features'}</div>
+                <div style={{ fontSize: 12, color: 'rgba(245,240,232,.45)' }}>
+                  {isPro
+                    ? cancelAtPeriodEnd
+                      ? `Cancels on ${planRenewsAt ? new Date(planRenewsAt).toLocaleDateString() : 'period end'} — won't renew`
+                      : planRenewsAt
+                        ? `Renews ${new Date(planRenewsAt).toLocaleDateString()}`
+                        : 'Active subscription'
+                    : 'Upgrade to unlock all Pro features'}
+                </div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 28, fontWeight: 700, color: 'var(--gold)' }}>{isPro ? '$12' : '$0'}</div>
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,.4)' }}>/month</div>
               </div>
             </div>
+
             {!isPro && (
-              <div style={{ padding: '1rem 1.25rem', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.2)', borderRadius: 10, marginBottom: '1rem' }}>
-                <div style={{ fontSize: 14, color: 'var(--ink)', marginBottom: '1rem' }}>Upgrade to Pro for unlimited share links, secret locations, permit info, white-label pages, and more.</div>
-                <button onClick={() => setToast('Stripe billing coming soon!')} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '9px 20px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Upgrade to Pro →</button>
+              <div style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, marginBottom: '1rem' }}>
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Upgrade to Pro</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
+                  Unlimited client share links, custom domain, white-label pages, the client confirmation email with directions, share analytics, and permit info. Cancel anytime — no contract.
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button onClick={() => startCheckout('monthly')} disabled={billingBusy} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '11px 22px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 600, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
+                    {billingBusy ? 'Loading…' : 'Upgrade — $12/month'}
+                  </button>
+                  <button onClick={() => startCheckout('yearly')} disabled={billingBusy} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '11px 22px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
+                    {billingBusy ? 'Loading…' : 'Upgrade yearly — save $24'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 10, fontWeight: 300 }}>
+                  Secure checkout via Stripe. We never see your card details.
+                </div>
               </div>
             )}
-            {isPro && <button onClick={() => setToast('Cancellation flow coming soon')} style={{ background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.25)', padding: '8px 18px', borderRadius: 4, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel subscription</button>}
+
+            {isPro && (
+              <div style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, marginBottom: '1rem' }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>Manage subscription</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
+                  Update your card, switch between monthly/yearly, view invoices, or cancel — handled by Stripe's billing portal.
+                </div>
+                <button onClick={openBillingPortal} disabled={billingBusy} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '10px 20px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
+                  {billingBusy ? 'Opening…' : 'Manage subscription →'}
+                </button>
+              </div>
+            )}
+
+            {billingError && (
+              <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)' }}>{billingError}</div>
+            )}
           </div>
         )}
 

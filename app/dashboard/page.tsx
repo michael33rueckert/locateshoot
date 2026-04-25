@@ -8,14 +8,15 @@ import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import CreateLocationGuideModal from '@/components/CreateLocationGuideModal'
 import LocationGuideCard from '@/components/LocationGuideCard'
+import UpgradePrompt from '@/components/UpgradePrompt'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio as shareFullPortfolioFn } from '@/lib/portfolio-share'
 import { thumbUrl } from '@/lib/image'
 
-interface Profile           { id: string; full_name: string | null; email: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
+interface Profile           { id: string; full_name: string | null; email: string | null; plan: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number; preview_url: string | null }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
-interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; expires_at: string | null; expire_on_submit: boolean; cover_photo_url: string | null; picks: ClientPick[]; expanded: boolean }
+interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; expires_at: string | null; expire_on_submit: boolean; cover_photo_url: string | null; picks: ClientPick[]; expanded: boolean; views_total: number; unique_viewers: number; total_seconds: number }
 
 function greetingTime() {
   const h = new Date().getHours()
@@ -32,6 +33,10 @@ export default function DashboardPage() {
   const [toast,               setToast]                = useState<string | null>(null)
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
   const [preselectAllPortfolio, setPreselectAllPortfolio] = useState(false)
+  // Toggled when a free user clicks "+ New guide" while already at the
+  // 1-custom-link cap — shows an inline upgrade prompt instead of the
+  // create modal so they don't fill out a form they can't submit.
+  const [showQuotaUpgrade,      setShowQuotaUpgrade]      = useState(false)
   const [editingPortfolioId,  setEditingPortfolioId]   = useState<string | null>(null)
   const [editingPermLink,     setEditingPermLink]      = useState<PermanentLink | null>(null)
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
@@ -51,7 +56,7 @@ export default function DashboardPage() {
       if (!user) { window.location.href = '/'; return }
 
       const [profileRes, portfolioRes] = await Promise.all([
-        supabase.from('profiles').select('id,full_name,email,custom_domain,custom_domain_verified,preferences').eq('id', user.id).single(),
+        supabase.from('profiles').select('id,full_name,email,plan,custom_domain,custom_domain_verified,preferences').eq('id', user.id).single(),
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state,is_secret,created_at,sort_order').eq('user_id', user.id).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
       ])
 
@@ -116,12 +121,25 @@ export default function DashboardPage() {
 
       if (permData && permData.length > 0) {
         const linksWithPicks = await Promise.all(permData.map(async (link: any) => {
-          const { data: picks } = await supabase
-            .from('client_picks')
-            .select('id,client_email,location_name,created_at')
-            .eq('share_link_id', link.id)
-            .order('created_at', { ascending: false })
-          return { ...link, picks: picks ?? [], expanded: false }
+          // Picks (client_picks) and analytics (share_link_views) for
+          // this guide. Both are RLS-scoped to the photographer so the
+          // anon key is fine here. Analytics queries no-op gracefully
+          // when the table doesn't exist yet (pre-migration).
+          const [picksRes, viewsRes] = await Promise.all([
+            supabase.from('client_picks').select('id,client_email,location_name,created_at').eq('share_link_id', link.id).order('created_at', { ascending: false }),
+            supabase.from('share_link_views').select('viewer_hash,total_seconds').eq('share_link_id', link.id),
+          ])
+          const views = viewsRes.data ?? []
+          const uniques = new Set(views.map((v: any) => v.viewer_hash).filter(Boolean))
+          const totalSeconds = views.reduce((s: number, v: any) => s + (v.total_seconds ?? 0), 0)
+          return {
+            ...link,
+            picks: picksRes.data ?? [],
+            expanded: false,
+            views_total:    views.length,
+            unique_viewers: uniques.size,
+            total_seconds:  totalSeconds,
+          }
         }))
         setPermanentLinks(linksWithPicks)
       }
@@ -292,8 +310,33 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>A curated set of portfolio locations for each city, style, or client — one reusable link per guide.</div>
                 </div>
-                <button onClick={() => setShowCreatePermanent(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>+ New guide</button>
+                <button
+                  onClick={() => {
+                    // Free plan = 1 active custom guide. Auto-portfolio
+                    // doesn't count. If they're already at the cap show
+                    // the upgrade prompt instead of opening the create
+                    // modal — saves them filling out a form they'd hit
+                    // a wall on saving.
+                    const isProUser = profile?.plan === 'pro' || profile?.plan === 'Pro'
+                    const customCount = customGuides.length
+                    if (!isProUser && customCount >= 1) {
+                      setShowQuotaUpgrade(true)
+                      return
+                    }
+                    setShowCreatePermanent(true)
+                  }}
+                  style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >+ New guide</button>
               </div>
+              {showQuotaUpgrade && (
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
+                  <UpgradePrompt
+                    feature="unlimited share links"
+                    description="The Free plan includes 1 active custom guide plus your auto-generated Portfolio guide. Upgrade to Pro for unlimited custom guides — one per city, theme, client, or session."
+                  />
+                  <button onClick={() => setShowQuotaUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
+                </div>
+              )}
 
               {(() => {
                 // Synthesize a card record for the "entire portfolio" guide
@@ -337,28 +380,55 @@ export default function DashboardPage() {
                 return (
                   <div style={{ position: 'relative' }}>
                     <div style={{ padding: '1rem 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
-                      {previewCards.map((card, i) => (
-                        <LocationGuideCard
-                          key={card.data.id}
-                          bgClass={BG_CYCLE[i % BG_CYCLE.length]}
-                          guide={card.data}
-                          featured={card.isPortfolio}
-                          copyState={
-                            card.isPortfolio
-                              ? (fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle')
-                              : (copiedGuideId === card.link!.id ? 'copied' : 'idle')
-                          }
-                          deleteState={
-                            card.isPortfolio
-                              ? 'idle'
-                              : (deleteGuideId === card.link!.id ? 'confirming' : 'idle')
-                          }
-                          onCopy={card.isPortfolio ? copyFullPortfolio : () => copyGuideUrl(card.link!.slug, card.link!.id)}
-                          onEdit={card.isPortfolio ? editFullPortfolio : () => setEditingPermLink(card.link!)}
-                          onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
-                          onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}
-                        />
-                      ))}
+                      {previewCards.map((card, i) => {
+                        const isProUser = profile?.plan === 'pro' || profile?.plan === 'Pro'
+                        // Analytics live on the underlying share_link row
+                        // for custom guides; the synthesized portfolio
+                        // guide reuses its own share_link's metrics when
+                        // one has been materialized.
+                        const link = card.isPortfolio ? fullPortfolioPermLink : card.link
+                        const views    = link?.views_total    ?? 0
+                        const uniques  = link?.unique_viewers ?? 0
+                        const seconds  = link?.total_seconds  ?? 0
+                        const avgSec   = views > 0 ? Math.round(seconds / views) : 0
+                        return (
+                          <div key={card.data.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <LocationGuideCard
+                              bgClass={BG_CYCLE[i % BG_CYCLE.length]}
+                              guide={card.data}
+                              featured={card.isPortfolio}
+                              copyState={
+                                card.isPortfolio
+                                  ? (fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle')
+                                  : (copiedGuideId === card.link!.id ? 'copied' : 'idle')
+                              }
+                              deleteState={
+                                card.isPortfolio
+                                  ? 'idle'
+                                  : (deleteGuideId === card.link!.id ? 'confirming' : 'idle')
+                              }
+                              onCopy={card.isPortfolio ? copyFullPortfolio : () => copyGuideUrl(card.link!.slug, card.link!.id)}
+                              onEdit={card.isPortfolio ? editFullPortfolio : () => setEditingPermLink(card.link!)}
+                              onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
+                              onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}
+                            />
+                            {/* Share analytics — Pro feature. Free users
+                                see a one-line nudge that links to the
+                                upgrade flow. Pro users see live counts. */}
+                            {isProUser ? (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', border: '1px solid var(--cream-dark)', fontSize: 11, color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
+                                <span title={`${views} total views`}>👁 {views}</span>
+                                <span title={`${uniques} unique viewers`}>🧑 {uniques}</span>
+                                <span title={`Avg ${avgSec}s per view`}>⏱ {avgSec >= 60 ? `${Math.round(avgSec / 60)}m` : `${avgSec}s`}</span>
+                              </div>
+                            ) : (
+                              <Link href="/profile#billing" style={{ display: 'block', padding: '6px 10px', borderRadius: 6, background: 'rgba(196,146,42,.06)', border: '1px solid rgba(196,146,42,.2)', fontSize: 11, color: 'var(--ink-soft)', textAlign: 'center', textDecoration: 'none' }}>
+                                <span style={{ color: 'var(--gold)', fontWeight: 500 }}>📊 Share analytics</span> — Pro
+                              </Link>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                     {/* Fade the bottom row + centered "View all" CTA when there's more than fits on the preview. */}
                     {hasMore && (

@@ -277,13 +277,21 @@ export async function POST(request: Request) {
     console.error('submit-pick email failure', e)
   }
 
-  // Client confirmation email — recap of every location they picked, with a
-  // Get Directions button per spot. Reply-to is the photographer so any
-  // follow-up reply goes straight to them. Skipped silently if no client
-  // email or no photographer profile (the picks are already saved).
-  let clientEmailResult: { ok: boolean; error?: string } = { ok: true }
+  // Client confirmation email — Pro feature. Recap of every location
+  // picked with a Get Directions button per spot. Reply-to is the
+  // photographer so any follow-up reply goes straight to them. Skipped
+  // when:
+  //   - no client email (anonymous pick, can't email anyone)
+  //   - no photographer profile (data integrity)
+  //   - photographer is on Free plan (gated to Pro per pricing —
+  //     photographer still gets their own pick notification email above)
+  let clientEmailResult: { ok: boolean; error?: string; skipped?: 'no-email' | 'free-plan' } = { ok: true }
   try {
-    if (email && profile) {
+    if (!email) {
+      clientEmailResult = { ok: true, skipped: 'no-email' }
+    } else if (!isPro) {
+      clientEmailResult = { ok: true, skipped: 'free-plan' }
+    } else if (email && profile) {
       const subject = names.length === 1
         ? `Your shoot location — ${names[0]}`
         : `Your ${names.length} shoot locations`
@@ -412,5 +420,11 @@ export async function POST(request: Request) {
     console.error('submit-pick push failure', e)
   }
 
-  return NextResponse.json({ ok: true, pickId: inserted.id, emailSent: emailResult.ok, clientEmailSent: clientEmailResult.ok })
+  return NextResponse.json({
+    ok: true,
+    pickId: inserted.id,
+    emailSent: emailResult.ok,
+    clientEmailSent: clientEmailResult.ok && !clientEmailResult.skipped,
+    clientEmailSkipped: clientEmailResult.skipped ?? null,
+  })
 }

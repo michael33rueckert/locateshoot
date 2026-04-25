@@ -46,15 +46,25 @@ export async function GET(request: Request, context: any) {
     }
   }
 
+  // Pull plan + branding in a single query — plan is what gates whether
+  // permit info is included in the response below (Pro feature), branding
+  // drives white-label rendering on the share page itself.
   let branding = null
+  let photographerPlan: string | null = null
   if (share.user_id) {
     const { data: prof } = await admin
       .from('profiles')
-      .select('preferences')
+      .select('plan,preferences')
       .eq('id', share.user_id)
       .single()
     branding = prof?.preferences ?? null
+    photographerPlan = (prof as any)?.plan ?? null
   }
+  // Permit info ("Permit verified", fee, notes, website) is a Pro feature.
+  // For Free photographers we strip those fields from every location in
+  // the response so the client share page hides the permit row entirely
+  // — no "Ask your photographer" placeholder shown either.
+  const isProPhotographer = photographerPlan === 'pro' || photographerPlan === 'Pro'
 
   let locations: any[] = []
   let secrets: any[] = []
@@ -157,11 +167,13 @@ export async function GET(request: Request, context: any) {
         longitude:        p.longitude,
         access_type:      preferOwn('access_type'),
         tags:             p.tags,
-        permit_required:  preferOwn('permit_required'),
-        permit_notes:     preferOwn('permit_notes'),
-        permit_fee:       src?.permit_fee       ?? null,
-        permit_website:   src?.permit_website   ?? null,
-        permit_certainty: src?.permit_certainty ?? 'unknown',
+        // Permit fields are gated to Pro photographers. Free shares get
+        // null across the board so the client UI hides the permit row.
+        permit_required:  isProPhotographer ? preferOwn('permit_required')      : null,
+        permit_notes:     isProPhotographer ? preferOwn('permit_notes')         : null,
+        permit_fee:       isProPhotographer ? (src?.permit_fee       ?? null)   : null,
+        permit_website:   isProPhotographer ? (src?.permit_website   ?? null)   : null,
+        permit_certainty: isProPhotographer ? (src?.permit_certainty ?? 'unknown') : null,
         pinterest_url:    p.pinterest_url       ?? null,
         blog_url:         p.blog_url            ?? null,
         rating:             src?.rating           ?? null,
@@ -181,7 +193,14 @@ export async function GET(request: Request, context: any) {
         .select('id,name,city,state,latitude,longitude,access_type,description,tags,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,rating,quality_score,save_count')
         .in('id', locIds)
       if (error) console.error('locations query error:', error)
-      locations = data ?? []
+      locations = (data ?? []).map((l: any) => isProPhotographer ? l : ({
+        ...l,
+        permit_required: null,
+        permit_notes:    null,
+        permit_fee:      null,
+        permit_website:  null,
+        permit_certainty: null,
+      }))
 
       const { data: photoData } = await admin
         .from('location_photos')

@@ -60,8 +60,8 @@ function PricingToggle({ onSignup }: { onSignup: () => void }) {
         <li><strong>Unlimited client share links</strong></li>
         <li>🌐 <strong>Custom domain</strong> — share links on <code>locations.yoursite.com</code></li>
         <li>🔒 <strong>Permit info &amp; access details</strong> on every location</li>
-        <li>Email notification when client picks</li>
-        <li>Share analytics — views &amp; time spent</li>
+        <li>✉ <strong>Client confirmation email</strong> with location details &amp; directions</li>
+        <li>📊 Share analytics — views &amp; time spent</li>
         <li>🎨 <strong>White-label share pages</strong> — your logo, not ours</li>
         <li>Custom message &amp; branding</li>
       </ul>
@@ -356,11 +356,13 @@ export default function HomePage() {
               <li>Full access to the location map</li>
               <li>Save unlimited favorites</li>
               <li>Search by location &amp; category</li>
-              <li>1 client share link per month</li>
+              <li>1 active client share link</li>
+              <li>Email when a client picks (sent to you)</li>
+              <li>Auto-generated Portfolio share guide</li>
               <li className="dim">Unlimited client share links</li>
               <li className="dim">Custom domain</li>
               <li className="dim">Permit info &amp; access details</li>
-              <li className="dim">Email notification when client picks</li>
+              <li className="dim">Client confirmation email with directions</li>
               <li className="dim">Share analytics — views &amp; time spent</li>
               <li className="dim">White-label share pages</li>
               <li className="dim">Custom message &amp; branding</li>

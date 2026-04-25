@@ -221,7 +221,15 @@ export default function CreateLocationGuideModal({
       if (insertErr) throw insertErr
       onCreated(data); onClose()
     } catch (err: any) {
-      setError(isEdit ? 'Could not save changes — please try again.' : 'Could not create the guide — please try again.')
+      // Postgres-side share-link quota check. The trigger raises
+      // 'free_plan_link_limit' for Free users who already have 1 active
+      // custom guide. Surface a clear upgrade message instead of the
+      // generic catch-all.
+      if (typeof err?.message === 'string' && err.message.includes('free_plan_link_limit')) {
+        setError('Free plan allows 1 active custom guide. Delete the existing guide or upgrade to Pro for unlimited guides.')
+      } else {
+        setError(isEdit ? 'Could not save changes — please try again.' : 'Could not create the guide — please try again.')
+      }
       console.error(err)
     } finally { setSaving(false) }
   }
