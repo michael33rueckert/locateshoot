@@ -140,11 +140,16 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
           </div>
           <div>
             <label style={lbl}>Permit certainty</label>
+            {/* Values must match PERMIT_CFG in app/explore/page.tsx — the
+                detail panel only knows how to render verified/likely/unknown.
+                An earlier version of this dropdown had "confirmed", which
+                was silently saved to the DB but rendered as "unknown" on
+                the public side because it didn't match a PERMIT_CFG key. */}
             <select style={inp} value={f.permit_certainty ?? ''} onChange={e => upd('permit_certainty', e.target.value || null)}>
               <option value="">—</option>
               <option value="unknown">unknown</option>
               <option value="likely">likely</option>
-              <option value="confirmed">confirmed</option>
+              <option value="verified">verified</option>
             </select>
           </div>
           <div>
