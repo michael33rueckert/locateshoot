@@ -456,7 +456,6 @@ export default function ClientPickerPage() {
                   isActive={isActive}
                   isDisabled={isDisabled}
                   onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
-                  onOpenLightbox={(imgs, start) => { setLightboxSrc(imgs[start]); setLightboxStart(start) }}
                 />
               )
             })}
@@ -758,7 +757,6 @@ function PickListItem({
   isActive,
   isDisabled,
   onSelect,
-  onOpenLightbox,
 }: {
   loc:            FullLocation
   index:          number
@@ -766,7 +764,6 @@ function PickListItem({
   isActive:       boolean
   isDisabled:     boolean
   onSelect:       () => void
-  onOpenLightbox: (imgs: string[], start: number) => void
 }) {
   const photos = loc.photoUrls.length > 0
     ? loc.photoUrls
@@ -808,6 +805,10 @@ function PickListItem({
               // the mobile hero isn't upscaled from a 480-wide thumbnail.
               const thumb  = thumbUrl(src)  ?? src
               const medium = mediumUrl(src) ?? src
+              // No onClick on the image — taps bubble up to the card's
+              // onSelect so any tap on the tile (including the photo) opens
+              // the location detail. Lightbox is reserved for the photo
+              // gallery inside the detail view.
               return (
                 <img
                   key={i}
@@ -817,7 +818,6 @@ function PickListItem({
                   alt=""
                   loading="lazy"
                   decoding="async"
-                  onClick={e => { e.stopPropagation(); onOpenLightbox(photos, i) }}
                 />
               )
             })}
