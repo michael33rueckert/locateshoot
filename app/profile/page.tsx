@@ -114,6 +114,18 @@ export default function ProfilePage() {
   const [domainError,   setDomainError]   = useState('')
   const [showDomainHelp,setShowDomainHelp]= useState(false)
 
+  // Custom sending email (Pro feature). Same shape as the custom domain
+  // flow above — input → save → DNS records to add → verify status.
+  // State is whatever Resend returns (pending, verified, failed, etc.).
+  interface SenderRecord { record:string; type:string; name:string; value:string; status?:string; ttl?:string|number; priority?:number }
+  const [senderInput,   setSenderInput]   = useState('')
+  const [senderEmail,   setSenderEmail]   = useState<string | null>(null)
+  const [senderState,   setSenderState]   = useState<string>('none')
+  const [senderRecords, setSenderRecords] = useState<SenderRecord[]>([])
+  const [senderBusy,    setSenderBusy]    = useState(false)
+  const [senderError,   setSenderError]   = useState('')
+  const [showSenderHelp,setShowSenderHelp]= useState(false)
+
   const isPro = plan === 'pro' || plan === 'Pro'
 
   useEffect(() => {
@@ -173,6 +185,57 @@ export default function ProfilePage() {
   }, [domainInput])
 
   useEffect(() => { loadDomainStatus() }, [loadDomainStatus])
+
+  const loadSenderStatus = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/sender-domain/status', { headers: { Authorization: `Bearer ${session.access_token}` } })
+    if (!res.ok) return
+    const data = await res.json()
+    setSenderEmail(data.email ?? null)
+    setSenderState(data.state ?? 'none')
+    setSenderRecords(Array.isArray(data.records) ? data.records : [])
+    if (data.email && !senderInput) setSenderInput(data.email)
+  }, [senderInput])
+
+  useEffect(() => { loadSenderStatus() }, [loadSenderStatus])
+
+  async function saveSender() {
+    setSenderError(''); setSenderBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setSenderError('Not signed in.'); return }
+      const res = await fetch('/api/sender-domain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: senderInput.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSenderError(data.message ?? data.error ?? 'Could not save sending email.')
+        return
+      }
+      setSenderEmail(data.email)
+      setSenderState(data.state)
+      setSenderRecords(Array.isArray(data.records) ? data.records : [])
+      setToast(data.verified ? '✓ Sending email verified!' : '✓ Saved — add the DNS records below to finish setup.')
+    } finally { setSenderBusy(false) }
+  }
+
+  async function removeSender() {
+    if (!confirm('Remove your custom sending email? Client emails will go from notifications@locateshoot.com again.')) return
+    setSenderBusy(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await fetch('/api/sender-domain', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      setSenderEmail(null); setSenderState('none'); setSenderRecords([]); setSenderInput('')
+      setToast('Custom sending email removed')
+    } finally { setSenderBusy(false) }
+  }
 
   async function saveDomain() {
     setDomainError(''); setDomainBusy(true)
@@ -629,6 +692,96 @@ export default function ProfilePage() {
 
               {domainError && <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)' }}>{domainError}</div>}
             </div>
+
+            {/* ── CUSTOM SENDING EMAIL ── */}
+            <div style={{ marginTop: '2rem', paddingTop: '1.75rem', borderTop: '1px solid var(--cream-dark)' }}>
+              <h2 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>
+                Custom Sending Email
+              </h2>
+              <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1.25rem', lineHeight: 1.55 }}>
+                Send client confirmation emails from your own address (e.g. <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>you@yoursite.com</code>) instead of <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>notifications@locateshoot.com</code>. Requires SPF + DKIM records at your DNS provider.
+              </p>
+
+              {!isPro && (
+                <div style={{ padding: '12px 14px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>⭐ Pro plan feature</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', flex: 1, minWidth: 200 }}>Upgrade to send client emails from your own address.</div>
+                  <Link href="/profile#billing" onClick={() => setActive('billing')} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>Upgrade</Link>
+                </div>
+              )}
+
+              <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', maxWidth: 560 }}>
+                {senderEmail && (
+                  <div style={{ marginBottom: '1rem', padding: '10px 12px', borderRadius: 8,
+                    background: senderState === 'verified' ? 'rgba(74,103,65,.08)' : senderState === 'failed' ? 'rgba(181,75,42,.08)' : 'rgba(196,146,42,.08)',
+                    border: `1px solid ${senderState === 'verified' ? 'rgba(74,103,65,.25)' : senderState === 'failed' ? 'rgba(181,75,42,.25)' : 'rgba(196,146,42,.25)'}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2,
+                      color: senderState === 'verified' ? 'var(--sage)' : senderState === 'failed' ? 'var(--rust)' : 'var(--gold)' }}>
+                      {senderState === 'verified' ? '✓ Verified — emails will send from this address'
+                        : senderState === 'failed' ? '⚠ Verification failed — check your DNS records below'
+                        : senderState === 'unknown' ? '⚠ Could not check status — try Refresh'
+                        : '⏳ Waiting for DNS — add the records below at your registrar'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontFamily: 'monospace' }}>{senderEmail}</div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button onClick={loadSenderStatus} disabled={senderBusy} style={{ padding: '5px 12px', borderRadius: 4, background: 'white', border: '1px solid var(--cream-dark)', fontSize: 11, fontWeight: 500, cursor: 'pointer', color: 'var(--ink-soft)', fontFamily: 'inherit' }}>Refresh status</button>
+                      <button onClick={removeSender} disabled={senderBusy} style={{ padding: '5px 12px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Remove</button>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '.75rem' }}>
+                  <label style={labelStyle}>Sending email address</label>
+                  <input value={senderInput} onChange={e => setSenderInput(e.target.value)} style={inputStyle} placeholder="you@yoursite.com" disabled={!isPro || !!senderEmail} />
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>You'll need access to DNS for the domain part — Gmail/Yahoo/Outlook addresses won't work.</div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {!senderEmail && <button onClick={saveSender} disabled={!isPro || senderBusy || !senderInput.trim()} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 20px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: !isPro || senderBusy || !senderInput.trim() ? 0.5 : 1 }}>
+                    {senderBusy ? 'Saving…' : 'Save email'}
+                  </button>}
+                  <button onClick={() => setShowSenderHelp(true)} style={{ background: 'transparent', color: 'var(--sky)', border: 'none', padding: 0, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>How do I set this up?</button>
+                </div>
+
+                {senderError && <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)' }}>{senderError}</div>}
+
+                {/* DNS records — only shown when Resend has handed them back. */}
+                {senderRecords.length > 0 && (
+                  <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--cream-dark)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Add these records at your DNS provider</div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 12, lineHeight: 1.5 }}>
+                      Log in to GoDaddy / Namecheap / Cloudflare / wherever you manage DNS for <strong>{senderEmail?.split('@')[1]}</strong>. Add each record below. Most propagate in a few minutes.
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {senderRecords.map((r, i) => (
+                        <div key={i} style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 6, padding: '10px 12px', fontSize: 12, fontFamily: 'monospace', color: 'var(--ink)', overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, fontFamily: 'inherit' }}>
+                            <span style={{ fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 11, fontWeight: 600, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                              {r.record}
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 20,
+                              background: r.status === 'verified' ? 'rgba(74,103,65,.12)' : r.status === 'failed' ? 'rgba(181,75,42,.12)' : 'rgba(196,146,42,.12)',
+                              color:      r.status === 'verified' ? 'var(--sage)'        : r.status === 'failed' ? 'var(--rust)'        : 'var(--gold)' }}>
+                              {r.status === 'verified' ? '✓ verified' : r.status === 'failed' ? 'failed' : (r.status ?? 'pending')}
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 4, fontSize: 11, lineHeight: 1.45 }}>
+                            <span style={{ color: 'var(--ink-soft)' }}>Type:</span><span><strong>{r.type}</strong></span>
+                            <span style={{ color: 'var(--ink-soft)' }}>Host:</span><span style={{ wordBreak: 'break-all' }}><strong>{r.name}</strong></span>
+                            <span style={{ color: 'var(--ink-soft)' }}>Value:</span><span style={{ wordBreak: 'break-all' }}><strong>{r.value}</strong></span>
+                            {r.priority != null && (<><span style={{ color: 'var(--ink-soft)' }}>Priority:</span><span><strong>{r.priority}</strong></span></>)}
+                            {r.ttl != null && (<><span style={{ color: 'var(--ink-soft)' }}>TTL:</span><span><strong>{r.ttl}</strong></span></>)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 10, fontStyle: 'italic', fontWeight: 300, lineHeight: 1.5 }}>
+                      Already added them? Click <strong>Refresh status</strong> above. If a record stays "pending" after 30 minutes, double-check the host/value match exactly — some providers add the domain automatically.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -844,6 +997,73 @@ export default function ProfilePage() {
               </div>
 
               <button onClick={() => setShowDomainHelp(false)} style={{ marginTop: '1.25rem', width: '100%', padding: '11px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Got it</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showSenderHelp && (
+        <>
+          <div onClick={() => setShowSenderHelp(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 600, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+            <div style={{ padding: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', gap: 12 }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 3 }}>✉ Set up your custom sending email</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>About 5 minutes total — most of it is waiting on DNS.</div>
+                </div>
+                <button onClick={() => setShowSenderHelp(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>1. What this does</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>
+                  When a client picks a location, the confirmation email currently goes from <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>notifications@locateshoot.com</code> with your name as the reply-to. After this setup, the email goes from <strong>your address</strong> directly — no LocateShoot in the From line.
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>2. What you need</div>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7 }}>
+                  <li>An email address at <strong>your own domain</strong> — e.g. <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>you@yourstudio.com</code>. Gmail / Yahoo / Outlook addresses won't work — you can't add SPF/DKIM records to a domain you don't own.</li>
+                  <li>Access to your DNS provider (GoDaddy, Namecheap, Cloudflare, Squarespace, Google Domains, etc. — wherever you bought the domain or manage its DNS).</li>
+                </ul>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>3. Enter your email and click Save</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>
+                  We register the domain part with our email provider (Resend) and they generate two DNS records you'll need: an <strong>SPF</strong> record (says we're allowed to send for your domain) and a <strong>DKIM</strong> record (signs each email so it isn't flagged as spoofed). They'll appear here on the page after you save.
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>4. Add the DNS records</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: 8 }}>
+                  Open your DNS provider's dashboard and add each record exactly as shown. The "Host" field is the subdomain part (some providers fill in your root domain automatically — if so, only enter the prefix like <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>resend._domainkey</code>, not the full <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>resend._domainkey.yoursite.com</code>).
+                </div>
+                <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 6, padding: '10px 14px', fontFamily: 'monospace', fontSize: 12, color: 'var(--ink)', lineHeight: 1.7 }}>
+                  <div><strong>SPF</strong> — tells receivers Resend may send for your domain.</div>
+                  <div><strong>DKIM</strong> — public key used to verify our signature on each email.</div>
+                  <div><strong>DMARC</strong> (optional) — tells receivers what to do with messages that fail SPF/DKIM. We recommend the default Resend provides.</div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontStyle: 'italic', fontWeight: 300 }}>
+                  If you already have an SPF record, don't add a second — Resend's docs explain how to merge them.
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>5. Click Refresh status</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>
+                  DNS usually propagates in 5–30 minutes. Once each record shows <strong style={{ color: 'var(--sage)' }}>✓ verified</strong>, the next client confirmation email will go from your address. Until then we keep using <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>notifications@locateshoot.com</code> as a fallback so nothing breaks.
+                </div>
+              </div>
+
+              <div style={{ padding: '10px 12px', background: 'rgba(61,110,140,.06)', border: '1px solid rgba(61,110,140,.2)', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--sky)' }}>Stuck?</strong> Resend has provider-specific guides for the most common DNS hosts at <code style={{ background: 'white', padding: '1px 5px', borderRadius: 3, border: '1px solid var(--cream-dark)' }}>resend.com/docs/dashboard/domains/introduction</code>. The exact steps are the same across providers, just labeled differently in their UI.
+              </div>
+
+              <button onClick={() => setShowSenderHelp(false)} style={{ marginTop: '1.25rem', width: '100%', padding: '11px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Got it</button>
             </div>
           </div>
         </>
