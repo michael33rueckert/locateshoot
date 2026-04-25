@@ -61,6 +61,15 @@ const NAV_ITEMS = [
 
 const ACCENT_COLORS = ['#c4922a','#4a6741','#3d6e8c','#b54b2a','#7c5cbf','#1a1612','#d4626a','#4a7a9b']
 
+// Feature flag — Custom Sending Email is hidden until we upgrade the
+// Resend plan to fit more than one verified domain. Each photographer
+// registers an additional domain on our Resend account, and the Free
+// tier caps at one (already taken by locateshoot.com itself). When ready
+// to enable, set NEXT_PUBLIC_CUSTOM_SENDER_ENABLED=true in env. The
+// underlying API routes + migration stay in place so flipping the flag
+// is the only change needed.
+const CUSTOM_SENDER_ENABLED = process.env.NEXT_PUBLIC_CUSTOM_SENDER_ENABLED === 'true'
+
 export default function ProfilePage() {
   const [active,        setActive]        = useState('profile')
   const [userId,        setUserId]        = useState<string | null>(null)
@@ -187,6 +196,7 @@ export default function ProfilePage() {
   useEffect(() => { loadDomainStatus() }, [loadDomainStatus])
 
   const loadSenderStatus = useCallback(async () => {
+    if (!CUSTOM_SENDER_ENABLED) return
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     const res = await fetch('/api/sender-domain/status', { headers: { Authorization: `Bearer ${session.access_token}` } })
@@ -694,6 +704,7 @@ export default function ProfilePage() {
             </div>
 
             {/* ── CUSTOM SENDING EMAIL ── */}
+            {CUSTOM_SENDER_ENABLED && (
             <div style={{ marginTop: '2rem', paddingTop: '1.75rem', borderTop: '1px solid var(--cream-dark)' }}>
               <h2 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>
                 Custom Sending Email
@@ -782,6 +793,7 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -1002,7 +1014,7 @@ export default function ProfilePage() {
         </>
       )}
 
-      {showSenderHelp && (
+      {CUSTOM_SENDER_ENABLED && showSenderHelp && (
         <>
           <div onClick={() => setShowSenderHelp(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 900 }} />
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 600, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>

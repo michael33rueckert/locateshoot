@@ -366,8 +366,12 @@ export async function POST(request: Request) {
       // Pro + verified custom sending domain → email goes From: their
       // address (e.g. jane@studio.com). Otherwise we fall back to the
       // shared notifications@locateshoot.com sender and rely on reply-to
-      // to route replies back to the photographer.
-      const useCustomSender = !!(profile.sender_verified && profile.sender_email)
+      // to route replies back to the photographer. Also gated by the
+      // CUSTOM_SENDER_ENABLED env flag — when soft-disabled (e.g. while
+      // Resend's plan only fits one domain), any stale sender_verified
+      // rows are ignored and we send through the default address.
+      const customSenderEnabled = process.env.CUSTOM_SENDER_ENABLED === 'true'
+      const useCustomSender = customSenderEnabled && !!(profile.sender_verified && profile.sender_email)
       const r = await sendEmail({
         to:          email,
         subject,

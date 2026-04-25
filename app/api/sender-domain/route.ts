@@ -28,6 +28,17 @@ async function authUser(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Soft-disabled until our Resend plan can fit additional verified
+  // domains beyond locateshoot.com itself. Defense in depth — the UI is
+  // also hidden client-side; this catches anyone hitting the endpoint
+  // directly. Flip CUSTOM_SENDER_ENABLED=true in env once Resend is on a
+  // tier that allows >1 domain.
+  if (process.env.CUSTOM_SENDER_ENABLED !== 'true') {
+    return NextResponse.json({
+      error: 'feature_disabled',
+      message: 'Custom sending email is temporarily unavailable.',
+    }, { status: 403 })
+  }
   if (!process.env.RESEND_API_KEY) {
     return NextResponse.json({
       error: 'server_misconfigured',
