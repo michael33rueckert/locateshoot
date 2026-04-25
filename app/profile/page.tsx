@@ -181,6 +181,24 @@ export default function ProfilePage() {
 
   useEffect(() => { loadProfile() }, [loadProfile])
 
+  // Refresh on tab focus. The Stripe Customer Portal doesn't auto-
+  // redirect back after cancel/update — a user may close the portal
+  // tab and re-focus the LocateShoot tab without triggering a full
+  // page reload, which would leave the billing UI showing stale state
+  // from before they made changes. Re-fetching the profile when the
+  // tab becomes visible keeps the renew/cancel banner accurate.
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === 'visible') loadProfile()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', onVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', onVisibility)
+    }
+  }, [loadProfile])
+
   const loadMfa = useCallback(async () => {
     const { data } = await supabase.auth.mfa.listFactors()
     setMfaFactors(data?.totp ?? [])
@@ -1004,11 +1022,16 @@ export default function ProfilePage() {
               <div style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, marginBottom: '1rem' }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>Manage subscription</div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
-                  Update your card, switch between monthly/yearly, view invoices, or cancel — handled by Stripe's billing portal.
+                  Update your card, switch between monthly/yearly, view invoices, or cancel — handled by Stripe's billing portal. After making changes there, return here and the plan info above will refresh.
                 </div>
-                <button onClick={openBillingPortal} disabled={billingBusy} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '10px 20px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
-                  {billingBusy ? 'Opening…' : 'Manage subscription →'}
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={openBillingPortal} disabled={billingBusy} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '10px 20px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
+                    {billingBusy ? 'Opening…' : 'Manage subscription →'}
+                  </button>
+                  <button onClick={loadProfile} style={{ background: 'transparent', color: 'var(--ink-soft)', padding: '10px 16px', borderRadius: 4, border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Refresh status
+                  </button>
+                </div>
               </div>
             )}
 
