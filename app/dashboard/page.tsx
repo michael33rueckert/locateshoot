@@ -148,15 +148,6 @@ export default function DashboardPage() {
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
 
-  async function shareFullPortfolio() {
-    if (!profile) return
-    const result = await shareFullPortfolioFn(profile)
-    if (!result.ok) { setToast(`⚠ ${result.error}`); return }
-    // Refresh the list so a newly-created link shows up in the UI.
-    loadData()
-    setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
-  }
-
   function copyGuideUrl(slug: string, id: string) {
     const url = buildShareUrl(slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
     navigator.clipboard?.writeText(url).catch(() => {})
@@ -238,20 +229,33 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Stats — className enables mobile 2-col grid */}
-        <div className="dash-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: '2rem' }}>
-          {[
-            { label: 'Portfolio',       value: portfolioLocs.length,           sub: 'your curated set' },
-            { label: 'Location guides', value: permanentLinks.length,          sub: 'reusable + single-use' },
-            { label: 'Client picks',    value: permanentLinks.reduce((s,l) => s + l.picks.length, 0), sub: 'from your guides' },
-          ].map(stat => (
-            <div key={stat.label} style={{ background: 'white', borderRadius: 10, padding: '1rem 1.25rem', border: '1px solid var(--cream-dark)' }}>
-              <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 6 }}>{stat.label}</div>
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 30, fontWeight: 700, color: 'var(--ink)', lineHeight: 1, marginBottom: 4 }}>{stat.value}</div>
-              <div style={{ fontSize: 12, color: 'var(--sage)' }}>{stat.sub}</div>
-            </div>
-          ))}
-        </div>
+        {/* Stats — desktop shows three cards, mobile gets a compact
+            one-line summary so the header doesn't eat half the viewport
+            before the user scrolls to the actual content. */}
+        {(() => {
+          const picks = permanentLinks.reduce((s,l) => s + l.picks.length, 0)
+          const stats = [
+            { label: 'Portfolio',       value: portfolioLocs.length,   sub: 'your curated set' },
+            { label: 'Location guides', value: permanentLinks.length,  sub: 'reusable + single-use' },
+            { label: 'Client picks',    value: picks,                  sub: 'from your guides' },
+          ]
+          return (
+            <>
+              <div className="dash-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: '2rem' }}>
+                {stats.map(stat => (
+                  <div key={stat.label} style={{ background: 'white', borderRadius: 10, padding: '1rem 1.25rem', border: '1px solid var(--cream-dark)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', marginBottom: 6 }}>{stat.label}</div>
+                    <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 30, fontWeight: 700, color: 'var(--ink)', lineHeight: 1, marginBottom: 4 }}>{stat.value}</div>
+                    <div style={{ fontSize: 12, color: 'var(--sage)' }}>{stat.sub}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="dash-stats-summary" style={{ display: 'none', marginBottom: '1.25rem', padding: '10px 14px', borderRadius: 8, background: 'white', border: '1px solid var(--cream-dark)', fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.5, textAlign: 'center' }}>
+                <strong style={{ color: 'var(--ink)', fontWeight: 600 }}>{portfolioLocs.length}</strong> location{portfolioLocs.length !== 1 ? 's' : ''} · <strong style={{ color: 'var(--ink)', fontWeight: 600 }}>{permanentLinks.length}</strong> guide{permanentLinks.length !== 1 ? 's' : ''} · <strong style={{ color: 'var(--ink)', fontWeight: 600 }}>{picks}</strong> client pick{picks !== 1 ? 's' : ''}
+              </div>
+            </>
+          )
+        })()}
 
         {/* Main grid — className enables mobile single-column */}
         <div className="dash-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
@@ -357,12 +361,8 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Your curated locations — shown to clients on share links.</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => { setPreselectAllPortfolio(false); setShowCreatePermanent(true) }} style={{ padding: '8px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>📚 New Location Guide</button>
-                  <button onClick={() => setShowAddPortfolio(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Add new location</button>
-                  <Link href="/explore" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>+ Add from Explore</Link>
-                  {portfolioLocs.length > 0 && (
-                    <button onClick={shareFullPortfolio} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>🔗 Share all as Location Guide</button>
-                  )}
+                  <button onClick={() => setShowAddPortfolio(true)} style={{ padding: '8px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Add new location</button>
+                  <Link href="/explore" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>Browse Explore →</Link>
                 </div>
               </div>
               {portfolioLocs.length === 0 ? (
@@ -418,31 +418,6 @@ export default function DashboardPage() {
 
           {/* ── RIGHT COLUMN — className enables mobile stacking ── */}
           <div className="dash-right-col" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-              <div style={{ padding: '.9rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Quick actions</div>
-              <div style={{ padding: '.75rem' }}>
-                {[
-                  { icon: '📚', label: 'New Location Guide',     href: '#',                  desc: 'Pick locations from your portfolio', onClick: () => { setPreselectAllPortfolio(false); setShowCreatePermanent(true) } },
-                  { icon: '📖', label: 'All Location Guides',    href: '/location-guides',   desc: 'Manage every guide in one place' },
-                  { icon: '📍', label: 'Browse the map',         href: '/explore',           desc: 'Add locations to your portfolio' },
-                  { icon: '✉️',  label: 'Edit message templates', href: '/profile#templates', desc: 'Manage your saved messages'  },
-                  { icon: '⚙',  label: 'Profile settings',       href: '/profile',           desc: 'Update your info & branding' },
-                ].map(action => (
-                  <Link key={action.label} href={action.href} onClick={(action as any).onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 6, textDecoration: 'none', marginBottom: 2 }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--cream)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <span style={{ fontSize: 18, width: 26, textAlign: 'center', flexShrink: 0 }}>{action.icon}</span>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{action.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>{action.desc}</div>
-                    </div>
-                    <span style={{ marginLeft: 'auto', fontSize: 14, color: 'var(--sand)', flexShrink: 0 }}>›</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', padding: '1rem 1.25rem' }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 10 }}>Your account</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>

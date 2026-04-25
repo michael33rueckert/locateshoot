@@ -1156,8 +1156,11 @@ body {
   /* ── Dashboard ── */
   .dash-main-grid  { grid-template-columns: 1fr !important; width: 100% !important; }
   .dash-main-grid > div { min-width: 0 !important; max-width: 100% !important; overflow: hidden !important; }
-  .dash-stats-grid { grid-template-columns: repeat(2,1fr) !important; gap: 8px !important; }
-  .dash-right-col  { display: flex !important; flex-direction: column !important; gap: 1rem !important; }
+  /* Hide the stat-card grid on narrow phones — replaced by the compact
+     one-line summary below it so the header doesn't eat half the screen. */
+  .dash-stats-grid    { display: none !important; }
+  .dash-stats-summary { display: block !important; }
+  .dash-right-col     { display: flex !important; flex-direction: column !important; gap: 1rem !important; }
  
   /* ── Explore ── */
   .explore-body {

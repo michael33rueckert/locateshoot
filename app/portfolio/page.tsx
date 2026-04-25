@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
-import { shareFullPortfolio as shareFullPortfolioFn } from '@/lib/portfolio-share'
 import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
 
@@ -121,13 +120,6 @@ export default function PortfolioPage() {
 
   const needsPhotosCount = locs.filter(l => l.photo_count === 0).length
 
-  async function handleShareFullPortfolio() {
-    if (!profile) return
-    const result = await shareFullPortfolioFn(profile)
-    if (!result.ok) { setToast(`⚠ ${result.error}`); return }
-    setToast('🔗 Portfolio link copied — auto-syncs with every new location you add')
-  }
-
   // Reorder portfolio locations. Writes sort_order on every row so the order
   // is stable. Driven by the useReorderDrag hook below — works on mouse,
   // pen, and touch via Pointer Events (HTML5 drag-and-drop was touch-hostile,
@@ -173,9 +165,6 @@ export default function PortfolioPage() {
             <button onClick={() => setShowAdd(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
             <Link href="/explore" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>+ Add from Explore</Link>
             <Link href="/location-guides" style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>📚 Location Guides</Link>
-            {locs.length > 0 && (
-              <button onClick={handleShareFullPortfolio} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>🔗 Share all as Location Guide</button>
-            )}
           </div>
         </div>
 
