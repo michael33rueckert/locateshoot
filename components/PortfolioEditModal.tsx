@@ -174,17 +174,34 @@ export default function PortfolioEditModal({
 
   async function handleUpload(files: File[]) {
     if (!files.length) return
-    setUploading(true)
+    setUploading(true); setErr('')
     const { data: p } = await supabase.from('profiles').select('full_name').eq('id', userId).single()
     const uploaded: PhotoRow[] = []
     // Start new photos at the end of the current order.
     let nextOrder = photos.length
+    let firstError: string | null = null
     for (const f of files) {
       try {
-        const ext = f.name.split('.').pop()
+        // File-extension extraction. Files dropped from some apps come
+        // with no extension on .name (e.g. screenshots on iOS) — fall
+        // back to the MIME type so the storage object still has a
+        // recognizable suffix instead of an undefined one.
+        const dotIdx  = f.name.lastIndexOf('.')
+        const nameExt = dotIdx >= 0 ? f.name.slice(dotIdx + 1) : ''
+        const mimeExt = (f.type || '').split('/')[1]
+        const ext = (nameExt || mimeExt || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
         const path = `${userId}/portfolio/${portfolioId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`
-        const { error: ue } = await supabase.storage.from('location-photos').upload(path, f, { contentType: f.type })
-        if (ue) { console.error(ue); continue }
+        // contentType — fall back to image/jpeg when the browser didn't
+        // populate file.type (e.g. some Android keyboards/intents). The
+        // storage bucket whitelists image/* MIME types; an empty content
+        // type is rejected before the file ever lands.
+        const contentType = f.type && f.type.startsWith('image/') ? f.type : 'image/jpeg'
+        const { error: ue } = await supabase.storage.from('location-photos').upload(path, f, { contentType })
+        if (ue) {
+          console.error('storage upload failed', ue, { path, name: f.name, size: f.size, type: f.type })
+          if (!firstError) firstError = `Upload failed: ${ue.message ?? 'storage rejected the file'}`
+          continue
+        }
         const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
         const { data: inserted, error: ie } = await supabase.from('location_photos').insert({
           portfolio_location_id: portfolioId,
@@ -195,13 +212,28 @@ export default function PortfolioEditModal({
           photographer_name: p?.full_name ?? null,
           sort_order: nextOrder++,
         }).select('id,url,storage_path,caption,sort_order').single()
-        if (ie) { console.error(ie); continue }
+        if (ie) {
+          console.error('location_photos insert failed', ie, { path })
+          if (!firstError) firstError = `Saved to storage but database insert failed: ${ie.message}`
+          // Try to clean up the orphaned storage object so we don't
+          // leave dangling files when the DB row insert keeps failing.
+          await supabase.storage.from('location-photos').remove([path]).catch(() => {})
+          continue
+        }
         if (inserted) uploaded.push(inserted)
-      } catch (e) { console.error(e) }
+      } catch (e: any) {
+        console.error('upload threw', e, { name: f.name })
+        if (!firstError) firstError = e?.message ?? 'Upload threw an unexpected error.'
+      }
     }
     setPhotos(prev => [...prev, ...uploaded])
     setUploading(false)
     if (fileRef.current) fileRef.current.value = ''
+    if (uploaded.length === 0 && firstError) {
+      setErr(firstError)
+    } else if (firstError && uploaded.length > 0) {
+      setErr(`${uploaded.length} of ${files.length} uploaded — ${firstError}`)
+    }
   }
 
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
