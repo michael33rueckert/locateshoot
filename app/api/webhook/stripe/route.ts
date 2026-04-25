@@ -48,7 +48,18 @@ async function syncSubscription(db: ReturnType<typeof admin>, sub: Stripe.Subscr
   const periodEndUnix = (sub as any).current_period_end
     ?? sub.items?.data?.[0]?.current_period_end
     ?? null
-  const renewsAt = periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null
+
+  // "Will cancel" detection — Stripe's newer API stopped flipping the
+  // cancel_at_period_end boolean for portal-initiated cancellations and
+  // instead sets cancel_at to a Unix timestamp (usually = period end).
+  // Treat either signal as "scheduled to cancel" so the UI shows
+  // "Cancels on …" correctly. When cancel_at is set we prefer it for
+  // the displayed date; otherwise we fall back to current_period_end.
+  const cancelAtUnix = (sub as any).cancel_at as number | null | undefined
+  const willCancel   = !!sub.cancel_at_period_end || !!cancelAtUnix
+  const cancelDate   = cancelAtUnix ? new Date(cancelAtUnix * 1000).toISOString() : null
+  const renewsAt     = cancelDate
+    ?? (periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null)
 
   await db.from('profiles').update({
     plan:                       active ? 'pro' : 'free',
@@ -56,7 +67,7 @@ async function syncSubscription(db: ReturnType<typeof admin>, sub: Stripe.Subscr
     stripe_subscription_id:     sub.id,
     stripe_subscription_status: sub.status,
     plan_renews_at:             renewsAt,
-    cancel_at_period_end:       !!sub.cancel_at_period_end,
+    cancel_at_period_end:       willCancel,
   }).eq('id', userId)
 }
 
