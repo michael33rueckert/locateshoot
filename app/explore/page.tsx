@@ -181,6 +181,11 @@ export default function ExplorePage() {
   const [locations,      setLocations]      = useState<any[]>([])
   const [dbLoading,      setDbLoading]      = useState(true)
   const [userLocation,   setUserLocation]   = useState<{lat:number;lng:number}|null>(null)
+  // The signed-in user's saved home city (preferences.home in profiles).
+  // Used as the map's initial framing — falls back to a USA-wide view
+  // when the user hasn't set one. We keep it in state so the prop change
+  // can recenter the map if prefs load after the map mounts.
+  const [homeLocation,   setHomeLocation]   = useState<{lat:number;lng:number}|null>(null)
   const [locGranted,     setLocGranted]     = useState(false)
   const [locLoading,     setLocLoading]     = useState(false)
   const [activeId,       setActiveId]       = useState<any>(null)
@@ -218,12 +223,30 @@ export default function ExplorePage() {
 
   useEffect(() => { supabase.auth.getUser().then(({data:{user}})=>setUser(user)) }, [])
 
+  // Pull the photographer's saved home city from profile preferences. If
+  // they set it during onboarding (or later via the Profile page) we'll
+  // open the map there instead of a generic US-wide view.
+  useEffect(() => {
+    if (!user) { setHomeLocation(null); return }
+    let cancelled = false
+    supabase.from('profiles').select('preferences').eq('id', user.id).single().then(({ data }) => {
+      if (cancelled) return
+      const home = (data?.preferences as any)?.home
+      if (home && Number.isFinite(home.lat) && Number.isFinite(home.lng)) {
+        setHomeLocation({ lat: home.lat, lng: home.lng })
+      } else {
+        setHomeLocation(null)
+      }
+    })
+    return () => { cancelled = true }
+  }, [user])
+
   useEffect(() => {
     async function load() {
       setDbLoading(true)
       try {
         const { data } = await supabase.from('locations')
-          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,description,created_at,added_by,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at')
+          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at')
           .eq('status','published').not('latitude','is',null).not('longitude','is',null).limit(500)
         setLocations((data??[]).map((loc:any,idx:number)=>({
           id:loc.id, name:loc.name,
@@ -235,7 +258,7 @@ export default function ExplorePage() {
           bg:BG_CYCLE[idx%BG_CYCLE.length],
           tags:loc.tags??[], saves:loc.save_count??0,
           desc:loc.description??'', qualityScore:loc.quality_score??0,
-          createdAt:loc.created_at, addedBy:loc.added_by,
+          createdAt:loc.created_at, addedBy:loc.added_by, source:loc.source,
           permit_required:loc.permit_required, permit_notes:loc.permit_notes,
           permit_fee:loc.permit_fee, permit_website:loc.permit_website,
           permit_certainty:loc.permit_certainty??'unknown', permit_scanned_at:loc.permit_scanned_at,
@@ -413,12 +436,20 @@ export default function ExplorePage() {
     setToast('Deleted')
   }
 
-  // When the user drops a pin via "Find Locations Near" or hits "Near me",
-  // we filter and sort the list by distance to that reference point. searchPin
-  // wins over userLocation when both are set (they chose an explicit place).
+  // Reference point for proximity filtering, in priority order:
+  //   1. Explicit search pin ("Find Locations Near …") — user's most direct intent
+  //   2. Browser geolocation when the user opted in via "Near me"
+  //   3. Saved home city from profile preferences — quiet personalization
+  //   4. None — falls through to the trending-six fallback below
   const nearRef = searchPin
     ? { lat: searchPin.lat, lng: searchPin.lng }
-    : (locGranted && userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null)
+    : (locGranted && userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : (homeLocation ?? null))
+
+  // True when the user has applied any explicit search/filter — we use this
+  // to decide whether to short-circuit the empty state into "trending six"
+  // mode. If they're actively searching for "barn", they want every barn,
+  // not a curated highlight reel.
+  const hasUserFilter = searchQuery.trim() !== '' || selectedTags.length > 0 || accessFilter !== 'All' || minRating > 0 || sortBy !== 'quality'
 
   const filtered = useMemo(()=>{
     let result=locations.filter((loc:any)=>{
@@ -430,7 +461,7 @@ export default function ExplorePage() {
       const matchesNear = !nearRef || distMiles(nearRef.lat, nearRef.lng, loc.lat, loc.lng) <= NEAR_RADIUS_MI
       return matchesAccess&&matchesTags&&matchesSearch&&matchesRating&&matchesNear
     })
-    return[...result].sort((a:any,b:any)=>{
+    let sorted = [...result].sort((a:any,b:any)=>{
       // When a near-reference is set, closest locations win — overrides the
       // chosen sort mode since the user explicitly asked for proximity.
       if (nearRef) {
@@ -451,7 +482,16 @@ export default function ExplorePage() {
         default:return 0
       }
     })
-  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,nearRef])
+    // Empty-state default: when the user has no saved home, hasn't dropped
+    // a search pin, hasn't enabled geolocation, and hasn't applied any
+    // filter, fall back to the same trending six the marketing home page
+    // uses (top curated locations by quality_score). Better landing
+    // experience than a 500-row firehose sorted by something arbitrary.
+    if (!nearRef && !hasUserFilter) {
+      sorted = sorted.filter((l:any) => l.source === 'curated').slice(0, 6)
+    }
+    return sorted
+  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,nearRef,hasUserFilter])
 
   const activeFilterCount=(accessFilter!=='All'?1:0)+selectedTags.length+(minRating>0?1:0)+(sortBy!=='quality'?1:0)
 
@@ -596,7 +636,7 @@ export default function ExplorePage() {
               ← List
             </button>
           )}
-          <ExploreMap locations={filtered as ExploreLocation[]} activeId={activeId} userLocation={userLocation} onMarkerClick={handleMarkerClick}/>
+          <ExploreMap locations={filtered as ExploreLocation[]} activeId={activeId} userLocation={userLocation} homeLocation={homeLocation} onMarkerClick={handleMarkerClick}/>
           <div style={{position:'absolute',bottom:24,left:16,zIndex:500,background:'white',borderRadius:8,padding:'.75rem 1rem',border:'1px solid var(--cream-dark)',boxShadow:'0 4px 16px rgba(26,22,18,.1)'}}>
             {[{color:'#4a6741',label:'Public'},{color:'#b54b2a',label:'Private'},{color:'#c4922a',label:'Selected'},{color:'#3d6e8c',label:'You'}].map(item=>(
               <div key={item.label} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:'var(--ink)',marginBottom:3}}>

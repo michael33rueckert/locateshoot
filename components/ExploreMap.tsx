@@ -34,19 +34,35 @@ interface ExploreMapProps {
   locations: ExploreLocation[]
   activeId: number | null
   userLocation: { lat: number; lng: number } | null
+  // The signed-in photographer's saved home city (from profile preferences).
+  // When set, the map opens centered on it at city zoom. When null we fall
+  // back to a USA-wide view instead of the old St-Joseph default — much
+  // better for users who haven't told us where they shoot yet.
+  homeLocation: { lat: number; lng: number } | null
   onMarkerClick: (id: number) => void
 }
+
+// USA-wide framing — center of the contiguous 48, zoomed out enough to show
+// roughly Maine to LA without spilling into Mexico/Canada at common viewport
+// widths. Used when no home city is saved.
+const USA_VIEW = { center: [39.5, -98.5] as [number, number], zoom: 4 }
+const HOME_CITY_ZOOM = 11
 
 export default function ExploreMap({
   locations,
   activeId,
   userLocation,
+  homeLocation,
   onMarkerClick,
 }: ExploreMapProps) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<any>(null)
   const markersRef    = useRef<Record<number, any>>({})
   const userMarkerRef = useRef<any>(null)
+  // Whether the initial view has already been applied. Without this guard,
+  // the home-location effect below would re-center the map every time the
+  // photographer pans away — annoying instead of helpful.
+  const initialViewApplied = useRef(false)
 
   // ── Init map ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -64,8 +80,16 @@ export default function ExploreMap({
         shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
       })
 
+      // Open on the home city when we already know it, otherwise the
+      // USA-wide fallback. The home-location effect below also handles the
+      // case where the profile preferences arrive after the map has mounted
+      // (async load).
+      const initial = homeLocation && isFiniteLatLng(homeLocation.lat, homeLocation.lng)
+        ? { center: [homeLocation.lat, homeLocation.lng] as [number, number], zoom: HOME_CITY_ZOOM }
+        : USA_VIEW
       const map = L.map(container, { zoomControl: false })
-        .setView([39.09, -94.58], 10)
+        .setView(initial.center, initial.zoom)
+      if (homeLocation) initialViewApplied.current = true
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
@@ -83,7 +107,20 @@ export default function ExploreMap({
         mapRef.current = null
       }
     }
+    // homeLocation is intentionally read once at mount — see the dedicated
+    // effect below for the late-arriving case.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ── Apply home city when profile prefs load after the map mounts ──────────
+  useEffect(() => {
+    if (initialViewApplied.current) return
+    if (!mapRef.current || !homeLocation) return
+    if (!mapHasSize(mapRef.current)) return
+    if (!isFiniteLatLng(homeLocation.lat, homeLocation.lng)) return
+    mapRef.current.setView([homeLocation.lat, homeLocation.lng], HOME_CITY_ZOOM)
+    initialViewApplied.current = true
+  }, [homeLocation])
 
   // ── Fly to user location when it arrives ──────────────────────────────────
   useEffect(() => {

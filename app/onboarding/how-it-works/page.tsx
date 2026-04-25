@@ -175,7 +175,21 @@ export default function HowItWorksPage() {
     } finally { setSearching(false) }
   }, [])
 
-  function handleAddress(r: AddressResult) { setPin(r); fetchNearby(r.lat, r.lng) }
+  function handleAddress(r: AddressResult) {
+    setPin(r); fetchNearby(r.lat, r.lng)
+    saveHomeLocation(r)
+  }
+
+  // Persist the photographer's home city to profile preferences so the
+  // Explore map can open there next time. We merge into existing prefs
+  // (don't clobber other keys like onboarded_at, branding, etc.).
+  async function saveHomeLocation(r: AddressResult) {
+    if (!userId) return
+    const { data } = await supabase.from('profiles').select('preferences').eq('id', userId).single()
+    const prev = (data?.preferences as any) ?? {}
+    const home = { lat: r.lat, lng: r.lng, label: r.label, shortLabel: r.shortLabel ?? null }
+    await supabase.from('profiles').update({ preferences: { ...prev, home } }).eq('id', userId)
+  }
   function toggleLoc(id: string) {
     setSelected(prev => {
       const n = new Set(prev)

@@ -4,9 +4,17 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
+import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 
 interface Template {
   id: string; name: string; body: string
+}
+
+interface HomeLocation {
+  lat: number
+  lng: number
+  label: string
+  shortLabel?: string | null
 }
 
 interface Preferences {
@@ -23,6 +31,10 @@ interface Preferences {
   studio_name?:            string
   instagram?:              string
   website?:                string
+  // Photographer's home city — used by the Explore map to open near
+  // them instead of a generic US-wide view. Saved during onboarding
+  // (when they enter their address) or edited here on the Profile page.
+  home?:                   HomeLocation | null
 }
 
 const DEFAULT_PREFS: Preferences = {
@@ -79,6 +91,11 @@ export default function ProfilePage() {
   const [templSaving,   setTemplSaving]   = useState(false)
 
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
+  // Toggle between the read-only "📍 Loose Park, KC" pill and the
+  // AddressSearch typeahead. We keep the typeahead hidden by default so
+  // the profile form looks clean for users who set their home city
+  // during onboarding.
+  const [changingHome, setChangingHome] = useState(false)
   const [newPw,     setNewPw]     = useState('')
   const [confirmPw, setConfirmPw] = useState('')
 
@@ -258,6 +275,32 @@ export default function ProfilePage() {
     setSaving(false); setToast(error ? '⚠ Could not save' : '✓ Profile saved!')
   }
 
+  // Home city — saves immediately on select instead of waiting for the
+  // Save profile button. Less surprising than typing an address, leaving,
+  // then wondering why the Explore map didn't move.
+  async function handleHomeSelect(r: AddressResult) {
+    const home: HomeLocation = { lat: r.lat, lng: r.lng, label: r.label, shortLabel: r.shortLabel ?? null }
+    const updated = { ...prefs, home }
+    setPrefs(updated)
+    setChangingHome(false)
+    if (!userId) return
+    setSaving(true)
+    const { error } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
+    setSaving(false)
+    setToast(error ? '⚠ Could not save home city' : '✓ Home city saved!')
+  }
+
+  async function clearHome() {
+    const updated = { ...prefs, home: null }
+    setPrefs(updated)
+    setChangingHome(false)
+    if (!userId) return
+    setSaving(true)
+    const { error } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
+    setSaving(false)
+    setToast(error ? '⚠ Could not clear home city' : 'Home city cleared')
+  }
+
   async function savePreferences() {
     if (!userId) return; setSaving(true)
     const { error } = await supabase.from('profiles').update({ preferences: prefs }).eq('id', userId)
@@ -434,6 +477,38 @@ export default function ProfilePage() {
               <div><label style={labelStyle}>Instagram handle</label><input value={instagram} onChange={e => setInstagram(e.target.value)} style={inputStyle} placeholder="@yourhandle" /></div>
               <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Website</label><input value={website} onChange={e => setWebsite(e.target.value)} style={inputStyle} placeholder="www.yoursite.com" /></div>
             </div>
+
+            {/* Home city — controls where the Explore map opens. Stored
+                in preferences.home so it survives whenever profile is
+                saved. We render the AddressSearch typeahead only when
+                the user wants to change/add it; otherwise just show the
+                pinned label + a Change button so they don't have to look
+                at an empty input every visit. */}
+            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>📍 Home city</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.5 }}>
+                The Explore map opens here when you sign in. Leave it blank to default to a USA-wide view.
+              </div>
+              {prefs.home && !changingHome ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 6, background: 'rgba(74,103,65,.08)', border: '1px solid rgba(74,103,65,.2)' }}>
+                  <span>📍</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--sage)' }}>{prefs.home.shortLabel ?? prefs.home.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 1 }}>{prefs.home.lat.toFixed(4)}, {prefs.home.lng.toFixed(4)}</div>
+                  </div>
+                  <button onClick={() => setChangingHome(true)} style={{ padding: '5px 12px', borderRadius: 4, background: 'white', border: '1px solid var(--cream-dark)', fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}>Change</button>
+                  <button onClick={clearHome} disabled={saving} style={{ padding: '5px 12px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Clear</button>
+                </div>
+              ) : (
+                <>
+                  <AddressSearch onSelect={handleHomeSelect} placeholder="e.g. Kansas City, MO" />
+                  {prefs.home && (
+                    <button onClick={() => setChangingHome(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Cancel</button>
+                  )}
+                </>
+              )}
+            </div>
+
             <button onClick={saveProfile} disabled={saving} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 24px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Saving…' : 'Save profile'}
             </button>
