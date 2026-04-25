@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -12,7 +12,7 @@ import ImageLightbox from '@/components/ImageLightbox'
 import AppNav from '@/components/AppNav'
 import LocationEditModal, { type ManagedLocation } from '@/components/admin/LocationEditModal'
 import { isAdminEmail } from '@/lib/admin'
-import { thumbUrl, mediumUrl } from '@/lib/image'
+import { thumbUrl } from '@/lib/image'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
@@ -42,75 +42,6 @@ const PERMIT_CFG: Record<string,{label:string;bg:string;color:string;border:stri
 
 type SortValue = 'quality'|'rating_asc'|'name'|'newest'|'saves'
 type AccessFilter = 'All'|'Public'|'Private'|'My Portfolio'
-
-// ── Hooks ─────────────────────────────────────────────────────────────────────
-
-function useCommunityPhotos(locationId: any, currentUserId: string|null) {
-  const [photos,  setPhotos]  = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    if (!locationId) return
-    setLoading(true)
-    supabase.from('location_photos').select('id,url,is_private,caption,photographer_name,created_at,user_id,storage_path').eq('location_id', locationId).order('created_at',{ascending:false})
-      .then(({ data }) => {
-        const filtered = (data??[]).filter((p:any) => {
-          // Hide seed photos (Wikipedia / other external sources) from the Photographer tab —
-          // they have storage_path like "external:wikipedia". Community uploads live in Storage
-          // with paths like "{userId}/{locationId}/{timestamp}.jpg".
-          if (typeof p.storage_path === 'string' && p.storage_path.startsWith('external:')) return false
-          if (p.is_private && p.user_id !== currentUserId) return false
-          return true
-        })
-        setPhotos(filtered); setLoading(false)
-      })
-  }, [locationId, currentUserId])
-  return { photos, loading }
-}
-
-// ── Photo upload ──────────────────────────────────────────────────────────────
-
-function PhotoUploadPanel({ locationId, user, onUpload }: { locationId:any; user:any; onUpload:()=>void }) {
-  const [files,setFiles]=useState<File[]>([])
-  const [isPrivate,setIsPrivate]=useState(false)
-  const [caption,setCaption]=useState('')
-  const [uploading,setUploading]=useState(false)
-  const [count,setCount]=useState(0)
-  const [done,setDone]=useState(false)
-  const ref=useRef<HTMLInputElement>(null)
-  async function upload(){
-    if(!user||!files.length)return;setUploading(true);let c=0
-    const {data:p}=await supabase.from('profiles').select('full_name').eq('id',user.id).single()
-    for(const f of files){try{const ext=f.name.split('.').pop(),path=`${user.id}/${locationId}/${Date.now()}.${ext}`;const{error:ue}=await supabase.storage.from('location-photos').upload(path,f,{contentType:f.type});if(ue)continue;const{data:u}=supabase.storage.from('location-photos').getPublicUrl(path);await supabase.from('location_photos').insert({location_id:locationId,user_id:user.id,url:u.publicUrl,storage_path:path,is_private:isPrivate,caption:caption.trim()||null,photographer_name:p?.full_name??''});c++;setCount(c)}catch(e){console.error(e)}}
-    setUploading(false);setDone(true);onUpload()
-  }
-  if(done)return<div style={{padding:'12px 14px',background:'rgba(74,103,65,.08)',border:'1px solid rgba(74,103,65,.2)',borderRadius:8,fontSize:13,color:'var(--sage)',textAlign:'center'}}>✓ {count} photo{count!==1?'s':''} uploaded!</div>
-  return(
-    <div style={{border:'1px solid var(--cream-dark)',borderRadius:10,overflow:'hidden'}}>
-      <div style={{padding:'10px 14px',background:'var(--cream)',borderBottom:'1px solid var(--cream-dark)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <div style={{fontSize:13,fontWeight:500,color:'var(--ink)'}}>📷 Add your photos</div>
-        <button onClick={()=>ref.current?.click()} style={{padding:'5px 12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',border:'none',fontSize:11,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>Browse</button>
-        <input ref={ref} type="file" accept="image/*" multiple onChange={e=>setFiles(p=>[...p,...Array.from(e.target.files??[])].slice(0,10))} style={{display:'none'}}/>
-      </div>
-      <div style={{padding:'12px 14px'}}>
-        {!files.length?<div onClick={()=>ref.current?.click()} style={{border:'2px dashed var(--cream-dark)',borderRadius:8,padding:'1rem',textAlign:'center',cursor:'pointer'}}><div style={{fontSize:22,marginBottom:4}}>📷</div><div style={{fontSize:12,color:'var(--ink-soft)',fontWeight:300}}>Click to select photos</div></div>:(
-          <>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:5,marginBottom:10}}>
-              {files.map((f,i)=><div key={i} style={{position:'relative',aspectRatio:'1',borderRadius:6,overflow:'hidden',border:'1px solid var(--cream-dark)'}}><img src={URL.createObjectURL(f)} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/><button onClick={()=>setFiles(p=>p.filter((_,j)=>j!==i))} style={{position:'absolute',top:2,right:2,width:18,height:18,borderRadius:'50%',background:'rgba(26,22,18,.7)',border:'none',cursor:'pointer',fontSize:10,color:'white',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button></div>)}
-            </div>
-            <input value={caption} onChange={e=>setCaption(e.target.value)} placeholder="Caption (optional)" style={{width:'100%',padding:'7px 10px',border:'1px solid var(--cream-dark)',borderRadius:4,fontFamily:'inherit',fontSize:12,outline:'none',marginBottom:8}}/>
-            <div onClick={()=>setIsPrivate(p=>!p)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:6,cursor:'pointer',border:`1px solid ${isPrivate?'rgba(124,92,191,.3)':'var(--cream-dark)'}`,background:isPrivate?'rgba(124,92,191,.05)':'white',marginBottom:10}}>
-              <div style={{width:16,height:16,borderRadius:3,border:`1.5px solid ${isPrivate?'#7c5cbf':'var(--sand)'}`,background:isPrivate?'#7c5cbf':'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'white',flexShrink:0}}>{isPrivate?'✓':''}</div>
-              <div style={{fontSize:12,fontWeight:500,color:isPrivate?'#7c5cbf':'var(--ink)'}}>🔒 Private</div>
-            </div>
-            <button onClick={upload} disabled={uploading} style={{width:'100%',padding:'9px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit',opacity:uploading?.6:1}}>
-              {uploading?`Uploading… (${count}/${files.length})`:`Upload ${files.length} photo${files.length!==1?'s':''}`}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ── Modals ────────────────────────────────────────────────────────────────────
 
@@ -153,23 +84,14 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
   const isInPortfolio = !!portfolioId
   const router = useRouter()
   const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
-  const { photos: communityPhotos } = useCommunityPhotos(loc.id, user?.id ?? null)
   const [activePhoto, setActivePhoto] = useState(0)
-  const [photoTab,    setPhotoTab]    = useState<'google'|'community'|'upload'>(communityPhotos.length > 0 ? 'community' : 'google')
   const [showReport,  setShowReport]  = useState(false)
 
-  useEffect(() => {
-    setActivePhoto(0)
-    // Photographer photos take priority; fall back to Google when none exist yet.
-    setPhotoTab(communityPhotos.length > 0 ? 'community' : 'google')
-  }, [loc.id, communityPhotos.length])
-  useEffect(() => {
-    if (!googleLoading && !googlePhotos.length && communityPhotos.length) setPhotoTab('community')
-  }, [googleLoading, googlePhotos.length, communityPhotos.length])
+  // Reset gallery to first image when switching locations.
+  useEffect(() => { setActivePhoto(0) }, [loc.id])
 
-  const hasGoogle    = googlePhotos.length > 0
-  const hasCommunity = communityPhotos.length > 0
-  const permitCfg    = PERMIT_CFG[loc.permit_certainty ?? 'unknown'] ?? PERMIT_CFG.unknown
+  const hasGoogle = googlePhotos.length > 0
+  const permitCfg = PERMIT_CFG[loc.permit_certainty ?? 'unknown'] ?? PERMIT_CFG.unknown
 
   function shareWithClient() {
     sessionStorage.setItem('sharePreselectedLocation', JSON.stringify({ id:loc.id, name:loc.name, city:loc.city, lat:loc.lat, lng:loc.lng, access:loc.access, rating:loc.rating, bg:loc.bg, type:'favorite' }))
@@ -183,29 +105,22 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
         <div style={{display:'flex',justifyContent:'center',padding:'12px 0 6px'}}><div style={{width:36,height:4,borderRadius:2,background:'var(--sand)'}}/></div>
         <button onClick={onClose} style={{position:'absolute',top:14,right:14,width:32,height:32,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:16,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10}}>✕</button>
 
-        {/* Photo area */}
+        {/* Photo area — Google Places photos only. We removed community
+            uploads + the Photographer / Add-yours tabs along with the rest
+            of the public-contribution surface. */}
         <div style={{position:'relative',height:'clamp(260px, 44vw, 380px)',background:'#1a1612',overflow:'hidden'}}>
-          {photoTab==='google'&&(googleLoading
+          {googleLoading
             ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
             :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} onClick={()=>onOpenLightbox(googlePhotos.map(p=>p.url), activePhoto)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>
-            :<div className={loc.bg} style={{position:'absolute',inset:0}}/>)}
-          {photoTab==='community'&&(hasCommunity?<img src={mediumUrl(communityPhotos[0].url) ?? communityPhotos[0].url} alt={loc.name} decoding="async" onClick={()=>onOpenLightbox(communityPhotos.map((p:any)=>p.url), 0)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>:<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}}><span style={{fontSize:32}}>📷</span><span style={{fontSize:12,color:'rgba(255,255,255,.6)'}}>No community photos yet</span></div>)}
-          {photoTab==='upload'&&<div className={loc.bg} style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:36}}>📷</span></div>}
-          {photoTab!=='upload'&&<div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>}
-          {photoTab==='google'&&hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
+            :<div className={loc.bg} style={{position:'absolute',inset:0}}/>}
+          <div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>
+          {hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
         </div>
 
-        {/* Photo tabs */}
-        <div style={{borderBottom:'1px solid var(--cream-dark)',display:'flex',overflowX:'auto'}}>
-          {[{key:'google',label:`Google${hasGoogle?` (${googlePhotos.length})`:''}`},{key:'community',label:`Photographer${hasCommunity?` (${communityPhotos.length})`:''}`},{key:'upload',label:user?'+ Add yours':'📷 Sign in to add'}].map(tab=>(
-            <button key={tab.key} onClick={()=>{if(tab.key==='upload'&&!user)return;setPhotoTab(tab.key as any)}} style={{padding:'8px 14px',fontSize:12,fontWeight:500,border:'none',borderBottom:`2px solid ${photoTab===tab.key?'var(--gold)':'transparent'}`,background:'white',color:photoTab===tab.key?'var(--ink)':'var(--ink-soft)',cursor:tab.key==='upload'&&!user?'default':'pointer',fontFamily:'inherit',whiteSpace:'nowrap',opacity:tab.key==='upload'&&!user?.5:1,flexShrink:0}}>{tab.label}</button>
-          ))}
-        </div>
-        {photoTab==='google'&&hasGoogle&&googlePhotos.length>1&&<div style={{display:'flex',gap:4,padding:'8px 1.25rem',overflowX:'auto',borderBottom:'1px solid var(--cream-dark)'}}>
+        {hasGoogle&&googlePhotos.length>1&&<div style={{display:'flex',gap:4,padding:'8px 1.25rem',overflowX:'auto',borderBottom:'1px solid var(--cream-dark)'}}>
           {googlePhotos.map((p,i)=><div key={i} onClick={()=>setActivePhoto(i)} style={{width:56,height:56,borderRadius:6,flexShrink:0,overflow:'hidden',cursor:'pointer',border:`2px solid ${activePhoto===i?'var(--gold)':'transparent'}`}}><img src={p.url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>)}
         </div>}
-        {photoTab==='google'&&<div style={{padding:'6px 1.25rem',borderBottom:'1px solid var(--cream-dark)',display:'flex',alignItems:'center',gap:6}}><img src="https://developers.google.com/static/maps/documentation/images/google_on_white.png" alt="Google" style={{height:11,opacity:.4}}/><span style={{fontSize:10,color:'var(--ink-soft)'}}>Photos via Google · Not affiliated with LocateShoot</span></div>}
-        {photoTab==='upload'&&user&&<div style={{padding:'1rem 1.25rem',borderBottom:'1px solid var(--cream-dark)'}}><PhotoUploadPanel locationId={loc.id} user={user} onUpload={()=>setPhotoTab('community')}/></div>}
+        <div style={{padding:'6px 1.25rem',borderBottom:'1px solid var(--cream-dark)',display:'flex',alignItems:'center',gap:6}}><img src="https://developers.google.com/static/maps/documentation/images/google_on_white.png" alt="Google" style={{height:11,opacity:.4}}/><span style={{fontSize:10,color:'var(--ink-soft)'}}>Photos via Google · Not affiliated with LocateShoot</span></div>
 
         {/* Details */}
         <div style={{padding:'1rem 1.25rem 1.5rem'}}>
@@ -219,7 +134,7 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
           {(loc.tags??[]).length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:'1rem'}}>{(loc.tags??[]).map((t:string)=><span key={t} style={{padding:'4px 10px',borderRadius:20,fontSize:12,background:'var(--cream-dark)',color:'var(--ink-soft)',border:'1px solid var(--sand)'}}>{t}</span>)}</div>}
           {loc.desc&&<p style={{fontSize:14,color:'var(--ink-soft)',fontWeight:300,lineHeight:1.7,marginBottom:'1.25rem'}}>{loc.desc}</p>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:'1rem'}}>
-            {[{icon:'🔒',label:'Access',value:loc.access==='public'?'Free public access':'Private — booking required'},{icon:'⭐',label:'Rating',value:loc.rating!=='—'?`${loc.rating} out of 5`:'Not yet rated'},{icon:'❤',label:'Saves',value:(loc.saves??0)>0?`${loc.saves}`:'Be the first!'},{icon:'📷',label:'Photos',value:`${hasGoogle?googlePhotos.length:0} Google · ${hasCommunity?communityPhotos.length:0} community`}].map(item=>(
+            {[{icon:'🔒',label:'Access',value:loc.access==='public'?'Free public access':'Private — booking required'},{icon:'⭐',label:'Rating',value:loc.rating!=='—'?`${loc.rating} out of 5`:'Not yet rated'},{icon:'❤',label:'Saves',value:(loc.saves??0)>0?`${loc.saves}`:'Be the first!'},{icon:'📷',label:'Photos',value:`${hasGoogle?googlePhotos.length:0} Google`}].map(item=>(
               <div key={item.label} style={{background:'var(--cream)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--cream-dark)'}}>
                 <div style={{fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--ink-soft)',marginBottom:4}}>{item.icon} {item.label}</div>
                 <div style={{fontSize:13,color:'var(--ink)',lineHeight:1.4}}>{item.value}</div>
