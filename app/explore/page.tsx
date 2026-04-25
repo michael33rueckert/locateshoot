@@ -10,6 +10,8 @@ import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import AuthModal from '@/components/AuthModal'
 import ImageLightbox from '@/components/ImageLightbox'
 import AppNav from '@/components/AppNav'
+import LocationEditModal, { type ManagedLocation } from '@/components/admin/LocationEditModal'
+import { isAdminEmail } from '@/lib/admin'
 import { thumbUrl, mediumUrl } from '@/lib/image'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
@@ -144,8 +146,9 @@ function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; o
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user }: {
+function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete }: {
   loc:any; portfolioId:string|null; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; onOpenLightbox:(src:string|string[], start?:number)=>void; user:any
+  isAdmin:boolean; onAdminEdit:(locId:string)=>void; onAdminDelete:(locId:string)=>Promise<void>
 }) {
   const isInPortfolio = !!portfolioId
   const router = useRouter()
@@ -239,6 +242,13 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
                 : <button onClick={()=>onAddToPortfolio(loc.id)} style={{width:'100%',padding:'12px',borderRadius:4,cursor:'pointer',fontFamily:'inherit',fontSize:14,fontWeight:600,marginBottom:10,background:'var(--gold)',color:'var(--ink)',border:'none'}}>Add to my portfolio</button>)
             : <button onClick={onSignIn} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:600,border:'none',cursor:'pointer',marginBottom:10}}>Sign in to add to your portfolio</button>}
           {user&&<button onClick={shareWithClient} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer',marginBottom:'1rem'}}>🔗 Share with client</button>}
+          {isAdmin&&(
+            <div style={{padding:'10px 12px',background:'rgba(26,22,18,.04)',border:'1px dashed var(--cream-dark)',borderRadius:6,marginBottom:'1rem',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+              <span style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginRight:'auto'}}>🛠 Admin</span>
+              <button onClick={()=>onAdminEdit(loc.id)} style={{padding:'7px 14px',borderRadius:4,border:'1px solid var(--cream-dark)',background:'white',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--ink)'}}>Edit</button>
+              <button onClick={async()=>{ if(confirm(`Delete ${loc.name}? This removes it from the public map and unlinks any portfolio rows.`)){ await onAdminDelete(loc.id); } }} style={{padding:'7px 14px',borderRadius:4,border:'1px solid rgba(181,75,42,.3)',background:'rgba(181,75,42,.05)',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--rust)'}}>Delete</button>
+            </div>
+          )}
           <div style={{padding:'10px 12px',background:'rgba(196,146,42,.04)',border:'1px solid rgba(196,146,42,.15)',borderRadius:6,marginBottom:10}}>
             <div style={{fontSize:10,color:'var(--ink-soft)',lineHeight:1.6,fontWeight:300}}>⚠ <strong style={{fontWeight:500}}>Disclaimer:</strong> Always verify access rights, permit requirements, and safety before your session.</div>
           </div>
@@ -261,6 +271,7 @@ export default function ExplorePage() {
   const [activeId,       setActiveId]       = useState<any>(null)
   const [detailLoc,      setDetailLoc]      = useState<any>(null)
   const [user,           setUser]           = useState<any>(null)
+  const [adminEditLoc,   setAdminEditLoc]   = useState<ManagedLocation|null>(null)
   const [authOpen,       setAuthOpen]       = useState<'login'|'signup'|null>(null)
   const [toast,          setToast]          = useState<string|null>(null)
   const [searchQuery,    setSearchQuery]    = useState('')
@@ -401,6 +412,91 @@ export default function ExplorePage() {
 
   function toggleTag(tag:string){setSelectedTags(prev=>prev.includes(tag)?prev.filter(t=>t!==tag):[...prev,tag])}
   function clearAllFilters(){setAccessFilter('All');setSelectedTags([]);setMinRating(0);setSortBy('quality')}
+
+  const isAdmin = !!user?.email && isAdminEmail(user.email)
+
+  // ?loc=<id> from /admin → auto-open the matching detail panel. Tries the
+  // already-loaded list first; falls back to a direct DB fetch when the
+  // location is filtered out or paginated past.
+  useEffect(() => {
+    if (typeof window === 'undefined' || dbLoading) return
+    const params = new URLSearchParams(window.location.search)
+    const locId = params.get('loc')
+    if (!locId) return
+    const existing = locations.find((l: any) => String(l.id) === String(locId))
+    if (existing) {
+      setDetailLoc(existing); setActiveId(existing.id)
+    } else {
+      supabase.from('locations')
+        .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,description,permit_required,permit_notes,permit_fee,permit_website,permit_certainty')
+        .eq('id', locId).maybeSingle()
+        .then(({ data }) => {
+          if (!data) return
+          setDetailLoc({
+            id: data.id, name: data.name,
+            city: data.city && data.state ? `${data.city}, ${data.state}` : (data.city ?? data.state ?? ''),
+            lat: data.latitude, lng: data.longitude,
+            access: data.access_type ?? 'public',
+            rating: data.rating ? parseFloat(data.rating).toFixed(1) : '—',
+            ratingNum: data.rating ? parseFloat(data.rating) : 0,
+            bg: BG_CYCLE[0],
+            tags: data.tags ?? [], saves: data.save_count ?? 0,
+            desc: data.description ?? '', qualityScore: data.quality_score ?? 0,
+            permit_required: data.permit_required, permit_notes: data.permit_notes,
+            permit_fee: data.permit_fee, permit_website: data.permit_website,
+            permit_certainty: data.permit_certainty,
+          })
+          setActiveId(data.id)
+        })
+    }
+    // Strip the param so a refresh doesn't re-trigger this.
+    params.delete('loc')
+    const qs = params.toString()
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }, [dbLoading, locations])
+
+  async function adminEditLocation(locId: string) {
+    // Pull the full row so the edit modal has every column it expects to
+    // render (status, source, category, etc. aren't on the lightweight
+    // detailLoc shape).
+    const { data, error } = await supabase.from('locations')
+      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,status,rating,quality_score,source,created_at')
+      .eq('id', locId).single()
+    if (error || !data) { setToast('⚠ Could not load location for edit'); return }
+    setAdminEditLoc(data as any)
+  }
+  async function adminSaveLocation(updates: Partial<ManagedLocation>) {
+    if (!adminEditLoc) return
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch(`/api/admin/locations/${adminEditLoc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(updates),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { setToast(`⚠ ${j.error ?? 'Update failed'}`); return }
+    setAdminEditLoc(null)
+    setToast('✓ Saved')
+    // Refresh the detail panel + the loaded markers so the change is visible.
+    setLocations(prev => prev.map(l => String(l.id) === String(adminEditLoc.id) ? { ...l, ...j.location } : l))
+    if (detailLoc && String(detailLoc.id) === String(adminEditLoc.id)) {
+      setDetailLoc((prev: any) => prev ? { ...prev, ...j.location, name: j.location.name ?? prev.name } : prev)
+    }
+  }
+  async function adminDeleteLocation(locId: string) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch(`/api/admin/locations/${locId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { setToast(`⚠ ${j.error ?? 'Delete failed'}`); return }
+    setLocations(prev => prev.filter(l => String(l.id) !== String(locId)))
+    setDetailLoc(null)
+    setToast('Deleted')
+  }
 
   // When the user drops a pin via "Find Locations Near" or hits "Near me",
   // we filter and sort the list by distance to that reference point. searchPin
@@ -602,7 +698,10 @@ export default function ExplorePage() {
       </button>
 
       {detailLoc&&(
-        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} onOpenLightbox={openLightbox} user={user}/>
+        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} onOpenLightbox={openLightbox} user={user} isAdmin={isAdmin} onAdminEdit={adminEditLocation} onAdminDelete={adminDeleteLocation}/>
+      )}
+      {adminEditLoc&&(
+        <LocationEditModal loc={adminEditLoc} onClose={()=>setAdminEditLoc(null)} onSave={adminSaveLocation}/>
       )}
       {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={()=>setLightboxSrc(null)}/>
