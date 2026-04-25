@@ -552,14 +552,18 @@ export default function ClientPickerPage() {
               onPointerUp={onDetailHandlePointerUp}
               onPointerCancel={onDetailHandlePointerUp}
               style={{
-                display: 'flex', justifyContent: 'center',
-                padding: '12px 0 6px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                // Generous touch target — the gray bar is just the visual
+                // affordance; the whole strip (~56px tall) is draggable so
+                // users don't have to land on the bar exactly.
+                minHeight: 56,
+                padding: '4px 0',
                 // Own the gesture so the browser doesn't fire pull-to-refresh.
                 touchAction: 'none',
                 cursor: detailDragStart.current != null ? 'grabbing' : 'grab',
               }}
             >
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--sand)' }} />
+              <div style={{ width: 44, height: 5, borderRadius: 3, background: 'var(--sand)' }} />
             </div>
             <button onClick={() => setDetailLoc(null)} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: '50%', background: 'rgba(26,22,18,.6)', border: 'none', cursor: 'pointer', fontSize: 16, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>✕</button>
             <DetailPhotoGallery
