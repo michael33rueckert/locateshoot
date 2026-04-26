@@ -946,9 +946,15 @@ body {
   .share-grid { grid-template-columns: 1fr !important; height: auto !important; }
   .share-map  { height: 50vh !important; order: -1; }
 
-  /* Profile: sidebar collapses */
+  /* Profile: sidebar stays as a vertical 200px left column at tablet
+     (≤1024px). The earlier override flipped it to flex-direction:row
+     while still living inside a 200px grid column, which produced a
+     broken layout: the nav container with flex:1 took all remaining
+     row width (~50px), squashing the 8 stacked buttons into a ~50px
+     gutter beside the logo and pushing the avatar to row 2.
+     Inheriting the desktop column layout keeps buttons stacked
+     vertically below the logo as photographers expect. */
   .profile-grid { grid-template-columns: 1fr !important; }
-  .profile-sidebar { position: static !important; height: auto !important; display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; border-right: none !important; border-bottom: 1px solid var(--cream-dark) !important; }
 
   /* Home pricing grid — tablet: vertical stack so the cards aren't
      orphaned (Free/Starter side-by-side leaves Pro alone on row 2). */

@@ -7,9 +7,6 @@ import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import SavedTemplatesPanel from '@/components/SavedTemplatesPanel'
 
-interface Template {
-  id: string; name: string; body: string
-}
 
 interface HomeLocation {
   lat: number
@@ -54,7 +51,6 @@ const NAV_ITEMS = [
   { id: 'profile',     icon: '👤', label: 'Profile'                },
   { id: 'branding',    icon: '🎨', label: 'Branding'               },
   { id: 'domain',      icon: '🌐', label: 'Custom Domain'          },
-  { id: 'templates',   icon: '✉️',  label: 'Message Templates'      },
   { id: 'preferences', icon: '⚙',  label: 'Preferences'            },
   { id: 'billing',     icon: '💳', label: 'Subscription & Billing' },
   { id: 'password',    icon: '🔒', label: 'Password & Security'    },
@@ -87,16 +83,6 @@ export default function ProfilePage() {
   const [showStudioName, setShowStudioName] = useState(true)
   const [shareTagline,   setShareTagline]   = useState("Let's find your perfect spot together.")
   const logoInputRef = useRef<HTMLInputElement>(null)
-
-  const [templates,     setTemplates]     = useState<Template[]>([])
-  const [editingId,     setEditingId]     = useState<string | null>(null)
-  const [editName,      setEditName]      = useState('')
-  const [editBody,      setEditBody]      = useState('')
-  const [showNewForm,   setShowNewForm]   = useState(false)
-  const [newName,       setNewName]       = useState('')
-  const [newBody,       setNewBody]       = useState('')
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [templSaving,   setTemplSaving]   = useState(false)
 
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
   // Pro-only Pick page template (font/colors/header/background). Loaded
@@ -191,8 +177,6 @@ export default function ProfilePage() {
         if (p.website)         setWebsite(p.website)
       }
     }
-    const { data: tmplData } = await supabase.from('message_templates').select('id,name,body').eq('user_id', user.id).order('created_at', { ascending: true })
-    if (tmplData) setTemplates(tmplData)
   }, [])
 
   useEffect(() => { loadProfile() }, [loadProfile])
@@ -517,31 +501,6 @@ export default function ProfilePage() {
       await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
       setPrefs(updated)
     }
-  }
-
-  function startEdit(t: Template) { setEditingId(t.id); setEditName(t.name); setEditBody(t.body); setShowNewForm(false) }
-  function cancelEdit() { setEditingId(null); setEditName(''); setEditBody('') }
-
-  async function saveEdit() {
-    if (!editName.trim() || !editBody.trim() || !userId) return; setTemplSaving(true)
-    const { error } = await supabase.from('message_templates').update({ name: editName.trim(), body: editBody.trim() }).eq('id', editingId!)
-    if (!error) { setTemplates(prev => prev.map(t => t.id === editingId ? { ...t, name: editName.trim(), body: editBody.trim() } : t)); setEditingId(null); setToast('✓ Template saved!') }
-    else { setToast('⚠ Could not save') }
-    setTemplSaving(false)
-  }
-
-  async function addTemplate() {
-    if (!newName.trim() || !newBody.trim() || !userId) return; setTemplSaving(true)
-    const { data, error } = await supabase.from('message_templates').insert({ user_id: userId, name: newName.trim(), body: newBody.trim() }).select().single()
-    if (!error && data) { setTemplates(prev => [...prev, data]); setNewName(''); setNewBody(''); setShowNewForm(false); setToast('✓ Template created!') }
-    else { setToast('⚠ Could not save') }
-    setTemplSaving(false)
-  }
-
-  async function deleteTemplate(id: string) {
-    if (deleteConfirm !== id) { setDeleteConfirm(id); return }
-    const { error } = await supabase.from('message_templates').delete().eq('id', id)
-    if (!error) { setTemplates(prev => prev.filter(t => t.id !== id)); setDeleteConfirm(null); setToast('Template deleted') }
   }
 
   async function updatePassword() {
@@ -893,60 +852,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* ── TEMPLATES ── */}
-        {active === 'templates' && (
-          <div>
-            {sectionTitle('Message Templates', 'Reusable messages for your Location Guides.')}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-              {templates.length === 0 && !showNewForm && (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13, fontStyle: 'italic', background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)' }}>No templates yet — add your first one below.</div>
-              )}
-              {templates.map(t => (
-                <div key={t.id} style={{ background: 'white', border: `1px solid ${editingId === t.id ? 'var(--gold)' : 'var(--cream-dark)'}`, borderRadius: 10, overflow: 'hidden' }}>
-                  {editingId === t.id ? (
-                    <div style={{ padding: '1.25rem' }}>
-                      <div style={{ marginBottom: '.75rem' }}><label style={labelStyle}>Template name</label><input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} autoFocus /></div>
-                      <div style={{ marginBottom: '1rem' }}><label style={labelStyle}>Message body</label><textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={5} style={{ ...inputStyle, resize: 'vertical' }} /></div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={saveEdit} disabled={!editName.trim() || !editBody.trim() || templSaving} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '8px 20px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: !editName.trim() || !editBody.trim() || templSaving ? 0.5 : 1 }}>Save template</button>
-                        <button onClick={cancelEdit} style={{ background: 'transparent', color: 'var(--ink-soft)', padding: '8px 16px', borderRadius: 4, border: '1px solid var(--sand)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: '1.1rem 1.25rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-                        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{t.name}</div>
-                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                          <button onClick={() => startEdit(t)} style={{ padding: '4px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
-                          <button onClick={() => deleteTemplate(t.id)} style={{ padding: '4px 12px', borderRadius: 4, border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', background: deleteConfirm === t.id ? 'var(--rust)' : 'rgba(181,75,42,.08)', color: deleteConfirm === t.id ? 'white' : 'var(--rust)' }}>
-                            {deleteConfirm === t.id ? 'Confirm delete' : 'Delete'}
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65 }}>{t.body}</div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            {showNewForm ? (
-              <div style={{ background: 'white', border: '1.5px solid var(--gold)', borderRadius: 10, padding: '1.25rem' }}>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>New template</div>
-                <div style={{ marginBottom: '.75rem' }}><label style={labelStyle}>Template name</label><input value={newName} onChange={e => setNewName(e.target.value)} style={inputStyle} autoFocus /></div>
-                <div style={{ marginBottom: '1rem' }}><label style={labelStyle}>Message body</label><textarea value={newBody} onChange={e => setNewBody(e.target.value)} rows={5} style={{ ...inputStyle, resize: 'vertical' }} /></div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={addTemplate} disabled={!newName.trim() || !newBody.trim() || templSaving} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '8px 20px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: !newName.trim() || !newBody.trim() || templSaving ? 0.5 : 1 }}>Add template</button>
-                  <button onClick={() => { setShowNewForm(false); setNewName(''); setNewBody('') }} style={{ background: 'transparent', color: 'var(--ink-soft)', padding: '8px 16px', borderRadius: 4, border: '1px solid var(--sand)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => { setShowNewForm(true); setEditingId(null) }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 4, border: '1.5px dashed var(--sand)', background: 'transparent', fontSize: 13, fontWeight: 500, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', width: '100%', justifyContent: 'center' }}>
-                + Add new template
-              </button>
-            )}
-          </div>
-        )}
-
         {/* ── PREFERENCES ── */}
         {active === 'preferences' && (
           <div>
@@ -954,12 +859,10 @@ export default function ProfilePage() {
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1rem' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1.25rem' }}>Email notifications</div>
               {prefRow('Email me when a client picks a location', 'Get an instant email the moment your client chooses their favorite spot.', 'email_on_pick')}
-              {prefRow('Email me when a client views my Location Guide', 'Know when your client opens the link you sent them.', 'email_on_view')}
             </div>
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1rem' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1.25rem' }}>Location Guide defaults</div>
               {prefRow('Default to "only show my photos" when creating a guide', 'New Location Guides will default to showing only your uploaded photos.', 'my_photos_only')}
-              {prefRow('Always include nearby recommended locations', 'Automatically add well-rated public locations near the pin.', 'include_recommendations')}
             </div>
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>Default Location Guide expiry</div>
@@ -1276,14 +1179,11 @@ export default function ProfilePage() {
       <style>{`
         .profile-mobile-nav { display: none; }
         .profile-topnav-mobile { display: none; }
-        /* Tablet + mobile (≤1024px): the desktop sidebar back link
-           wraps to weird places when the sidebar collapses to a row,
-           so hide it there and rely on the inline back link at the
-           top of the main content area instead. */
-        @media (max-width: 1024px) {
-          .profile-sidebar-back { display: none !important; }
-          .profile-back-mobile { display: inline-flex !important; }
-        }
+        /* Mobile (≤768px) only: the sidebar is hidden entirely and
+           replaced with .profile-mobile-nav (a section dropdown), so
+           swap the sidebar back link for an inline one at the top of
+           the main content area. Tablet keeps the sidebar back link
+           since the sidebar itself stays visible there. */
         @media (max-width: 768px) {
           .profile-sidebar { display: none !important; }
           .profile-mobile-nav {
@@ -1293,6 +1193,7 @@ export default function ProfilePage() {
             padding: 1rem 1.25rem;
           }
           .profile-mobile-back { display: none !important; }
+          .profile-back-mobile { display: inline-flex !important; }
           .profile-topnav-mobile { display: block; }
         }
       `}</style>
