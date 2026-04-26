@@ -634,7 +634,15 @@ body {
   border-radius: var(--radius-lg);
   padding: 2rem;
   position: relative;
+  /* Equal-height cards with the CTA pinned to the bottom — Free has 6
+     bullets, Starter 7, Pro 5; without flex+auto-margin the buttons
+     would sit at staggered heights and the cards would look uneven. */
+  display: flex;
+  flex-direction: column;
 }
+.price-card .price-features { flex: 1 1 auto; }
+.price-card .btn,
+.price-card .price-note { flex-shrink: 0; }
 .price-card.is-featured { border-color: var(--gold); }
 
 .popular-badge {
@@ -894,7 +902,9 @@ body {
   .location-grid { grid-template-columns: repeat(2,1fr); }
   .how-grid { grid-template-columns: repeat(2,1fr); }
   .map-layout { grid-template-columns: 1fr; height: auto; }
-  .pricing-grid { grid-template-columns: 1fr; }
+  /* 3-card pricing grid: tablet keeps 2 cards per row, phones drop
+     to 1 (handled in the ≤768 block below). */
+  .pricing-grid { grid-template-columns: 1fr 1fr; }
   .venue-layout { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
 }
@@ -935,8 +945,8 @@ body {
   .profile-grid { grid-template-columns: 1fr !important; }
   .profile-sidebar { position: static !important; height: auto !important; display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; border-right: none !important; border-bottom: 1px solid var(--cream-dark) !important; }
 
-  /* Home pricing grid */
-  .pricing-grid { grid-template-columns: 1fr !important; }
+  /* Home pricing grid — tablet: 2 cards per row */
+  .pricing-grid { grid-template-columns: 1fr 1fr !important; }
 }
 
 /* ── Phone (≤768px) ── */

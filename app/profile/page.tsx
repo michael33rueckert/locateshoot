@@ -797,11 +797,11 @@ export default function ProfilePage() {
         {/* ── CUSTOM DOMAIN ── */}
         {active === 'domain' && (
           <div>
-            {sectionTitle('Custom Domain', 'Serve your client share links from your own domain (e.g. locations.yoursite.com).')}
+            {sectionTitle('Custom Domain', 'Serve your Location Guides from your own domain (e.g. locations.yoursite.com).')}
             {!isPro && (
               <div style={{ padding: '12px 14px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>⭐ Pro plan feature</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)', flex: 1, minWidth: 200 }}>Upgrade to use your own domain for share links.</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', flex: 1, minWidth: 200 }}>Upgrade to use your own domain for Location Guides.</div>
                 <Link href="/profile#billing" onClick={() => setActive('billing')} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>Upgrade</Link>
               </div>
             )}
@@ -935,7 +935,7 @@ export default function ProfilePage() {
         {/* ── TEMPLATES ── */}
         {active === 'templates' && (
           <div>
-            {sectionTitle('Message Templates', 'Reusable messages for your client share links.')}
+            {sectionTitle('Message Templates', 'Reusable messages for your Location Guides.')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
               {templates.length === 0 && !showNewForm && (
                 <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13, fontStyle: 'italic', background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)' }}>No templates yet — add your first one below.</div>
@@ -993,15 +993,15 @@ export default function ProfilePage() {
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1rem' }}>
               <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1.25rem' }}>Email notifications</div>
               {prefRow('Email me when a client picks a location', 'Get an instant email the moment your client chooses their favorite spot.', 'email_on_pick')}
-              {prefRow('Email me when a client views my share link', 'Know when your client opens the link you sent them.', 'email_on_view')}
+              {prefRow('Email me when a client views my Location Guide', 'Know when your client opens the link you sent them.', 'email_on_view')}
             </div>
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1rem' }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1.25rem' }}>Share link defaults</div>
-              {prefRow('Default to "only show my photos" when creating a share', 'New share links will default to showing only your uploaded photos.', 'my_photos_only')}
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1.25rem' }}>Location Guide defaults</div>
+              {prefRow('Default to "only show my photos" when creating a guide', 'New Location Guides will default to showing only your uploaded photos.', 'my_photos_only')}
               {prefRow('Always include nearby recommended locations', 'Automatically add well-rated public locations near the pin.', 'include_recommendations')}
             </div>
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>Default share link expiry</div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>Default Location Guide expiry</div>
               <select value={prefs.default_expiry} onChange={e => updatePref('default_expiry', e.target.value)} style={{ ...inputStyle, width: 200, cursor: 'pointer', appearance: 'none' }}>
                 <option value="7">7 days</option>
                 <option value="14">14 days</option>
@@ -1222,8 +1222,8 @@ export default function ProfilePage() {
               </div>
 
               <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>4. Your client share links switch automatically</div>
-                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>Once verified, all share links (both expiring and permanent) will use your domain. Clients see <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>locations.yoursite.com/pick/…</code> instead of locateshoot.com.</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>4. Your Location Guides switch automatically</div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>Once verified, all Location Guides (both expiring and permanent) will use your domain. Clients see <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>locations.yoursite.com/pick/…</code> instead of locateshoot.com.</div>
               </div>
 
               <div style={{ padding: '10px 12px', background: 'rgba(61,110,140,.06)', border: '1px solid rgba(61,110,140,.2)', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.6 }}>

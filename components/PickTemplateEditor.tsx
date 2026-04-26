@@ -7,6 +7,7 @@ import {
   FONT_OPTIONS,
   type PickTemplate,
   isValidHex,
+  googleFontHref,
 } from '@/lib/pick-template'
 
 // Pro-only Pick page template editor. Reads / writes profiles.pick_template.
@@ -115,6 +116,26 @@ export default function PickTemplateEditor({ userId, initial, isPro, onChange }:
     setBackground('image', pub.publicUrl)
   }
 
+  // Inject a Google Fonts <link> for the chosen font so the preview
+  // (and the layout mockups below) actually render in that face. The
+  // <link> stays in the document head — when the font changes we
+  // append a new one and remove the old. Browsers de-dupe identical
+  // hrefs, so flipping back to a previously-used font is instant.
+  const activeFont = tpl.font ?? DEFAULT_TEMPLATE.font
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const href = googleFontHref(activeFont)
+    if (!href) return
+    let link = document.querySelector(`link[data-pte-font="${activeFont}"]`) as HTMLLinkElement | null
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = href
+      link.setAttribute('data-pte-font', activeFont)
+      document.head.appendChild(link)
+    }
+  }, [activeFont])
+
   // Pull saved-template fields back into local state when the prop
   // changes (e.g. profile reload from another tab).
   useEffect(() => {
@@ -137,11 +158,11 @@ export default function PickTemplateEditor({ userId, initial, isPro, onChange }:
     return (
       <div style={{ background: 'var(--cream)', border: '1px solid var(--sand)', borderRadius: 10, padding: '1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>🎨 Pick page template</span>
+          <span style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>🎨 Location Guide template</span>
           <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)', fontWeight: 500 }}>Pro only</span>
         </div>
         <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>
-          Customize the layout, font, colors, and header of the Pick page so client share links match your studio's branding. Available on the Pro plan.
+          Customize the layout, font, colors, and header of your Location Guides so client-facing pages match your studio's branding. Available on the Pro plan.
         </div>
       </div>
     )
@@ -153,12 +174,53 @@ export default function PickTemplateEditor({ userId, initial, isPro, onChange }:
   ]
   const currentLayout = tpl.layout ?? DEFAULT_TEMPLATE.layout
 
+  // Live mockup colors — pulled from the resolved colors so the preview
+  // tiles repaint as the photographer adjusts the palette above.
+  const previewColors = {
+    bg:     isValidHex(colorDrafts.background) ? colorDrafts.background : DEFAULT_TEMPLATE.colors.background,
+    text:   isValidHex(colorDrafts.text)       ? colorDrafts.text       : DEFAULT_TEMPLATE.colors.text,
+    accent: isValidHex(colorDrafts.accent)     ? colorDrafts.accent     : DEFAULT_TEMPLATE.colors.accent,
+  }
+  // Stylized thumbnails of each layout — no actual photos, just shapes
+  // showing the proportions + arrangement so the photographer can see
+  // what each layout will look like before picking it.
+  function LayoutPreview({ kind }: { kind: 'card' | 'list' }) {
+    if (kind === 'card') {
+      return (
+        <div style={{ background: previewColors.bg, border: '1px solid rgba(0,0,0,.08)', borderRadius: 6, padding: 6, fontFamily: `'${activeFont}', serif` }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ background: 'white', borderRadius: 4, marginBottom: i === 0 ? 4 : 0, overflow: 'hidden' }}>
+              <div style={{ aspectRatio: '4 / 3', background: 'linear-gradient(135deg, #d4c5b0 0%, #a89c8d 100%)' }} />
+              <div style={{ padding: '4px 6px' }}>
+                <div style={{ height: 5, width: '70%', background: previewColors.text, opacity: .85, marginBottom: 3, borderRadius: 1 }} />
+                <div style={{ height: 3, width: '45%', background: previewColors.text, opacity: .35, borderRadius: 1 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+    return (
+      <div style={{ background: previewColors.bg, border: '1px solid rgba(0,0,0,.08)', borderRadius: 6, padding: 6, fontFamily: `'${activeFont}', serif` }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ background: 'white', borderRadius: 4, marginBottom: i < 2 ? 3 : 0, padding: 4, display: 'flex', gap: 5, alignItems: 'center' }}>
+            <div style={{ width: 22, height: 22, borderRadius: 3, background: 'linear-gradient(135deg, #d4c5b0 0%, #a89c8d 100%)', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ height: 4, width: '60%', background: previewColors.text, opacity: .85, marginBottom: 2, borderRadius: 1 }} />
+              <div style={{ height: 3, width: '40%', background: previewColors.text, opacity: .35, borderRadius: 1 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>🎨 Pick page template</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>Match the Pick page to your studio's branding. Saves automatically as you edit.</div>
+          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>🎨 Location Guide template</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>Match your Location Guides to your studio's branding. Saves automatically as you edit.</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--ink-soft)' }}>
           {saving ? '💾 Saving…' : savedAt ? '✓ Saved' : ''}
@@ -166,20 +228,38 @@ export default function PickTemplateEditor({ userId, initial, isPro, onChange }:
         </div>
       </div>
 
-      {/* Layout */}
+      {/* Layout — thumbnail cards (visual mockups) so the photographer
+          sees what each option looks like rather than picking blind
+          from a radio list. Mockups recolor live with the chosen
+          background / text / accent. */}
       <div style={{ marginBottom: '1.25rem' }}>
         <label style={labelStyle}>Layout</label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
           {layouts.map(opt => {
             const active = currentLayout === opt.value
             return (
-              <label key={opt.value} style={{ display: 'flex', gap: 10, padding: '10px 12px', borderRadius: 6, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--gold)' : 'var(--cream-dark)'}`, background: active ? 'rgba(196,146,42,.05)' : 'white', transition: 'all .15s' }}>
-                <input type="radio" name="layout" checked={active} onChange={() => setLayout(opt.value)} style={{ marginTop: 3, accentColor: 'var(--gold)' }} />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>{opt.label}</div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.45 }}>{opt.desc}</div>
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setLayout(opt.value)}
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                  padding: 10, borderRadius: 8, cursor: 'pointer',
+                  border: `2px solid ${active ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                  background: active ? 'rgba(196,146,42,.05)' : 'white',
+                  transition: 'all .15s', textAlign: 'left',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <LayoutPreview kind={opt.value} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `1.5px solid ${active ? 'var(--gold)' : 'var(--sand)'}`, background: active ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--ink)' }}>
+                    {active ? '✓' : ''}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{opt.label}</div>
                 </div>
-              </label>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.45 }}>{opt.desc}</div>
+              </button>
             )
           })}
         </div>
@@ -243,34 +323,22 @@ export default function PickTemplateEditor({ userId, initial, isPro, onChange }:
         </div>
       </div>
 
-      {/* Header */}
+      {/* Header — logo placement + intro override. The "show studio
+          name" toggle lives in the Branding section above (one global
+          setting that applies to all guides), not duplicated here. */}
       <div style={{ marginBottom: '1.25rem' }}>
         <label style={labelStyle}>Header</label>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Logo placement</div>
-            <select
-              value={tpl.header?.logoPlacement ?? DEFAULT_TEMPLATE.header.logoPlacement}
-              onChange={e => setHeader('logoPlacement', e.target.value as 'left' | 'center' | 'hidden')}
-              style={{ ...inputStyle, cursor: 'pointer' }}
-            >
-              <option value="left">Left</option>
-              <option value="center">Center</option>
-              <option value="hidden">Hide logo</option>
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Studio name</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, cursor: 'pointer', background: 'white' }}>
-              <input
-                type="checkbox"
-                checked={tpl.header?.showStudioName ?? DEFAULT_TEMPLATE.header.showStudioName}
-                onChange={e => setHeader('showStudioName', e.target.checked)}
-                style={{ accentColor: 'var(--gold)' }}
-              />
-              <span style={{ fontSize: 13, color: 'var(--ink)' }}>Show studio name</span>
-            </label>
-          </div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Logo placement</div>
+          <select
+            value={tpl.header?.logoPlacement ?? DEFAULT_TEMPLATE.header.logoPlacement}
+            onChange={e => setHeader('logoPlacement', e.target.value as 'left' | 'center' | 'hidden')}
+            style={{ ...inputStyle, cursor: 'pointer', maxWidth: 240 }}
+          >
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="hidden">Hide logo</option>
+          </select>
         </div>
         <div>
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Intro line (optional)</div>

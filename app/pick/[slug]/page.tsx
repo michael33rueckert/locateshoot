@@ -229,8 +229,8 @@ export default function ClientPickerPage() {
         const json = await res.json()
         if (!res.ok) {
           setError(json.error === 'expired'
-            ? 'This share link has expired. Please ask your photographer for a new one.'
-            : 'This share link could not be found.')
+            ? 'This Location Guide has expired. Please ask your photographer for a new one.'
+            : 'This Location Guide could not be found.')
           return
         }
         const { share, branding, locations: locs, secrets, pickTemplate: tpl } = json

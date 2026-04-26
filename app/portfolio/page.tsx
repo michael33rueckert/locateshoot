@@ -214,7 +214,7 @@ export default function PortfolioPage() {
               My Portfolio
             </h1>
             <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, maxWidth: 560, lineHeight: 1.6 }}>
-              Your curated locations. These are what clients see on every share link you send — keep each one loaded up with your best photos and notes.
+              Your curated locations. These are what clients see on every Location Guide you send — keep each one loaded up with your best photos and notes.
             </p>
           </div>
           <div className="portfolio-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>

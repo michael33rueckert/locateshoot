@@ -88,7 +88,7 @@ begin
 
   if active_count >= 1 then
     raise exception 'free_plan_link_limit'
-      using hint = 'Free plan allows 1 active custom share link. Upgrade to Starter for unlimited links.',
+      using hint = 'Free plan allows 1 active custom Location Guide. Upgrade to Starter for unlimited guides.',
             errcode = 'P0001';
   end if;
 

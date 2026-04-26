@@ -49,14 +49,20 @@ function PricingTiers({ onSignup }: { onSignup: () => void }) {
   const proYearly      = '$21'   // $250/yr ÷ 12 ≈ $20.83
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: '1.75rem' }}>
-        <span style={{ fontSize: 13, color: !yearly ? 'var(--ink)' : 'var(--ink-soft)', fontWeight: !yearly ? 500 : 400 }}>Monthly</span>
-        <div onClick={() => setYearly(p => !p)} style={{ width: 40, height: 22, borderRadius: 11, background: yearly ? 'var(--gold)' : 'var(--cream-dark)', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
-          <div style={{ position: 'absolute', top: 3, left: yearly ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+      {/* Toggle pill — solid white card with shadow so it stands out
+          against the cream pricing section. The track color flips
+          ink/gold (high contrast) instead of cream-dark (which was
+          too subtle to see). */}
+      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <div onClick={() => setYearly(p => !p)} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderRadius: 999, background: 'white', border: '1px solid var(--sand)', boxShadow: '0 2px 6px rgba(26,22,18,.08)', cursor: 'pointer' }}>
+          <span style={{ fontSize: 13, color: !yearly ? 'var(--ink)' : 'var(--ink-soft)', fontWeight: !yearly ? 600 : 400 }}>Monthly</span>
+          <div style={{ width: 44, height: 24, borderRadius: 12, background: yearly ? 'var(--gold)' : 'var(--ink)', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+            <div style={{ position: 'absolute', top: 2, left: yearly ? 22 : 2, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+          </div>
+          <span style={{ fontSize: 13, color: yearly ? 'var(--ink)' : 'var(--ink-soft)', fontWeight: yearly ? 600 : 400 }}>
+            Yearly <span style={{ fontSize: 11, color: 'var(--sage)', fontWeight: 700, marginLeft: 2 }}>Save ~16%</span>
+          </span>
         </div>
-        <span style={{ fontSize: 13, color: yearly ? 'var(--ink)' : 'var(--ink-soft)', fontWeight: yearly ? 500 : 400 }}>
-          Yearly <span style={{ fontSize: 11, color: 'var(--sage)', fontWeight: 600 }}>Save ~16%</span>
-        </span>
       </div>
 
       <div className="pricing-grid">
@@ -106,7 +112,7 @@ function PricingTiers({ onSignup }: { onSignup: () => void }) {
           <div className="price-period">{yearly ? 'Billed $250/year · cancel anytime' : 'Billed monthly · cancel anytime'}</div>
           <ul className="price-features">
             <li>Everything in Starter</li>
-            <li>🌐 <strong>Custom domain</strong> — share links on <code>locations.yoursite.com</code></li>
+            <li>🌐 <strong>Custom domain</strong> — Location Guides on <code>locations.yoursite.com</code></li>
             <li>🎨 <strong>White-label share pages</strong> — your logo, not ours</li>
             <li>🖌 <strong>Customizable Pick page templates</strong> — layout, font, colors, header</li>
             <li>Custom message &amp; branding</li>
@@ -245,7 +251,7 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <button className="btn btn-gold btn-lg"  onClick={() => openModal('signup')}>Join Free — Set Up Your Share Link</button>
+                <button className="btn btn-gold btn-lg"  onClick={() => openModal('signup')}>Join Free — Set Up Your Location Guide</button>
                 <button className="btn btn-ghost btn-lg" onClick={() => openModal('login')}>Sign In</button>
               </>
             )}
@@ -388,9 +394,14 @@ export default function HomePage() {
       <section className="section pricing-section" id="pricing">
         <div className="pricing-center">
           <div className="section-eyebrow" style={{ justifyContent: 'center' }}>Simple, honest pricing</div>
-          <h2 className="section-title">Free to start.<br /><em>Starter</em> to grow. <em>Pro</em> to brand.</h2>
-          <p className="section-sub" style={{ margin: '0 auto' }}>
-            Three tiers — start with what fits today, upgrade when you outgrow it.
+          {/* Title kept on a single phrase per line. <wbr> hint after
+              "Starter" lets browsers break there if absolutely needed
+              (narrow phones) but won't orphan single words. The
+              non-breaking space before "it." prevents that single
+              short word from wrapping alone on its own line. */}
+          <h2 className="section-title">Free to start.<br /><em>Starter</em> to grow.&nbsp;<em>Pro</em> to brand.</h2>
+          <p className="section-sub" style={{ margin: '0 auto', textWrap: 'balance' as any }}>
+            Three tiers — start with what fits today, upgrade when you outgrow&nbsp;it.
           </p>
         </div>
 

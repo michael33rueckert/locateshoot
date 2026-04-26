@@ -168,7 +168,7 @@ export default function AuthModal({ initialMode, onClose }: Props) {
              'Reset your password'}
           </div>
           <div style={{ fontSize: 13, color: 'rgba(245,240,232,.45)', fontWeight: 300, marginBottom: '1.5rem', lineHeight: 1.5 }}>
-            {mode === 'login'  ? 'Sign in to access your dashboard and share links.' :
+            {mode === 'login'  ? 'Sign in to access your dashboard and Location Guides.' :
              mode === 'signup' ? 'Join photographers discovering great locations.' :
              mode === 'mfa'    ? 'Open your authenticator app and enter the 6-digit code for LocateShoot.' :
              "Enter your email and we'll send you a reset link."}
