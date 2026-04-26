@@ -6,7 +6,7 @@
 // the Pick page falls back to DEFAULTS for anything missing, so a
 // half-configured template still renders correctly.
 
-export type LayoutKind = 'card' | 'list'
+export type LayoutKind = 'card' | 'list' | 'grid' | 'magazine' | 'minimal'
 
 export interface PickTemplate {
   layout?:     LayoutKind
@@ -114,3 +114,72 @@ export interface SavedTemplate {
   created_at: string
   updated_at: string
 }
+
+// Curated preset templates the photographer can start from when
+// creating a new template. Each is a complete config — picking one
+// fills in font/colors/layout/header all at once. They can edit
+// further from there.
+export interface PresetTemplate {
+  id:          string
+  name:        string
+  description: string
+  config:      PickTemplate
+}
+
+export const PRESETS: PresetTemplate[] = [
+  {
+    id: 'classic-editorial',
+    name: 'Classic Editorial',
+    description: 'Warm cream + gold with a serif voice. Reads like a wedding magazine.',
+    config: {
+      layout: 'card',
+      font:   'Playfair Display',
+      colors: { background: '#f9f6f1', text: '#1a1612', accent: '#c4922a', accentText: '#1a1612' },
+      header: { logoPlacement: 'left' },
+    },
+  },
+  {
+    id: 'modern-minimal',
+    name: 'Modern Minimal',
+    description: 'Crisp white + black with a clean sans-serif. No-frills and editorial.',
+    config: {
+      layout: 'minimal',
+      font:   'Inter',
+      colors: { background: '#ffffff', text: '#0a0a0a', accent: '#0a0a0a', accentText: '#ffffff' },
+      header: { logoPlacement: 'center' },
+    },
+  },
+  {
+    id: 'romantic-wedding',
+    name: 'Romantic Wedding',
+    description: 'Soft blush palette with a delicate serif. Built for engagement + bridal flows.',
+    config: {
+      layout: 'magazine',
+      font:   'Cormorant Garamond',
+      colors: { background: '#faf3ee', text: '#3a2a2a', accent: '#c08a8a', accentText: '#ffffff' },
+      header: { logoPlacement: 'center' },
+    },
+  },
+  {
+    id: 'bold-studio',
+    name: 'Bold Studio',
+    description: 'Dark dramatic with an editorial display face. For studios that want to make a statement.',
+    config: {
+      layout: 'grid',
+      font:   'Fraunces',
+      colors: { background: '#1a1612', text: '#f5f0e8', accent: '#d4a76a', accentText: '#1a1612' },
+      header: { logoPlacement: 'left' },
+    },
+  },
+  {
+    id: 'warm-boho',
+    name: 'Warm Boho',
+    description: 'Earth tones with a friendly serif. Great for outdoor + family sessions.',
+    config: {
+      layout: 'card',
+      font:   'Lora',
+      colors: { background: '#f4ede0', text: '#3d3026', accent: '#a16b3d', accentText: '#ffffff' },
+      header: { logoPlacement: 'left' },
+    },
+  },
+]

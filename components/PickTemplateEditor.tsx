@@ -6,9 +6,11 @@ import {
   DEFAULT_TEMPLATE,
   FONT_OPTIONS,
   type PickTemplate,
+  type LayoutKind,
   isValidHex,
   googleFontHref,
 } from '@/lib/pick-template'
+import TemplatePreview from '@/components/TemplatePreview'
 
 // Pro-only Location Guide template editor. Saves debounced as the
 // photographer edits — no manual Save button.
@@ -74,7 +76,7 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
     setSavedAt(Date.now())
   }
 
-  function setLayout(layout: 'card' | 'list') {
+  function setLayout(layout: LayoutKind) {
     const next = { ...tpl, layout }
     setTpl(next); scheduleSave(next)
   }
@@ -174,51 +176,29 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
     )
   }
 
-  const layouts: { value: 'card' | 'list'; label: string; desc: string }[] = [
-    { value: 'card', label: 'Card', desc: 'Tall photo per location with name + meta below (default).' },
-    { value: 'list', label: 'Compact list', desc: 'Smaller thumbnail on the left, info on the right. Denser.' },
+  const layouts: { value: LayoutKind; label: string; desc: string }[] = [
+    { value: 'card',     label: 'Card',          desc: 'Tall photo per location with name + meta below.' },
+    { value: 'grid',     label: 'Grid',          desc: 'Two-column tiled gallery — fits more on screen.' },
+    { value: 'magazine', label: 'Magazine',      desc: 'Hero photo on top, smaller cards beneath.' },
+    { value: 'list',     label: 'Compact list',  desc: 'Small thumbnail on the left, info + button on the right.' },
+    { value: 'minimal',  label: 'Minimal',       desc: 'Text-forward rows with thumbnail + view link.' },
   ]
   const currentLayout = tpl.layout ?? DEFAULT_TEMPLATE.layout
 
-  // Live mockup colors — pulled from the resolved colors so the preview
-  // tiles repaint as the photographer adjusts the palette above.
-  const previewColors = {
-    bg:     isValidHex(colorDrafts.background) ? colorDrafts.background : DEFAULT_TEMPLATE.colors.background,
-    text:   isValidHex(colorDrafts.text)       ? colorDrafts.text       : DEFAULT_TEMPLATE.colors.text,
-    accent: isValidHex(colorDrafts.accent)     ? colorDrafts.accent     : DEFAULT_TEMPLATE.colors.accent,
-  }
-  // Stylized thumbnails of each layout — no actual photos, just shapes
-  // showing the proportions + arrangement so the photographer can see
-  // what each layout will look like before picking it.
-  function LayoutPreview({ kind }: { kind: 'card' | 'list' }) {
-    if (kind === 'card') {
-      return (
-        <div style={{ background: previewColors.bg, border: '1px solid rgba(0,0,0,.08)', borderRadius: 6, padding: 6, fontFamily: `'${activeFont}', serif` }}>
-          {[0, 1].map(i => (
-            <div key={i} style={{ background: 'white', borderRadius: 4, marginBottom: i === 0 ? 4 : 0, overflow: 'hidden' }}>
-              <div style={{ aspectRatio: '4 / 3', background: 'linear-gradient(135deg, #d4c5b0 0%, #a89c8d 100%)' }} />
-              <div style={{ padding: '4px 6px' }}>
-                <div style={{ height: 5, width: '70%', background: previewColors.text, opacity: .85, marginBottom: 3, borderRadius: 1 }} />
-                <div style={{ height: 3, width: '45%', background: previewColors.text, opacity: .35, borderRadius: 1 }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )
-    }
-    return (
-      <div style={{ background: previewColors.bg, border: '1px solid rgba(0,0,0,.08)', borderRadius: 6, padding: 6, fontFamily: `'${activeFont}', serif` }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{ background: 'white', borderRadius: 4, marginBottom: i < 2 ? 3 : 0, padding: 4, display: 'flex', gap: 5, alignItems: 'center' }}>
-            <div style={{ width: 22, height: 22, borderRadius: 3, background: 'linear-gradient(135deg, #d4c5b0 0%, #a89c8d 100%)', flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ height: 4, width: '60%', background: previewColors.text, opacity: .85, marginBottom: 2, borderRadius: 1 }} />
-              <div style={{ height: 3, width: '40%', background: previewColors.text, opacity: .35, borderRadius: 1 }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    )
+  // Build a "live" template snapshot from the in-editor state — uses
+  // valid color drafts when available so the preview repaints on every
+  // valid color tweak without waiting for the debounced save. Falls
+  // back to the resolved template for invalid drafts so the preview
+  // never breaks mid-edit.
+  const livePreview: PickTemplate = {
+    ...tpl,
+    colors: {
+      ...(tpl.colors ?? {}),
+      background: isValidHex(colorDrafts.background) ? colorDrafts.background : tpl.colors?.background,
+      text:       isValidHex(colorDrafts.text)       ? colorDrafts.text       : tpl.colors?.text,
+      accent:     isValidHex(colorDrafts.accent)     ? colorDrafts.accent     : tpl.colors?.accent,
+      accentText: isValidHex(colorDrafts.accentText) ? colorDrafts.accentText : tpl.colors?.accentText,
+    },
   }
 
   return (
@@ -234,13 +214,12 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
         </div>
       </div>
 
-      {/* Layout — thumbnail cards (visual mockups) so the photographer
-          sees what each option looks like rather than picking blind
-          from a radio list. Mockups recolor live with the chosen
-          background / text / accent. */}
+      {/* Layout — thumbnail cards rendered with TemplatePreview so each
+          option shows the actual layout proportions + the photographer's
+          current colors and font. Click a card to apply that layout. */}
       <div style={{ marginBottom: '1.25rem' }}>
         <label style={labelStyle}>Layout</label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           {layouts.map(opt => {
             const active = currentLayout === opt.value
             return (
@@ -250,21 +229,21 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
                 onClick={() => setLayout(opt.value)}
                 style={{
                   display: 'flex', flexDirection: 'column', gap: 8,
-                  padding: 10, borderRadius: 8, cursor: 'pointer',
+                  padding: 8, borderRadius: 8, cursor: 'pointer',
                   border: `2px solid ${active ? 'var(--gold)' : 'var(--cream-dark)'}`,
                   background: active ? 'rgba(196,146,42,.05)' : 'white',
                   transition: 'all .15s', textAlign: 'left',
                   fontFamily: 'inherit',
                 }}
               >
-                <LayoutPreview kind={opt.value} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `1.5px solid ${active ? 'var(--gold)' : 'var(--sand)'}`, background: active ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--ink)' }}>
+                <TemplatePreview template={{ ...livePreview, layout: opt.value }} variant="thumb" studioName="Studio" intro="Pick a location" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 2px' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0, border: `1.5px solid ${active ? 'var(--gold)' : 'var(--sand)'}`, background: active ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--ink)' }}>
                     {active ? '✓' : ''}
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{opt.label}</div>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.45 }}>{opt.desc}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.4, padding: '0 2px' }}>{opt.desc}</div>
               </button>
             )
           })}
@@ -394,6 +373,18 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
             <input ref={fileRef} type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) handleBgUpload(f); if (fileRef.current) fileRef.current.value = '' }} style={{ display: 'none' }} />
           </div>
         )}
+      </div>
+
+      {/* Live preview — full-width mock of how the Pick page will
+          render with the current settings. Updates on every keystroke
+          so the photographer sees changes immediately without having
+          to open a real share link in another tab. */}
+      <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--cream-dark)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={labelStyle}>Live preview</label>
+          <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontStyle: 'italic' }}>How clients will see it</span>
+        </div>
+        <TemplatePreview template={livePreview} variant="panel" />
       </div>
 
       {error && (

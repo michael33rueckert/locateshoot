@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import PickTemplateEditor from '@/components/PickTemplateEditor'
+import TemplatePreview from '@/components/TemplatePreview'
 import type { SavedTemplate } from '@/lib/pick-template'
+import { PRESETS } from '@/lib/pick-template'
 
 // Pro-tier UI for managing multiple named Location Guide templates.
 // Lists the photographer's saved templates, lets them pick which one to
@@ -31,6 +33,10 @@ export default function SavedTemplatesPanel({ userId, isPro }: Props) {
   const [error,     setError]     = useState<string | null>(null)
   const [renaming,  setRenaming]  = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  // When true the panel shows the starting-template gallery instead
+  // of the saved-templates list. The "+ New template" button toggles
+  // this on; picking a preset (or "Blank template") closes it.
+  const [showGallery, setShowGallery] = useState(false)
 
   const load = useCallback(async () => {
     if (!userId || !isPro) return
@@ -60,24 +66,30 @@ export default function SavedTemplatesPanel({ userId, isPro }: Props) {
 
   useEffect(() => { load() }, [load])
 
-  async function addTemplate() {
-    setError(null)
+  async function createFromPreset(presetId: string | null) {
+    setError(null); setShowGallery(false)
+    const preset = presetId ? PRESETS.find(p => p.id === presetId) : null
     // First template a user adds becomes default automatically. After
     // that, new templates start non-default — they have to explicitly
     // promote one.
     const isFirst = templates.length === 0
-    const name    = `Template ${templates.length + 1}`
+    const name    = preset ? preset.name : `Custom template ${templates.length + 1}`
+    const config  = preset ? preset.config : {}
     const { data, error } = await supabase
       .from('pick_templates')
-      .insert({ user_id: userId, name, config: {}, is_default: isFirst })
+      .insert({ user_id: userId, name, config, is_default: isFirst })
       .select('id,user_id,name,config,is_default,created_at,updated_at')
       .single()
     if (error || !data) { setError(error?.message ?? 'Could not add template'); return }
     const next = [data as SavedTemplate, ...templates]
     setTemplates(next)
     setActiveId(data.id)
-    setRenaming(data.id)
-    setRenameValue(name)
+    // Auto-rename only when the user picked Blank — preset names are
+    // already meaningful so they don't need to be edited up front.
+    if (!preset) {
+      setRenaming(data.id)
+      setRenameValue(name)
+    }
   }
 
   async function deleteTemplate(id: string) {
@@ -152,17 +164,75 @@ export default function SavedTemplatesPanel({ userId, isPro }: Props) {
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>🎨 Location Guide templates</div>
           <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Save multiple templates and pick one per Location Guide. Mark one as your default — guides without an explicit template fall back to it.</div>
         </div>
-        <button onClick={addTemplate} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ New template</button>
+        <button onClick={() => setShowGallery(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ New template</button>
       </div>
+
+      {/* Starting-template gallery — shown when "+ New template" is
+          clicked. Each preset is a one-click apply that fills in the
+          full config (font/colors/layout/header) for the new template,
+          which the photographer can then edit further. "Blank
+          template" creates an unconfigured row that defaults to the
+          existing Pick page render until edited. */}
+      {showGallery && (
+        <div style={{ marginBottom: '1.25rem', padding: '1rem', background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>Pick a starting template</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>You'll be able to customize everything after — font, colors, layout, header.</div>
+            </div>
+            <button onClick={() => setShowGallery(false)} style={{ background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Cancel</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+            {PRESETS.map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => createFromPreset(preset.id)}
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                  padding: 8, borderRadius: 8, cursor: 'pointer',
+                  border: '1px solid var(--cream-dark)', background: 'white',
+                  textAlign: 'left', fontFamily: 'inherit',
+                  transition: 'all .15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(196,146,42,.15)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}
+              >
+                <TemplatePreview template={preset.config} variant="thumb" studioName="Studio" intro="Pick your location" />
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', padding: '0 2px' }}>{preset.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.4, padding: '0 2px' }}>{preset.description}</div>
+              </button>
+            ))}
+            {/* Blank option — start from defaults and build from scratch. */}
+            <button
+              type="button"
+              onClick={() => createFromPreset(null)}
+              style={{
+                display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', justifyContent: 'center',
+                padding: 12, borderRadius: 8, cursor: 'pointer',
+                border: '1px dashed var(--sand)', background: 'transparent',
+                fontFamily: 'inherit', minHeight: 140,
+                transition: 'all .15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.background = 'rgba(196,146,42,.04)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--sand)'; e.currentTarget.style.background = 'transparent' }}
+            >
+              <div style={{ fontSize: 32, color: 'var(--ink-soft)', lineHeight: 1 }}>+</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>Blank template</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.4, textAlign: 'center' }}>Start from scratch.</div>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Template list — each row is clickable to switch the editor
           below to that template. The active one is highlighted. */}
       {loading ? (
         <div style={{ padding: '1rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)' }}>Loading templates…</div>
-      ) : templates.length === 0 ? (
+      ) : templates.length === 0 && !showGallery ? (
         <div style={{ padding: '1.25rem', textAlign: 'center', background: 'var(--cream)', border: '1px dashed var(--cream-dark)', borderRadius: 8 }}>
-          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 8 }}>No templates yet — create one to start customizing your Location Guide pages.</div>
-          <button onClick={addTemplate} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add your first template</button>
+          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 8 }}>No templates yet — pick a starting style to customize your Location Guide pages.</div>
+          <button onClick={() => setShowGallery(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Browse starting templates →</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: '1.25rem' }}>
