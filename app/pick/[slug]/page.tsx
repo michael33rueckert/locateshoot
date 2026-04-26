@@ -1075,7 +1075,11 @@ function DetailPhotoGallery({
   const activePhotos = tab === 'photographer' ? photographerPhotos : googlePhotos
   const hasPhotos    = activePhotos.length > 0
   const hasMultiple  = activePhotos.length > 1
-  const heroHeight   = 'clamp(260px, 44vw, 380px)' // closer to a natural photo aspect ratio
+  // 4:3 aspect ratio matches the list-card thumbs and a typical
+  // landscape photo, so neither the top of someone's head nor the
+  // foreground gets cropped. Width follows the panel (max 580px), so
+  // the rendered hero is ~280-435px tall depending on viewport.
+  const heroAspect   = '4 / 3'
   const stripRef     = useRef<HTMLDivElement>(null)
 
   // Keep the idx counter + thumbnail-row highlight in sync with the hero's
@@ -1106,7 +1110,7 @@ function DetailPhotoGallery({
 
   return (
     <>
-      <div className={hasPhotos ? undefined : loc.bg} style={{ height: heroHeight, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
+      <div className={hasPhotos ? undefined : loc.bg} style={{ width: '100%', aspectRatio: heroAspect, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
         {hasPhotos ? (
           <div
             ref={stripRef}
