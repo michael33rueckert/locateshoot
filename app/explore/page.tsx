@@ -393,9 +393,15 @@ export default function ExplorePage() {
       if(error||!inserted)throw error??new Error('Insert failed')
       setPortfolioSources(prev=>{const n=new Map(prev);n.set(key,String(inserted.id));return n})
       setToast('✓ Added! Next: upload your own pro photos from the dashboard.')
-    } catch(e){
+    } catch(e: any){
       console.error(e)
-      setToast('⚠ Could not add to portfolio — please try again')
+      // The free-plan 5-location cap is enforced by a DB trigger.
+      // Surface a clear upgrade message instead of a generic failure.
+      if (typeof e?.message === 'string' && e.message.includes('free_plan_location_cap')) {
+        setToast('⚠ Free plan allows 5 portfolio locations. Upgrade to Starter for unlimited.')
+      } else {
+        setToast('⚠ Could not add to portfolio — please try again')
+      }
     }
   }
 

@@ -192,10 +192,11 @@ export async function POST(request: Request) {
     }
   }
 
-  // Photographer's white-label state. Pro users with remove_ls_branding
-  // see emails from "Studio Name" instead of LocateShoot, with their
-  // accent color used in CTAs and the LocateShoot footer hidden.
+  // Plan tiers — Starter+ unlocks the client confirmation email and
+  // permit-info-on-shares; Pro additionally unlocks white-label
+  // branding (no LocateShoot footer + studio name in From).
   const prefs           = (profile?.preferences as any) ?? {}
+  const isPaid          = profile?.plan === 'starter' || profile?.plan === 'pro' || profile?.plan === 'Pro'
   const isPro           = profile?.plan === 'pro' || profile?.plan === 'Pro'
   const whiteLabel      = isPro && !!prefs.remove_ls_branding
   const studioName      = (prefs.studio_name as string | undefined)?.trim() || profile?.full_name?.trim() || ''
@@ -289,7 +290,7 @@ export async function POST(request: Request) {
   try {
     if (!email) {
       clientEmailResult = { ok: true, skipped: 'no-email' }
-    } else if (!isPro) {
+    } else if (!isPaid) {
       clientEmailResult = { ok: true, skipped: 'free-plan' }
     } else if (email && profile) {
       const subject = names.length === 1

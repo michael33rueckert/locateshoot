@@ -9,6 +9,7 @@ import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import CreateLocationGuideModal from '@/components/CreateLocationGuideModal'
 import LocationGuideCard from '@/components/LocationGuideCard'
 import UpgradePrompt from '@/components/UpgradePrompt'
+import { hasStarter, freePortfolioLocationCap } from '@/lib/plan'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio as shareFullPortfolioFn } from '@/lib/portfolio-share'
 import { thumbUrl } from '@/lib/image'
@@ -37,6 +38,11 @@ export default function DashboardPage() {
   // 1-custom-link cap — shows an inline upgrade prompt instead of the
   // create modal so they don't fill out a form they can't submit.
   const [showQuotaUpgrade,      setShowQuotaUpgrade]      = useState(false)
+  // Same pattern for the 5-portfolio-location cap. Surfaces an inline
+  // upgrade prompt when a Free user is at the cap and tries to add
+  // another location, instead of letting them open the Add modal and
+  // then hit a database trigger error on save.
+  const [showCapUpgrade,        setShowCapUpgrade]        = useState(false)
   const [editingPortfolioId,  setEditingPortfolioId]   = useState<string | null>(null)
   const [editingPermLink,     setEditingPermLink]      = useState<PermanentLink | null>(null)
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
@@ -380,7 +386,7 @@ export default function DashboardPage() {
                     // the upgrade prompt instead of opening the create
                     // modal — saves them filling out a form they'd hit
                     // a wall on saving.
-                    const isProUser = profile?.plan === 'pro' || profile?.plan === 'Pro'
+                    const isProUser = hasStarter(profile?.plan)
                     const customCount = customGuides.length
                     if (!isProUser && customCount >= 1) {
                       setShowQuotaUpgrade(true)
@@ -444,7 +450,7 @@ export default function DashboardPage() {
                   <div style={{ position: 'relative' }}>
                     <div style={{ padding: '1rem 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
                       {previewCards.map((card, i) => {
-                        const isProUser = profile?.plan === 'pro' || profile?.plan === 'Pro'
+                        const isProUser = hasStarter(profile?.plan)
                         // Analytics live on the underlying share_link row
                         // for custom guides; the synthesized portfolio
                         // guide reuses its own share_link's metrics when
@@ -518,10 +524,32 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Your curated locations — shown to clients on share links.</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => setShowAddPortfolio(true)} style={{ padding: '8px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Add new location</button>
+                  <button
+                    onClick={() => {
+                      // Free plan caps portfolio at 5 locations. If they're
+                      // at the cap, show the upgrade prompt instead of
+                      // opening the Add modal — saves them filling out a
+                      // form that would just hit the trigger error.
+                      if (!hasStarter(profile?.plan) && portfolioLocs.length >= freePortfolioLocationCap()) {
+                        setShowCapUpgrade(true)
+                        return
+                      }
+                      setShowAddPortfolio(true)
+                    }}
+                    style={{ padding: '8px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                  >+ Add new location</button>
                   <Link href="/explore" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>Browse Explore →</Link>
                 </div>
               </div>
+              {showCapUpgrade && (
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
+                  <UpgradePrompt
+                    feature="unlimited portfolio locations"
+                    description={`The Free plan includes up to ${freePortfolioLocationCap()} portfolio locations. Upgrade to Starter for unlimited locations and unlimited share guides.`}
+                  />
+                  <button onClick={() => setShowCapUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
+                </div>
+              )}
               {portfolioLocs.length === 0 ? (
                 <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
                   <div style={{ fontSize: 36, marginBottom: 12 }}>📍</div>

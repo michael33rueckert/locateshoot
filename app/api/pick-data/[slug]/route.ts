@@ -71,11 +71,12 @@ export async function GET(request: Request, context: any) {
     branding = prof?.preferences ?? null
     photographerPlan = (prof as any)?.plan ?? null
   }
-  // Permit info ("Permit verified", fee, notes, website) is a Pro feature.
-  // For Free photographers we strip those fields from every location in
-  // the response so the client share page hides the permit row entirely
-  // — no "Ask your photographer" placeholder shown either.
-  const isProPhotographer = photographerPlan === 'pro' || photographerPlan === 'Pro'
+  // Permit info ("Permit verified", fee, notes, website) is a Starter+
+  // feature — photographers on Free can't surface it to clients on
+  // share pages. For Free shares we strip those fields from every
+  // location in the response so the client UI hides the permit row
+  // entirely (no "Ask your photographer" placeholder shown either).
+  const isProPhotographer = photographerPlan === 'starter' || photographerPlan === 'pro' || photographerPlan === 'Pro'
 
   let locations: any[] = []
   let secrets: any[] = []

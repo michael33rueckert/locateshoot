@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
-import { getStripe, isProActive } from '@/lib/stripe'
+import { getStripe, isProActive, tierFromPriceId } from '@/lib/stripe'
 
 // Stripe webhook — single source of truth for profiles.plan. Every
 // subscription state change (created, updated, deleted, payment failed,
@@ -61,8 +61,18 @@ async function syncSubscription(db: ReturnType<typeof admin>, sub: Stripe.Subscr
   const renewsAt     = cancelDate
     ?? (periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null)
 
+  // Map the subscription's price ID back to one of our tiers so the
+  // photographer's plan reflects what they're actually paying for.
+  // tierFromPriceId returns null for prices we don't recognize (e.g.
+  // a stale env-var mismatch) — in that case we leave them as the
+  // safe default of 'starter' rather than blocking access on a
+  // misconfigured server.
+  const itemPriceId = sub.items?.data?.[0]?.price?.id ?? null
+  const tier        = tierFromPriceId(itemPriceId) ?? 'starter'
+  const planValue   = active ? tier : 'free'
+
   await db.from('profiles').update({
-    plan:                       active ? 'pro' : 'free',
+    plan:                       planValue,
     stripe_customer_id:         customerId,
     stripe_subscription_id:     sub.id,
     stripe_subscription_status: sub.status,

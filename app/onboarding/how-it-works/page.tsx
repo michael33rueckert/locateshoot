@@ -230,7 +230,18 @@ export default function HowItWorksPage() {
       }))
       const { data: existing } = await supabase.from('portfolio_locations').select('source_location_id').eq('user_id', userId)
       const existingSet = new Set((existing ?? []).map((r: any) => r.source_location_id).filter(Boolean))
-      const fresh = rows.filter(r => !existingSet.has(r.source_location_id))
+      let fresh = rows.filter(r => !existingSet.has(r.source_location_id))
+      // Free-plan 5-location cap. New signups default to Free, and the
+      // picker auto-pre-selects the top 12 — without this, the trigger
+      // would reject the whole batch when the photographer is brand new.
+      // Slice to whatever room they have left so the rest of the
+      // walkthrough can still proceed.
+      const { data: prof } = await supabase.from('profiles').select('plan').eq('id', userId).single()
+      const isFree = !prof || (prof.plan !== 'starter' && prof.plan !== 'pro' && prof.plan !== 'Pro')
+      if (isFree) {
+        const room = Math.max(0, 5 - existingSet.size)
+        if (fresh.length > room) fresh = fresh.slice(0, room)
+      }
       if (fresh.length > 0) await supabase.from('portfolio_locations').insert(fresh as any)
       await markOnboarded()
       setPickerDone(true)

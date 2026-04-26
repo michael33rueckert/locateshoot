@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getStripe, getPriceId, type Cadence } from '@/lib/stripe'
+import { getStripe, getPriceId, type Cadence, type Tier } from '@/lib/stripe'
+import { hasPro, hasStarter } from '@/lib/plan'
 
 // Create a Stripe Checkout Session for the Pro upgrade and return its URL.
 // The client redirects the user to that URL; success/cancel both come
@@ -16,7 +17,11 @@ function admin() {
 }
 
 export async function POST(request: Request) {
-  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_BASE_PRICE_ID || !process.env.STRIPE_PREMIUM_PRICE_ID) {
+  // Required env vars across the four (tier, cadence) combos. Legacy
+  // STRIPE_BASE_/PREMIUM_PRICE_ID names are honored as Starter monthly
+  // and yearly fallbacks via getPriceId, so check by attempting the
+  // resolution rather than hard-coding env-name knowledge here.
+  if (!process.env.STRIPE_SECRET_KEY) {
     return NextResponse.json({ error: 'server_misconfigured', message: 'Stripe is not fully configured. Contact support.' }, { status: 500 })
   }
 
@@ -28,6 +33,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
+  const tier: Tier       = body?.tier    === 'pro'    ? 'pro'    : 'starter'
   const cadence: Cadence = body?.cadence === 'yearly' ? 'yearly' : 'monthly'
 
   const { data: profile } = await db
@@ -36,10 +42,17 @@ export async function POST(request: Request) {
     .eq('id', user.id)
     .single()
 
-  // Already on Pro — kick to billing portal instead so they manage the
-  // existing subscription rather than starting a duplicate.
-  if ((profile?.plan === 'pro' || profile?.plan === 'Pro') && profile?.stripe_customer_id) {
-    return NextResponse.json({ alreadyPro: true })
+  // Already on a paid tier — kick to billing portal instead so they
+  // manage the existing subscription rather than starting a duplicate.
+  // (Switching tiers happens through the portal's "switch plan" flow.)
+  if ((hasStarter(profile?.plan) || hasPro(profile?.plan)) && profile?.stripe_customer_id) {
+    return NextResponse.json({ alreadyPaid: true })
+  }
+
+  let priceId: string
+  try { priceId = getPriceId(tier, cadence) }
+  catch (e: any) {
+    return NextResponse.json({ error: 'price_misconfigured', message: e?.message ?? 'Price not configured.' }, { status: 500 })
   }
 
   const stripe = getStripe()
@@ -54,14 +67,23 @@ export async function POST(request: Request) {
     ...(profile?.stripe_customer_id
       ? { customer: profile.stripe_customer_id }
       : { customer_email: user.email ?? profile?.email ?? undefined }),
-    line_items: [{ price: getPriceId(cadence), quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     // Embed the Supabase user id so the webhook can map back to a row
-    // even if the customer was created mid-checkout.
+    // even if the customer was created mid-checkout. Tier + cadence are
+    // also embedded for diagnostic visibility in Stripe dashboards.
     client_reference_id: user.id,
-    metadata: { supabase_user_id: user.id, cadence },
+    metadata: { supabase_user_id: user.id, tier, cadence },
     subscription_data: {
-      metadata: { supabase_user_id: user.id, cadence },
+      metadata: { supabase_user_id: user.id, tier, cadence },
+      // Pro tier gets a 14-day free trial; Starter does not (it's the
+      // entry paid tier and Free already exists for trial-style usage).
+      // The card is collected at checkout but no charge happens until
+      // day 15 (or never if the user cancels in time).
+      ...(tier === 'pro' ? { trial_period_days: 14 } : {}),
     },
+    // Card required up front even for the Pro trial — Stripe will
+    // honor trial_period_days but still collect payment details now.
+    payment_method_collection: 'always',
     success_url: `${returnUrl}?checkout=success`,
     cancel_url:  `${returnUrl}?checkout=cancel`,
     allow_promotion_codes: true,

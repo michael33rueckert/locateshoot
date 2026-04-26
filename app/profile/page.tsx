@@ -141,7 +141,15 @@ export default function ProfilePage() {
   const [senderError,   setSenderError]   = useState('')
   const [showSenderHelp,setShowSenderHelp]= useState(false)
 
-  const isPro = plan === 'pro' || plan === 'Pro'
+  // Tier predicates. isPro is the strict "Pro tier only" check used by
+  // custom-domain, white-label, and custom-sending-email gates. isPaid
+  // is "any paid tier" — a Starter user shouldn't see Free upgrade
+  // banners just because they're not on Pro.
+  const isPaid     = plan === 'starter' || plan === 'pro' || plan === 'Pro'
+  const isPro      = plan === 'pro' || plan === 'Pro'
+  const isStarter  = plan === 'starter'
+  const tierLabel  = isPro ? 'Pro' : isStarter ? 'Starter' : 'Free'
+  const tierPrice  = isPro ? '$25' : isStarter ? '$12' : '$0'
 
   useEffect(() => {
     const hash = window.location.hash.replace('#', '')
@@ -611,8 +619,8 @@ export default function ProfilePage() {
             }
             <div>
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{fullName || 'Your Name'}</div>
-              <span style={{ padding: '1px 6px', borderRadius: 20, fontSize: 10, background: isPro ? 'rgba(196,146,42,.12)' : 'var(--cream-dark)', color: isPro ? 'var(--gold)' : 'var(--ink-soft)', border: isPro ? '1px solid rgba(196,146,42,.2)' : 'none', fontWeight: 500 }}>
-                {isPro ? '⭐ Pro' : 'Free'}
+              <span style={{ padding: '1px 6px', borderRadius: 20, fontSize: 10, background: isPaid ? 'rgba(196,146,42,.12)' : 'var(--cream-dark)', color: isPaid ? 'var(--gold)' : 'var(--ink-soft)', border: isPaid ? '1px solid rgba(196,146,42,.2)' : 'none', fontWeight: 500 }}>
+                {isPro ? '⭐ Pro' : isStarter ? '✦ Starter' : 'Free'}
               </span>
             </div>
           </div>
@@ -981,19 +989,19 @@ export default function ProfilePage() {
             {sectionTitle('Subscription & Billing', 'Manage your plan.')}
             <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 12 }}>
               <div>
-                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--cream)', marginBottom: 3 }}>{isPro ? 'Pro Plan' : 'Free Plan'}</div>
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--cream)', marginBottom: 3 }}>{tierLabel} Plan</div>
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,.45)' }}>
-                  {isPro
+                  {isPaid
                     ? cancelAtPeriodEnd
                       ? `Cancels on ${planRenewsAt ? new Date(planRenewsAt).toLocaleDateString() : 'period end'} — won't renew`
                       : planRenewsAt
                         ? `Renews ${new Date(planRenewsAt).toLocaleDateString()}`
                         : 'Active subscription'
-                    : 'Upgrade to unlock all Pro features'}
+                    : 'Upgrade to Starter or Pro for the full toolset'}
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 28, fontWeight: 700, color: 'var(--gold)' }}>{isPro ? '$12' : '$0'}</div>
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 28, fontWeight: 700, color: 'var(--gold)' }}>{tierPrice}</div>
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,.4)' }}>/month</div>
               </div>
             </div>

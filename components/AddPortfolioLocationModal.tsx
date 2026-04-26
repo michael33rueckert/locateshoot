@@ -105,7 +105,18 @@ export default function AddPortfolioLocationModal({
       error    = retry.error
     }
 
-    if (error || !inserted) { setSaving(false); setErr(error?.message ?? 'Could not add location.'); return }
+    if (error || !inserted) {
+      setSaving(false)
+      // The free-plan 5-location cap is enforced by a DB trigger. Catch
+      // its specific exception name and surface a clear upgrade message
+      // instead of the raw "free_plan_location_cap" string.
+      if (typeof error?.message === 'string' && error.message.includes('free_plan_location_cap')) {
+        setErr('Free plan allows up to 5 portfolio locations. Upgrade to Starter for unlimited locations.')
+      } else {
+        setErr(error?.message ?? 'Could not add location.')
+      }
+      return
+    }
 
     // Upload any pending photos against the new portfolio_location_id. Failures
     // here are non-fatal — the row is already saved; we just warn.
