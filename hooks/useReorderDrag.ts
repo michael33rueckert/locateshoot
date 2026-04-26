@@ -47,113 +47,140 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
   const draggingRef = useRef<string | null>(null)
   const overRef     = useRef<string | null>(null)
 
-  function bindItem(id: string) {
-    return {
-      'data-reorder-id': id,
-      // Swallow native long-press / drag behaviors that would otherwise
-      // hijack the gesture before we can enter drag mode. onContextMenu
-      // kills the Android "Copy / Open in new tab" sheet; onDragStart
-      // kills the HTML5 drag that `<img>` children kick off by default.
-      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
-      onDragStart:   (e: React.DragEvent)  => e.preventDefault(),
-      onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
-        // Only primary button for mouse; any touch/pen counts.
-        if (e.pointerType === 'mouse' && e.button !== 0) return
+  // Long-press + pointer-capture handler shared by bindItem (whole-row
+  // drag) and bindHandle (drag-by-grip). When `fromHandle` is true the
+  // long-press wait is skipped — grabbing a dedicated handle is
+  // unambiguous intent, no need to disambiguate from a scroll. The
+  // handle owns the gesture from the first touch.
+  function buildOnPointerDown(id: string, opts: { fromHandle: boolean }) {
+    return (e: React.PointerEvent<HTMLElement>) => {
+      // Only primary button for mouse; any touch/pen counts.
+      if (e.pointerType === 'mouse' && e.button !== 0) return
 
-        const startX    = e.clientX
-        const startY    = e.clientY
-        const pointerId = e.pointerId
-        const target    = e.currentTarget as HTMLElement
-        const origTouchAction = target.style.touchAction
-        let moved = false
+      const pointerId = e.pointerId
+      const target    = e.currentTarget as HTMLElement
+      const origTouchAction = target.style.touchAction
 
-        // Phase 1: long-press detection. We watch for pointer movement
-        // or release before the timer fires so a scroll gesture doesn't
-        // accidentally start a drag.
-        const checkMove = (ev: PointerEvent) => {
-          if (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8) {
-            moved = true
+      // Drag-mode entry. Pulled out so we can call it either after the
+      // long-press timer (whole-row mode) or immediately on touch
+      // (handle mode).
+      function enterDragMode() {
+        try { target.setPointerCapture(pointerId) } catch {}
+        target.style.touchAction = 'none'
+
+        draggingRef.current = id
+        overRef.current = null
+        setDraggingId(id)
+        setOverId(null)
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try { (navigator as any).vibrate(30) } catch {}
+        }
+
+        const handleMove = (ev: PointerEvent) => {
+          ev.preventDefault()
+          // elementsFromPoint returns every element at the point in
+          // z-order. The dragged card sits on top (finger is on it), so
+          // skip past it and look for the first sibling card beneath.
+          const stack = document.elementsFromPoint
+            ? document.elementsFromPoint(ev.clientX, ev.clientY)
+            : []
+          let hoverId: string | null = null
+          for (const el of stack) {
+            const card = (el as Element).closest?.('[data-reorder-id]') as HTMLElement | null
+            if (!card) continue
+            const candidate = card.getAttribute('data-reorder-id')
+            if (candidate && candidate !== draggingRef.current) { hoverId = candidate; break }
+          }
+          if (hoverId !== overRef.current) {
+            overRef.current = hoverId
+            setOverId(hoverId)
           }
         }
-        const cancelPress = () => {
-          clearTimeout(timerId)
-          window.removeEventListener('pointermove', checkMove)
-          window.removeEventListener('pointerup', cancelPress)
-          window.removeEventListener('pointercancel', cancelPress)
-        }
 
-        window.addEventListener('pointermove', checkMove)
-        window.addEventListener('pointerup', cancelPress)
-        window.addEventListener('pointercancel', cancelPress)
-
-        const timerId = window.setTimeout(() => {
-          if (moved) { cancelPress(); return }
-
-          // Phase 2 bookkeeping — swap listeners synchronously.
-          window.removeEventListener('pointermove', checkMove)
-          window.removeEventListener('pointerup', cancelPress)
-          window.removeEventListener('pointercancel', cancelPress)
-
-          // Lock the pointer and the element to us. Doing this in the
-          // same synchronous tick as setDraggingId prevents the browser's
-          // own long-press / context-menu logic from stealing the
-          // gesture between now and the next render.
-          try { target.setPointerCapture(pointerId) } catch {}
-          target.style.touchAction = 'none'
-
-          draggingRef.current = id
+        const finish = (commit: boolean) => {
+          const from = draggingRef.current
+          const to   = overRef.current
+          if (commit && from && to && from !== to) reorder(from, to)
+          draggingRef.current = null
           overRef.current = null
-          setDraggingId(id)
+          setDraggingId(null)
           setOverId(null)
-          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-            try { (navigator as any).vibrate(30) } catch {}
-          }
+          target.style.touchAction = origTouchAction
+          try { target.releasePointerCapture(pointerId) } catch {}
+          window.removeEventListener('pointermove', handleMove)
+          window.removeEventListener('pointerup', handleUp)
+          window.removeEventListener('pointercancel', handleCancel)
+        }
+        const handleUp     = () => finish(true)
+        const handleCancel = () => finish(false)
 
-          const handleMove = (ev: PointerEvent) => {
-            ev.preventDefault()
-            // elementsFromPoint returns every element at the point in
-            // z-order. The dragged card sits on top (finger is on it), so
-            // skip past it and look for the first sibling card beneath.
-            const stack = document.elementsFromPoint
-              ? document.elementsFromPoint(ev.clientX, ev.clientY)
-              : []
-            let hoverId: string | null = null
-            for (const el of stack) {
-              const card = (el as Element).closest?.('[data-reorder-id]') as HTMLElement | null
-              if (!card) continue
-              const candidate = card.getAttribute('data-reorder-id')
-              if (candidate && candidate !== draggingRef.current) { hoverId = candidate; break }
-            }
-            if (hoverId !== overRef.current) {
-              overRef.current = hoverId
-              setOverId(hoverId)
-            }
-          }
+        window.addEventListener('pointermove', handleMove, { passive: false })
+        window.addEventListener('pointerup', handleUp)
+        window.addEventListener('pointercancel', handleCancel)
+      }
 
-          const finish = (commit: boolean) => {
-            const from = draggingRef.current
-            const to   = overRef.current
-            if (commit && from && to && from !== to) reorder(from, to)
-            draggingRef.current = null
-            overRef.current = null
-            setDraggingId(null)
-            setOverId(null)
-            target.style.touchAction = origTouchAction
-            try { target.releasePointerCapture(pointerId) } catch {}
-            window.removeEventListener('pointermove', handleMove)
-            window.removeEventListener('pointerup', handleUp)
-            window.removeEventListener('pointercancel', handleCancel)
-          }
-          const handleUp     = () => finish(true)
-          const handleCancel = () => finish(false)
+      // Handle mode: skip the long-press wait. The user grabbed a
+      // dedicated drag handle, so go straight into drag.
+      if (opts.fromHandle) {
+        e.preventDefault()
+        e.stopPropagation()
+        enterDragMode()
+        return
+      }
 
-          window.addEventListener('pointermove', handleMove, { passive: false })
-          window.addEventListener('pointerup', handleUp)
-          window.addEventListener('pointercancel', handleCancel)
-        }, 320)
-      },
+      // Whole-row mode: long-press detection. We watch for pointer
+      // movement or release before the timer fires so a scroll gesture
+      // doesn't accidentally start a drag.
+      const startX = e.clientX
+      const startY = e.clientY
+      let moved = false
+      const checkMove = (ev: PointerEvent) => {
+        if (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8) {
+          moved = true
+        }
+      }
+      const cancelPress = () => {
+        clearTimeout(timerId)
+        window.removeEventListener('pointermove', checkMove)
+        window.removeEventListener('pointerup', cancelPress)
+        window.removeEventListener('pointercancel', cancelPress)
+      }
+      window.addEventListener('pointermove', checkMove)
+      window.addEventListener('pointerup', cancelPress)
+      window.addEventListener('pointercancel', cancelPress)
+      const timerId = window.setTimeout(() => {
+        if (moved) { cancelPress(); return }
+        window.removeEventListener('pointermove', checkMove)
+        window.removeEventListener('pointerup', cancelPress)
+        window.removeEventListener('pointercancel', cancelPress)
+        enterDragMode()
+      }, 320)
     }
   }
 
-  return { draggingId, overId, bindItem }
+  function bindItem(id: string) {
+    return {
+      'data-reorder-id': id,
+      // Swallow native long-press / drag behaviors.
+      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+      onDragStart:   (e: React.DragEvent)  => e.preventDefault(),
+      onPointerDown: buildOnPointerDown(id, { fromHandle: false }),
+    }
+  }
+
+  // Optional dedicated drag-handle binding. Use this on a small grip
+  // element inside the row when the row also needs to be vertically
+  // scrollable — touching the body scrolls naturally; touching the
+  // handle drags immediately. The row should still get bindItem so
+  // hit-testing can identify it as a drop target.
+  function bindHandle(id: string) {
+    return {
+      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+      onDragStart:   (e: React.DragEvent)  => e.preventDefault(),
+      onPointerDown: buildOnPointerDown(id, { fromHandle: true }),
+      style: { touchAction: 'none' as const },
+    }
+  }
+
+  return { draggingId, overId, bindItem, bindHandle }
 }

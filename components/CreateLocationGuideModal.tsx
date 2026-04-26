@@ -95,6 +95,10 @@ export default function CreateLocationGuideModal({
   // Loaded from the existing guide on edit (see effect below); enforced
   // <= MAX_HIGHLIGHTS in toggleHighlight.
   const [highlightedIds, setHighlightedIds] = useState<string[]>([])
+  // Set to true on save when the highlighted_location_ids column is
+  // missing in Supabase — surfaces a notice to the user so they know
+  // their stars weren't actually persisted.
+  const [highlightsDropped, setHighlightsDropped] = useState(false)
   const [message,        setMessage]        = useState('')
   const [expirationMode, setExpirationMode] = useState<ExpirationMode>('never')
   const [expiresDate,    setExpiresDate]    = useState('') // yyyy-mm-dd
@@ -257,8 +261,11 @@ export default function CreateLocationGuideModal({
           .single()
         if (updateErr && /highlighted_location_ids/.test(updateErr.message ?? '')) {
           // Migration 20260425_share_link_highlights.sql not run yet —
-          // retry without that column. Highlights silently get dropped.
+          // retry without that column. Highlights get dropped, and we
+          // surface a notice to the user so they know to run the
+          // migration instead of assuming their stars were saved.
           console.warn('share_links.highlighted_location_ids missing — saving without highlights (run migration to enable)')
+          if (validHighlights.length > 0) setHighlightsDropped(true)
           const fb = await supabase.from('share_links').update(updatePayload).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
           data = fb.data; updateErr = fb.error
         }
@@ -289,6 +296,7 @@ export default function CreateLocationGuideModal({
         .single()
       if (insertErr && /highlighted_location_ids/.test(insertErr.message ?? '')) {
         console.warn('share_links.highlighted_location_ids missing — creating without highlights (run migration to enable)')
+        if (validHighlights.length > 0) setHighlightsDropped(true)
         const fb = await supabase.from('share_links').insert(insertBase).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
         data = fb.data; insertErr = fb.error
       }
@@ -434,25 +442,38 @@ export default function CreateLocationGuideModal({
                     const hl = isHighlighted(id)
                     const isDragging = reorderDrag.draggingId === id
                     const isOver     = reorderDrag.overId === id && reorderDrag.draggingId && reorderDrag.draggingId !== id
-                    const bind       = reorderDrag.bindItem(id)
+                    const itemBind   = reorderDrag.bindItem(id)
+                    const handleBind = reorderDrag.bindHandle(id)
                     const atCap      = highlightedIds.length >= MAX_HIGHLIGHTS && !hl
                     return (
                       <div key={id}
-                        {...bind}
+                        // bindItem only attaches data-reorder-id (for
+                        // drop-target hit testing) + cancel context menu.
+                        // Pointer events go on the grip handle below so
+                        // touching the row body still scrolls the modal.
+                        {...itemBind}
+                        onPointerDown={undefined}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10,
                           padding: '9px 14px',
                           borderBottom: i < selectedIds.length - 1 ? '1px solid var(--cream-dark)' : 'none',
                           background: isOver ? 'rgba(196,146,42,.12)' : isDragging ? 'rgba(196,146,42,.06)' : 'white',
                           opacity: isDragging ? 0.5 : 1,
-                          touchAction: 'pan-y',
                           userSelect: 'none',
                           WebkitUserSelect: 'none',
                           WebkitTouchCallout: 'none',
-                          cursor: isDragging ? 'grabbing' : 'grab',
                           transition: 'background .12s',
                         }}>
-                        <span style={{ fontSize: 14, color: 'var(--ink-soft)', flexShrink: 0, fontVariantNumeric: 'tabular-nums', minWidth: 18, textAlign: 'center' }} aria-hidden>⋮⋮</span>
+                        {/* Dedicated drag handle. Has touch-action: none
+                            (via bindHandle's style) so dragging it never
+                            triggers page scroll, regardless of direction.
+                            The rest of the row uses default touch-action
+                            so the modal scrolls normally. */}
+                        <span
+                          {...handleBind}
+                          aria-label="Drag to reorder"
+                          style={{ ...handleBind.style, fontSize: 14, color: 'var(--ink-soft)', flexShrink: 0, minWidth: 22, textAlign: 'center', cursor: isDragging ? 'grabbing' : 'grab', padding: '6px 4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                        >⋮⋮</span>
                         <div className={thumb ? undefined : BG_CYCLE[i % BG_CYCLE.length]} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0, overflow: 'hidden', position: 'relative', background: thumb ? 'var(--cream-dark)' : undefined }}>
                           {thumb && <img src={thumb} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                         </div>
@@ -593,6 +614,11 @@ export default function CreateLocationGuideModal({
             )}
           </div>
 
+          {highlightsDropped && (
+            <div style={{ padding: '8px 12px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 6, fontSize: 12, color: 'var(--ink)', marginBottom: '1rem', lineHeight: 1.5 }}>
+              ⚠ Saved, but the <strong>★ Recommended</strong> picks weren't stored — that feature needs the <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>20260425_share_link_highlights.sql</code> migration to be applied to your Supabase database.
+            </div>
+          )}
           {error && <div style={{ padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem' }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: 10 }}>
