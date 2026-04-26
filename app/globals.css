@@ -660,8 +660,13 @@ body {
 .price-period { font-size: 13px; color: var(--ink-soft); font-weight: 300; margin-bottom: 1.5rem; }
 
 .price-features { list-style: none; margin-bottom: 1.5rem; }
-.price-features li { font-size: 14px; color: var(--ink-mid); padding: 5px 0; display: flex; align-items: flex-start; gap: 8px; line-height: 1.4; }
-.price-features li::before { content: '✓'; color: var(--sage); font-weight: 700; flex-shrink: 0; }
+/* Grid layout (checkmark | content) so inline elements like <code> or
+   <strong> inside the content cell stay in normal text flow instead of
+   becoming additional flex items — the latter caused odd wrapping in
+   bullets that mixed regular text with inline code (e.g. the Pro
+   custom-domain bullet). */
+.price-features li { font-size: 14px; color: var(--ink-mid); padding: 5px 0; display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; line-height: 1.4; }
+.price-features li::before { content: '✓'; color: var(--sage); font-weight: 700; line-height: 1.4; }
 .price-features li.dim { color: var(--ink-soft); }
 .price-features li.dim::before { content: '—'; color: var(--sand); }
 
@@ -902,9 +907,9 @@ body {
   .location-grid { grid-template-columns: repeat(2,1fr); }
   .how-grid { grid-template-columns: repeat(2,1fr); }
   .map-layout { grid-template-columns: 1fr; height: auto; }
-  /* 3-card pricing grid: tablet keeps 2 cards per row, phones drop
-     to 1 (handled in the ≤768 block below). */
-  .pricing-grid { grid-template-columns: 1fr 1fr; }
+  /* 3-card pricing grid: tablet stacks vertically — 2-up looked
+     unbalanced because the third card spilled to its own row. */
+  .pricing-grid { grid-template-columns: 1fr; max-width: 480px; }
   .venue-layout { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
 }
@@ -945,8 +950,9 @@ body {
   .profile-grid { grid-template-columns: 1fr !important; }
   .profile-sidebar { position: static !important; height: auto !important; display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; border-right: none !important; border-bottom: 1px solid var(--cream-dark) !important; }
 
-  /* Home pricing grid — tablet: 2 cards per row */
-  .pricing-grid { grid-template-columns: 1fr 1fr !important; }
+  /* Home pricing grid — tablet: vertical stack so the cards aren't
+     orphaned (Free/Starter side-by-side leaves Pro alone on row 2). */
+  .pricing-grid { grid-template-columns: 1fr !important; max-width: 480px !important; }
 }
 
 /* ── Phone (≤768px) ── */
@@ -988,8 +994,9 @@ body {
 
   /* PRICING */
   .pricing-section { padding: 3rem 1.25rem !important; }
-  .pricing-grid    { grid-template-columns: 1fr !important; gap: 1rem !important; }
+  .pricing-grid    { grid-template-columns: 1fr !important; max-width: 100% !important; gap: 1rem !important; }
   .price-card.is-featured { order: -1; }
+  .price-card { padding: 1.5rem !important; }
 
   /* COMMUNITY */
   .community-section { padding: 3rem 1.25rem !important; }

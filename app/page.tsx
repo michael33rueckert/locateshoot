@@ -112,9 +112,9 @@ function PricingTiers({ onSignup }: { onSignup: () => void }) {
           <div className="price-period">{yearly ? 'Billed $250/year · cancel anytime' : 'Billed monthly · cancel anytime'}</div>
           <ul className="price-features">
             <li>Everything in Starter</li>
-            <li>🌐 <strong>Custom domain</strong> — Location Guides on <code>locations.yoursite.com</code></li>
-            <li>🎨 <strong>White-label share pages</strong> — your logo, not ours</li>
-            <li>🖌 <strong>Customizable Pick page templates</strong> — layout, font, colors, header</li>
+            <li>🌐 <strong>Custom domain</strong> for your Location Guides</li>
+            <li>🎨 <strong>White-label pages</strong> — your logo, not ours</li>
+            <li>🖌 <strong>Customizable Location Guide templates</strong> — layout, font, colors</li>
             <li>Custom message &amp; branding</li>
           </ul>
           <button className="btn btn-dark" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={onSignup}>
