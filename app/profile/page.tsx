@@ -52,7 +52,7 @@ const DEFAULT_PREFS: Preferences = {
 
 const NAV_ITEMS = [
   { id: 'profile',     icon: '👤', label: 'Profile'                },
-  { id: 'branding',    icon: '🎨', label: 'Location Guide Layouts' },
+  { id: 'branding',    icon: '🎨', label: 'Branding'               },
   { id: 'domain',      icon: '🌐', label: 'Custom Domain'          },
   { id: 'templates',   icon: '✉️',  label: 'Message Templates'      },
   { id: 'preferences', icon: '⚙',  label: 'Preferences'            },
@@ -639,6 +639,11 @@ export default function ProfilePage() {
       {/* MAIN CONTENT — className enables mobile full-width */}
       <div className="profile-main">
 
+        {/* Back link visible on tablet + mobile (≤1024px). On desktop the
+            sidebar already hosts a "Back to dashboard" link, so this one
+            is hidden via .profile-back-mobile in the page <style> block. */}
+        <Link href="/dashboard" className="profile-back-mobile" style={{ fontSize: 13, color: 'var(--ink-soft)', textDecoration: 'none', display: 'none', alignItems: 'center', gap: 4, marginBottom: '1rem' }}>← Back to dashboard</Link>
+
         {/* Mobile nav — section dropdown (hamburger above handles dashboard/explore/etc.) */}
         <div className="profile-mobile-nav">
           <label style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--ink-soft)', display: 'block', marginBottom: 4 }}>Section</label>
@@ -703,12 +708,12 @@ export default function ProfilePage() {
         {/* ── BRANDING ── */}
         {active === 'branding' && (
           <div>
-            {sectionTitle('Location Guide Layouts', 'Build and manage the templates that style the Location Guides you send to clients.')}
+            {sectionTitle('Branding', 'Your studio logo and the layout templates that style the Location Guides you send to clients.')}
             <div style={{ background: isPro ? 'white' : 'var(--cream)', border: `1px solid ${isPro ? 'var(--cream-dark)' : 'var(--sand)'}`, borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    🎨 White-label share pages
+                    🎨 White-label Location Guides
                     {!isPro && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)', fontWeight: 500 }}>Pro only</span>}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>Your logo replaces the LocateShoot branding on client share pages.</div>
@@ -734,23 +739,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>Share page display</div>
-              <label onClick={() => setShowStudioName(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: '1rem' }}>
-                <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${showStudioName ? 'var(--gold)' : 'var(--sand)'}`, background: showStudioName ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>
-                  {showStudioName ? '✓' : ''}
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Show studio name on client share pages</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>Displays your studio name in the share page header</div>
-                </div>
-              </label>
-              <div>
-                <label style={labelStyle}>Tagline shown on share pages</label>
-                <input value={shareTagline} onChange={e => setShareTagline(e.target.value)} style={inputStyle} placeholder="e.g. Let's find your perfect spot together." />
-              </div>
-            </div>
-
             <button onClick={saveBranding} disabled={saving} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 24px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Saving…' : 'Save branding'}
             </button>
@@ -760,7 +748,8 @@ export default function ProfilePage() {
                 actual styling editor. Each template saves itself, so
                 the panel sits below the branding save button as its
                 own card. */}
-            <div style={{ marginTop: '2rem' }}>
+            <div style={{ marginTop: '2.5rem' }}>
+              {sectionTitle('Layout Templates', 'Design how your Location Guides look — layout, font, colors, header. Saved templates are picked per guide.')}
               <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} />
             </div>
           </div>
@@ -1287,6 +1276,14 @@ export default function ProfilePage() {
       <style>{`
         .profile-mobile-nav { display: none; }
         .profile-topnav-mobile { display: none; }
+        /* Tablet + mobile (≤1024px): the desktop sidebar back link
+           wraps to weird places when the sidebar collapses to a row,
+           so hide it there and rely on the inline back link at the
+           top of the main content area instead. */
+        @media (max-width: 1024px) {
+          .profile-sidebar-back { display: none !important; }
+          .profile-back-mobile { display: inline-flex !important; }
+        }
         @media (max-width: 768px) {
           .profile-sidebar { display: none !important; }
           .profile-mobile-nav {

@@ -901,7 +901,7 @@ export default function ClientPickerPage() {
                 onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
                 placeholder="First name"
                 autoComplete="given-name"
-                style={{ padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+                style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
               />
               <input
                 value={clientLastName}
@@ -909,7 +909,7 @@ export default function ClientPickerPage() {
                 onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
                 placeholder="Last name"
                 autoComplete="family-name"
-                style={{ padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+                style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
               />
             </div>
             <input ref={emailRef} type="email" value={clientEmail} onChange={e => { setClientEmail(e.target.value); setEmailError('') }}
