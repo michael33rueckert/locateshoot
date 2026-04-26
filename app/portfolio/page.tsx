@@ -59,7 +59,7 @@ export default function PortfolioPage() {
       if (profileData) setProfile(profileData as any)
       const { data: rows } = await supabase
         .from('portfolio_locations')
-        .select('id,source_location_id,name,city,state,is_secret,created_at,sort_order')
+        .select('id,source_location_id,name,city,state,latitude,longitude,is_secret,created_at,sort_order')
         .eq('user_id', user.id)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
@@ -120,13 +120,19 @@ export default function PortfolioPage() {
       // and why sessionStorage caches the resolved URL.
       const isStaleGoogleUrl = (u: string | null) =>
         !!u && /googleusercontent\.com|googleapis\.com\/v1\/places/.test(u)
-      const stillMissing = initial.filter((l: any) =>
-        (!l.preview_url || isStaleGoogleUrl(l.preview_url))
-        && Number.isFinite(l.latitude) && Number.isFinite(l.longitude)
-      )
+      // Supabase returns numeric columns as strings sometimes — coerce
+      // before isFinite or every location gets filtered out and the
+      // lazy-fetch never fires.
+      const numCoerce = (v: any): number => typeof v === 'number' ? v : parseFloat(v)
+      const stillMissing = initial.filter((l: any) => {
+        const lat = numCoerce(l.latitude); const lng = numCoerce(l.longitude)
+        return (!l.preview_url || isStaleGoogleUrl(l.preview_url))
+          && Number.isFinite(lat) && Number.isFinite(lng)
+      })
       if (stillMissing.length > 0) {
         stillMissing.forEach(async (loc: any) => {
           const cacheKey = `google-photo:${loc.id}`
+          const lat = numCoerce(loc.latitude); const lng = numCoerce(loc.longitude)
           try {
             const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
             if (cached) {
@@ -136,7 +142,7 @@ export default function PortfolioPage() {
             const res = await fetch('/api/place-photos', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: loc.name, city: loc.city, state: loc.state, lat: loc.latitude, lng: loc.longitude }),
+              body: JSON.stringify({ name: loc.name, city: loc.city, state: loc.state, lat, lng }),
             })
             if (!res.ok) return
             const json = await res.json()
