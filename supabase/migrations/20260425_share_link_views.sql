@@ -26,6 +26,10 @@ create index if not exists share_link_views_share_link_id_idx
 -- RLS: photographers see only their own guides' views.
 alter table share_link_views enable row level security;
 
+-- drop-then-create so the migration is idempotent — `create policy`
+-- has no `if not exists` form in older Postgres, and re-running raised
+-- error 42710 the first time this migration was applied incrementally.
+drop policy if exists share_link_views_select_own on share_link_views;
 create policy share_link_views_select_own on share_link_views
   for select
   using (
