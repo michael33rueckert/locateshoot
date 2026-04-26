@@ -286,7 +286,6 @@ export default function HomePage() {
                       {user ? (
                         <>
                           <div className="card-rating">★ {loc.rating ? parseFloat(loc.rating.toString()).toFixed(1) : 'New'}</div>
-                          <div className="card-saves">❤ {loc.save_count ?? 0} saves</div>
                         </>
                       ) : (
                         <button

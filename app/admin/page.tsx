@@ -423,7 +423,6 @@ export default function AdminPage() {
                     <th style={thStyle}>Status</th>
                     <th style={thStyle}>Access</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Rating</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>Saves</th>
                     <th style={thStyle}>Source</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -440,7 +439,6 @@ export default function AdminPage() {
                       </td>
                       <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', fontSize: 11 }}>{l.access_type ?? '—'}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{l.rating != null ? `★ ${l.rating}` : '—'}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{(l as any).save_count ?? 0}</td>
                       <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', fontSize: 11 }}>{l.source ?? '—'}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <button onClick={() => setEditingLoc(l)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink)', marginRight: 6 }}>Edit</button>

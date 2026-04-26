@@ -511,7 +511,6 @@ body {
 
 .card-rating { font-size: 13px; font-weight: 500; color: var(--gold); }
 .card-rating span { color: var(--ink-soft); font-weight: 300; font-size: 12px; }
-.card-saves  { font-size: 12px; color: var(--ink-soft); }
 
 .promoted-strip {
   background: rgba(196,146,42,0.08);

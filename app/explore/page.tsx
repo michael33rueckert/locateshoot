@@ -32,7 +32,7 @@ function distMiles(lat1: number, lng1: number, lat2: number, lng2: number): numb
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
 }
 const ALL_TAGS = ['Golden Hour','Sunrise','Sunset','Forest','Urban','Waterfront','Historic','Nature','Gardens','Architecture','Romantic','Dramatic','Editorial','Meadow','Creek','Bridge','Mural','Rooftop','Barn','Ranch','Vineyard','Campus','Trail','Industrial','Rustic','Colorful','Wedding','Family']
-const SORT_OPTIONS = [{ value: 'quality', label: '⭐ Top rated' },{ value: 'rating_asc', label: '↑ Lowest rated' },{ value: 'name', label: '🔤 Name A–Z' },{ value: 'newest', label: '🕒 Newest first' },{ value: 'saves', label: '❤ Most saved' }]
+const SORT_OPTIONS = [{ value: 'quality', label: '⭐ Top rated' },{ value: 'rating_asc', label: '↑ Lowest rated' },{ value: 'name', label: '🔤 Name A–Z' },{ value: 'newest', label: '🕒 Newest first' }]
 const RATING_OPTIONS = [{ value: 0, label: 'Any rating' },{ value: 4.5, label: '★ 4.5+' },{ value: 4.0, label: '★ 4.0+' },{ value: 3.5, label: '★ 3.5+' },{ value: 3.0, label: '★ 3.0+' }]
 const PERMIT_CFG: Record<string,{label:string;bg:string;color:string;border:string}> = {
   verified: { label: '✓ Permit Verified',      bg: 'rgba(181,75,42,.1)',  color: 'var(--rust)', border: 'rgba(181,75,42,.25)' },
@@ -40,7 +40,7 @@ const PERMIT_CFG: Record<string,{label:string;bg:string;color:string;border:stri
   unknown:  { label: '? Permit Unknown',        bg: 'var(--cream-dark)',   color: 'var(--ink-soft)', border: 'var(--sand)' },
 }
 
-type SortValue = 'quality'|'rating_asc'|'name'|'newest'|'saves'
+type SortValue = 'quality'|'rating_asc'|'name'|'newest'
 type AccessFilter = 'All'|'Public'|'Private'|'My Portfolio'
 
 // ── Modals ────────────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
           {(loc.tags??[]).length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:'1rem'}}>{(loc.tags??[]).map((t:string)=><span key={t} style={{padding:'4px 10px',borderRadius:20,fontSize:12,background:'var(--cream-dark)',color:'var(--ink-soft)',border:'1px solid var(--sand)'}}>{t}</span>)}</div>}
           {loc.desc&&<p style={{fontSize:14,color:'var(--ink-soft)',fontWeight:300,lineHeight:1.7,marginBottom:'1.25rem'}}>{loc.desc}</p>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:'1rem'}}>
-            {[{icon:'🔒',label:'Access',value:loc.access==='public'?'Free public access':'Private — booking required'},{icon:'⭐',label:'Rating',value:loc.rating!=='—'?`${loc.rating} out of 5`:'Not yet rated'},{icon:'❤',label:'Saves',value:(loc.saves??0)>0?`${loc.saves}`:'Be the first!'},{icon:'📷',label:'Photos',value:`${hasGoogle?googlePhotos.length:0} Google`}].map(item=>(
+            {[{icon:'🔒',label:'Access',value:loc.access==='public'?'Free public access':'Private — booking required'},{icon:'⭐',label:'Rating',value:loc.rating!=='—'?`${loc.rating} out of 5`:'Not yet rated'},{icon:'📷',label:'Photos',value:`${hasGoogle?googlePhotos.length:0} Google`}].map(item=>(
               <div key={item.label} style={{background:'var(--cream)',borderRadius:8,padding:'10px 12px',border:'1px solid var(--cream-dark)'}}>
                 <div style={{fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--ink-soft)',marginBottom:4}}>{item.icon} {item.label}</div>
                 <div style={{fontSize:13,color:'var(--ink)',lineHeight:1.4}}>{item.value}</div>
@@ -544,7 +544,6 @@ export default function ExplorePage() {
         case'rating_asc':return(a.ratingNum??0)-(b.ratingNum??0)
         case'name':return a.name.localeCompare(b.name)
         case'newest':return new Date(b.createdAt??0).getTime()-new Date(a.createdAt??0).getTime()
-        case'saves':return(b.saves??0)-(a.saves??0)
         default:return 0
       }
     })

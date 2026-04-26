@@ -9,11 +9,22 @@ export async function GET(request: Request, context: any) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { data: share, error: shareErr } = await admin
+  // Try with highlighted_location_ids (migration 20260425_share_link_highlights);
+  // fall back to the pre-migration shape so pick pages still load when that
+  // column doesn't exist yet. Both shapes are passed through to the client
+  // as-is, so widen to `any` instead of fighting the inferred union type.
+  const baseShareCols = 'id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio,max_picks,max_pick_distance_miles,expire_on_submit'
+  const initial = await admin
     .from('share_links')
-    .select('id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio,max_picks,max_pick_distance_miles,expire_on_submit')
+    .select(`${baseShareCols},highlighted_location_ids`)
     .eq('slug', slug)
     .single()
+  let share: any = initial.data
+  let shareErr = initial.error
+  if (shareErr && /highlighted_location_ids/.test(shareErr.message ?? '')) {
+    const fb = await admin.from('share_links').select(baseShareCols).eq('slug', slug).single()
+    share = fb.data; shareErr = fb.error
+  }
 
   if (shareErr || !share) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })

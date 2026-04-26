@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { tileUrl } from '@/lib/image'
+import { useReorderDrag } from '@/hooks/useReorderDrag'
+
+const MAX_HIGHLIGHTS = 3
 
 // Unified Location Guide creation/edit modal. Used on the dashboard and on the
 // /location-guides page. Supports three expiration modes:
@@ -88,6 +91,10 @@ export default function CreateLocationGuideModal({
           :  (preselectIds     ? preselectIds
           :  [])))
   )
+  // 1-3 location IDs the photographer is highlighting to the client.
+  // Loaded from the existing guide on edit (see effect below); enforced
+  // <= MAX_HIGHLIGHTS in toggleHighlight.
+  const [highlightedIds, setHighlightedIds] = useState<string[]>([])
   const [message,        setMessage]        = useState('')
   const [expirationMode, setExpirationMode] = useState<ExpirationMode>('never')
   const [expiresDate,    setExpiresDate]    = useState('') // yyyy-mm-dd
@@ -106,27 +113,38 @@ export default function CreateLocationGuideModal({
   // show only photos from locations the photographer has included in the guide.
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ pid: string; url: string }[]>([])
 
-  // Load existing message, expiration, cover photo, multi-pick when editing.
+  // Load existing message, expiration, cover photo, multi-pick, highlights
+  // when editing. The highlighted_location_ids column may not exist yet
+  // (migration 20260425_share_link_highlights.sql) — try with the column
+  // first, then fall back without it so editing works either way.
   useEffect(() => {
     if (!editLink) return
-    supabase.from('share_links')
-      .select('message,expires_at,is_permanent,expire_on_submit,cover_photo_url,max_picks,max_pick_distance_miles')
-      .eq('id', editLink.id)
-      .single()
-      .then(({ data }) => {
-        if (!data) return
-        if (data.message) setMessage(data.message)
-        if (data.cover_photo_url) setCoverUrl(data.cover_photo_url)
-        if (data.expire_on_submit) { setExpirationMode('on_submit') }
-        else if (data.expires_at)   { setExpirationMode('date'); setExpiresDate(toInputDate(data.expires_at)) }
-        else                         { setExpirationMode('never') }
-        const mp = data.max_picks ?? 1
-        if (mp > 1) {
-          setMultipick(true)
-          setMaxPicks(mp)
-          if (data.max_pick_distance_miles != null) setMaxMiles(String(data.max_pick_distance_miles))
-        }
-      })
+    const baseCols = 'message,expires_at,is_permanent,expire_on_submit,cover_photo_url,max_picks,max_pick_distance_miles'
+    ;(async () => {
+      let { data } = await supabase.from('share_links')
+        .select(`${baseCols},highlighted_location_ids`)
+        .eq('id', editLink.id)
+        .single()
+      if (!data) {
+        // Probably the migration hasn't landed yet — re-fetch without it.
+        const fb = await supabase.from('share_links').select(baseCols).eq('id', editLink.id).single()
+        data = fb.data as any
+      }
+      if (!data) return
+      if (data.message) setMessage(data.message)
+      if (data.cover_photo_url) setCoverUrl(data.cover_photo_url)
+      if (data.expire_on_submit) { setExpirationMode('on_submit') }
+      else if (data.expires_at)   { setExpirationMode('date'); setExpiresDate(toInputDate(data.expires_at)) }
+      else                         { setExpirationMode('never') }
+      const mp = data.max_picks ?? 1
+      if (mp > 1) {
+        setMultipick(true)
+        setMaxPicks(mp)
+        if (data.max_pick_distance_miles != null) setMaxMiles(String(data.max_pick_distance_miles))
+      }
+      const hl = (data as any).highlighted_location_ids as string[] | null | undefined
+      if (Array.isArray(hl)) setHighlightedIds(hl.slice(0, MAX_HIGHLIGHTS))
+    })()
   }, [editLink])
 
   // For full-portfolio guides, keep selectedIds in sync with the live
@@ -159,9 +177,40 @@ export default function CreateLocationGuideModal({
   )
 
   function toggleLoc(id: string) {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+    setSelectedIds(prev => {
+      if (prev.includes(id)) {
+        // Removing — also drop from highlights so a deselected location
+        // can't stay marked as recommended.
+        setHighlightedIds(h => h.filter(x => x !== id))
+        return prev.filter(x => x !== id)
+      }
+      return [...prev, id]
+    })
   }
   function isSelected(id: string) { return selectedIds.includes(id) }
+  function isHighlighted(id: string) { return highlightedIds.includes(id) }
+  function toggleHighlight(id: string) {
+    setHighlightedIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id)
+      if (prev.length >= MAX_HIGHLIGHTS) return prev  // soft cap; UI will show feedback
+      return [...prev, id]
+    })
+  }
+
+  // Drag-to-reorder for the selected-locations list. Same hook the
+  // portfolio page uses for sorting portfolio locations.
+  function moveSelected(fromId: string, toId: string) {
+    setSelectedIds(prev => {
+      const fromIdx = prev.indexOf(fromId)
+      const toIdx   = prev.indexOf(toId)
+      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev
+      const next = [...prev]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return next
+    })
+  }
+  const reorderDrag = useReorderDrag(moveSelected)
 
   async function create() {
     if (!sessionName.trim()) { setError('Please give this guide a name.'); return }
@@ -181,10 +230,15 @@ export default function CreateLocationGuideModal({
       const finalMaxPicks = multipick ? Math.max(2, Math.min(20, Math.floor(maxPicks))) : 1
       const milesNum = parseFloat(maxMiles)
       const finalMaxMiles = multipick && Number.isFinite(milesNum) && milesNum > 0 ? milesNum : null
+      // Drop highlights for locations that aren't selected anymore (e.g.
+      // user deselected after starring). Cap at 3 in case the soft cap
+      // was bypassed somehow.
+      const validHighlights = highlightedIds.filter(id => selectedIds.includes(id)).slice(0, MAX_HIGHLIGHTS)
+
       if (isEdit && editLink) {
         // Full-portfolio guides keep portfolio_location_ids = null so the
         // pick-data route resolves the live portfolio; static guides write
-        // their hand-picked list.
+        // their hand-picked list (in the order the photographer arranged).
         const updatePayload: Record<string, any> = {
           session_name:            sessionName.trim(),
           message:                 message.trim() || null,
@@ -196,13 +250,24 @@ export default function CreateLocationGuideModal({
           max_pick_distance_miles: finalMaxMiles,
         }
         if (!isFullPortfolio) updatePayload.portfolio_location_ids = selectedIds
-        const { data, error: updateErr } = await supabase.from('share_links').update(updatePayload).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
+        let { data, error: updateErr } = await supabase.from('share_links')
+          .update({ ...updatePayload, highlighted_location_ids: validHighlights })
+          .eq('id', editLink.id)
+          .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
+          .single()
+        if (updateErr && /highlighted_location_ids/.test(updateErr.message ?? '')) {
+          // Migration 20260425_share_link_highlights.sql not run yet —
+          // retry without that column. Highlights silently get dropped.
+          console.warn('share_links.highlighted_location_ids missing — saving without highlights (run migration to enable)')
+          const fb = await supabase.from('share_links').update(updatePayload).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
+          data = fb.data; updateErr = fb.error
+        }
         if (updateErr) throw updateErr
         onCreated(data); onClose()
         return
       }
       const slug = generateSlug(sessionName, photographerName || 'photographer')
-      const { data, error: insertErr } = await supabase.from('share_links').insert({
+      const insertBase = {
         user_id:                 userId,
         slug,
         session_name:            sessionName.trim(),
@@ -217,7 +282,16 @@ export default function CreateLocationGuideModal({
         cover_photo_url:         keepCover,
         max_picks:               finalMaxPicks,
         max_pick_distance_miles: finalMaxMiles,
-      }).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
+      }
+      let { data, error: insertErr } = await supabase.from('share_links')
+        .insert({ ...insertBase, highlighted_location_ids: validHighlights })
+        .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
+        .single()
+      if (insertErr && /highlighted_location_ids/.test(insertErr.message ?? '')) {
+        console.warn('share_links.highlighted_location_ids missing — creating without highlights (run migration to enable)')
+        const fb = await supabase.from('share_links').insert(insertBase).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
+        data = fb.data; insertErr = fb.error
+      }
       if (insertErr) throw insertErr
       onCreated(data); onClose()
     } catch (err: any) {
@@ -337,31 +411,48 @@ export default function CreateLocationGuideModal({
               🔗 <strong style={{ fontWeight: 600 }}>Auto-syncs with your portfolio.</strong> Every saved location is included automatically. To change which locations are shown to clients, add or remove them from your portfolio.
             </div>
           ) : <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>
-                Portfolio locations * <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({selectedIds.length} of {portfolio.length} selected)</span>
-              </label>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {selectedIds.length < portfolio.length && portfolio.length > 0 && <button onClick={() => setSelectedIds(portfolio.map(p => p.id))} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Select all</button>}
-                {selectedIds.length > 0 && <button onClick={() => setSelectedIds([])} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>}
-              </div>
-            </div>
-            {portfolio.length === 0 ? (
-              <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)' }}>
-                Your portfolio is empty. <Link href="/explore" style={{ color: 'var(--gold)', fontWeight: 500 }}>Browse Explore →</Link>
-              </div>
-            ) : (
-              <>
-                <input type="text" value={locSearch} onChange={e => setLocSearch(e.target.value)} placeholder="Search your portfolio…" style={{ ...inputStyle, marginBottom: 8, fontSize: 13 }} />
-                <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8 }}>
-                  {filteredLocs.length === 0 && <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No portfolio locations match &quot;{locSearch}&quot;</div>}
-                  {filteredLocs.map((loc, i) => {
-                    const sel = isSelected(loc.id)
+            {/* Selected locations — shown in their saved order. Photographer
+                can press-and-hold to drag-reorder, star up to 3 as the
+                client's recommended picks, or remove via the ✕ button. */}
+            {selectedIds.length > 0 && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 }}>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>
+                    Selected locations <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({selectedIds.length}) — press &amp; hold to reorder</span>
+                  </label>
+                  <button onClick={() => { setSelectedIds([]); setHighlightedIds([]) }} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear all</button>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 300, lineHeight: 1.5 }}>
+                  Tap the <span style={{ color: 'var(--gold)' }}>★</span> to mark up to {MAX_HIGHLIGHTS} as your <strong style={{ fontWeight: 500 }}>recommended</strong> picks — clients see those highlighted at the top of the list.
+                </div>
+                <div style={{ border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
+                  {selectedIds.map((id, i) => {
+                    const loc = portfolio.find(p => p.id === id)
+                    if (!loc) return null
                     const cityLine = [loc.city, loc.state].filter(Boolean).join(', ')
                     const thumb = tileUrl(loc.photo_url ?? null) ?? loc.photo_url ?? null
+                    const hl = isHighlighted(id)
+                    const isDragging = reorderDrag.draggingId === id
+                    const isOver     = reorderDrag.overId === id && reorderDrag.draggingId && reorderDrag.draggingId !== id
+                    const bind       = reorderDrag.bindItem(id)
+                    const atCap      = highlightedIds.length >= MAX_HIGHLIGHTS && !hl
                     return (
-                      <div key={loc.id} onClick={() => toggleLoc(loc.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', borderBottom: i < filteredLocs.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: sel ? 'rgba(196,146,42,.05)' : 'white', transition: 'background .15s' }}>
-                        <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--sand)'}`, background: sel ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)', transition: 'all .15s' }}>{sel ? '✓' : ''}</div>
+                      <div key={id}
+                        {...bind}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '9px 14px',
+                          borderBottom: i < selectedIds.length - 1 ? '1px solid var(--cream-dark)' : 'none',
+                          background: isOver ? 'rgba(196,146,42,.12)' : isDragging ? 'rgba(196,146,42,.06)' : 'white',
+                          opacity: isDragging ? 0.5 : 1,
+                          touchAction: 'pan-y',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          WebkitTouchCallout: 'none',
+                          cursor: isDragging ? 'grabbing' : 'grab',
+                          transition: 'background .12s',
+                        }}>
+                        <span style={{ fontSize: 14, color: 'var(--ink-soft)', flexShrink: 0, fontVariantNumeric: 'tabular-nums', minWidth: 18, textAlign: 'center' }} aria-hidden>⋮⋮</span>
                         <div className={thumb ? undefined : BG_CYCLE[i % BG_CYCLE.length]} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0, overflow: 'hidden', position: 'relative', background: thumb ? 'var(--cream-dark)' : undefined }}>
                           {thumb && <img src={thumb} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                         </div>
@@ -369,22 +460,88 @@ export default function CreateLocationGuideModal({
                           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
                           <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {cityLine || '—'}</div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); toggleHighlight(id) }}
+                          disabled={atCap}
+                          aria-label={hl ? 'Remove from recommended' : 'Mark as recommended'}
+                          title={hl ? 'Remove from recommended' : atCap ? `Already highlighting ${MAX_HIGHLIGHTS}` : 'Mark as recommended'}
+                          style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: hl ? 'rgba(196,146,42,.15)' : 'transparent', color: hl ? 'var(--gold)' : atCap ? 'var(--cream-dark)' : 'var(--sand)', cursor: atCap ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        >★</button>
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); toggleLoc(id) }}
+                          aria-label="Remove from guide"
+                          title="Remove from guide"
+                          style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        >✕</button>
                       </div>
                     )
                   })}
                 </div>
-                <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {onAddLocation && (
-                    <button type="button" onClick={onAddLocation} style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      + Add new location
-                    </button>
-                  )}
-                  <Link href="/explore" style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
-                    Explore nearby locations →
-                  </Link>
+                {highlightedIds.length === MAX_HIGHLIGHTS && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-soft)', fontStyle: 'italic', fontWeight: 300 }}>
+                    {MAX_HIGHLIGHTS} recommended picks selected (max). Unstar one to highlight a different location.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Add-more list — only the unselected portfolio. Tapping
+                appends to the bottom of the selected list above. */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>
+                {selectedIds.length > 0 ? 'Add more from your portfolio' : 'Pick locations from your portfolio *'} <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({portfolio.length - selectedIds.length} available)</span>
+              </label>
+              {selectedIds.length < portfolio.length && portfolio.length > 0 && <button onClick={() => setSelectedIds(portfolio.map(p => p.id))} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Select all</button>}
+            </div>
+            {portfolio.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)' }}>
+                Your portfolio is empty. <Link href="/explore" style={{ color: 'var(--gold)', fontWeight: 500 }}>Browse Explore →</Link>
+              </div>
+            ) : selectedIds.length === portfolio.length ? (
+              <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)', fontStyle: 'italic' }}>
+                Every portfolio location is in this guide.
+              </div>
+            ) : (
+              <>
+                <input type="text" value={locSearch} onChange={e => setLocSearch(e.target.value)} placeholder="Search your portfolio…" style={{ ...inputStyle, marginBottom: 8, fontSize: 13 }} />
+                <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--cream-dark)', borderRadius: 8 }}>
+                  {(() => {
+                    const available = filteredLocs.filter(l => !isSelected(l.id))
+                    if (available.length === 0) {
+                      return <div style={{ padding: '1rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>{locSearch.trim() ? `No more matches for "${locSearch}"` : 'Every portfolio location is in this guide.'}</div>
+                    }
+                    return available.map((loc, i) => {
+                      const cityLine = [loc.city, loc.state].filter(Boolean).join(', ')
+                      const thumb = tileUrl(loc.photo_url ?? null) ?? loc.photo_url ?? null
+                      return (
+                        <div key={loc.id} onClick={() => toggleLoc(loc.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', borderBottom: i < available.length - 1 ? '1px solid var(--cream-dark)' : 'none', background: 'white', transition: 'background .12s' }}>
+                          <div className={thumb ? undefined : BG_CYCLE[i % BG_CYCLE.length]} style={{ width: 38, height: 38, borderRadius: 6, flexShrink: 0, overflow: 'hidden', position: 'relative', background: thumb ? 'var(--cream-dark)' : undefined }}>
+                            {thumb && <img src={thumb} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {cityLine || '—'}</div>
+                          </div>
+                          <div style={{ fontSize: 18, color: 'var(--gold)', flexShrink: 0, padding: '0 4px' }} aria-hidden>＋</div>
+                        </div>
+                      )
+                    })
+                  })()}
                 </div>
               </>
             )}
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {onAddLocation && (
+                <button type="button" onClick={onAddLocation} style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  + Add new location
+                </button>
+              )}
+              <Link href="/explore" style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
+                Explore nearby locations →
+              </Link>
+            </div>
           </div>}
 
           {/* Cover photo picker — used as the card thumbnail + link preview */}

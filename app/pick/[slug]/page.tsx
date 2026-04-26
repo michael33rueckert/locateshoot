@@ -65,6 +65,10 @@ type FullLocation = ClientLocation & {
   photoUrl: string | null
   photoUrls: string[]
   hideGooglePhotos: boolean
+  // True when the photographer marked this location as a recommended
+  // pick for this guide. Surfaces a "⭐ Recommended" badge + sorts the
+  // location to the top of the list.
+  highlighted: boolean
 }
 
 export default function ClientPickerPage() {
@@ -228,6 +232,14 @@ export default function ClientPickerPage() {
         setShareData(share)
         setBranding(branding)
 
+        // Photographer's recommended picks for this guide. Stored as
+        // portfolio_location ids on share_links.highlighted_location_ids
+        // — when the migration hasn't landed yet the field is undefined,
+        // which the Set treats as empty (no highlights surfaced).
+        const highlightSet = new Set<string>(
+          Array.isArray(share?.highlighted_location_ids) ? share.highlighted_location_ids.map((x: any) => String(x)) : []
+        )
+
         const all: FullLocation[] = []
 
         ;(locs ?? []).forEach((loc: any, idx: number) => {
@@ -264,6 +276,7 @@ export default function ClientPickerPage() {
             photoUrl: loc.photo_url ?? null,
             photoUrls: loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : []),
             hideGooglePhotos: !!loc.hide_google_photos,
+            highlighted: highlightSet.has(String(loc.id)),
           })
         })
 
@@ -280,6 +293,7 @@ export default function ClientPickerPage() {
             pinterestUrl: null, blogUrl: null,
             saves: 0,
             hideGooglePhotos: true,
+            highlighted: false,
             photoUrl: null,
             photoUrls: [],
           })
@@ -576,22 +590,29 @@ export default function ClientPickerPage() {
                   This link may have been created before a recent update.<br />Ask your photographer to send a new link.
                 </div>
               </div>
-            ) : locations.map((loc, i) => {
-              const isChosen   = chosenSet.has(String(loc.id))
-              const isActive   = String(activeId) === String(loc.id)
-              const isDisabled = !isChosen && disabledSet.has(String(loc.id))
-              return (
-                <PickListItem
-                  key={String(loc.id)}
-                  loc={loc}
-                  index={i}
-                  isChosen={isChosen}
-                  isActive={isActive}
-                  isDisabled={isDisabled}
-                  onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
-                />
-              )
-            })}
+            ) : (() => {
+              // Sort highlighted (photographer-recommended) locations to
+              // the top of the list while preserving the photographer's
+              // saved order within each group. The list shows them with
+              // a "⭐ Recommended" badge in PickListItem.
+              const sorted = [...locations].sort((a, b) => Number(!!b.highlighted) - Number(!!a.highlighted))
+              return sorted.map((loc, i) => {
+                const isChosen   = chosenSet.has(String(loc.id))
+                const isActive   = String(activeId) === String(loc.id)
+                const isDisabled = !isChosen && disabledSet.has(String(loc.id))
+                return (
+                  <PickListItem
+                    key={String(loc.id)}
+                    loc={loc}
+                    index={i}
+                    isChosen={isChosen}
+                    isActive={isActive}
+                    isDisabled={isDisabled}
+                    onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
+                  />
+                )
+              })
+            })()}
             <div style={{ height: 80 }} />
           </div>
         </div>
@@ -706,7 +727,6 @@ export default function ClientPickerPage() {
                     { icon: '⭐', label: 'Rating', value: detailLoc.rating !== '—' ? `${detailLoc.rating} / 5` : 'Not yet rated' },
                   ]
                   if (hasPermitData) cells.push({ icon: '📋', label: 'Permit', value: permitText })
-                  cells.push({ icon: '❤',  label: 'Saves',  value: detailLoc.saves > 0 ? `${detailLoc.saves} photographers` : 'New location' })
                   return cells
                 })().map(item => (
                   <div key={item.label} style={{ background: 'var(--cream)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--cream-dark)' }}>
@@ -1011,6 +1031,14 @@ function PickListItem({
         <div style={{ position: 'absolute', top: 8, left: 8, width: 24, height: 24, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.92)' : 'rgba(26,22,18,.72)', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, backdropFilter: 'blur(4px)' }}>
           {isChosen ? '✓' : index + 1}
         </div>
+        {/* Photographer-recommended badge — shown for the 1-3 locations
+            the photographer marked as a "highlight" when building the
+            guide. Sits opposite the index pill so the two don't crowd. */}
+        {loc.highlighted && (
+          <span style={{ position: 'absolute', top: 8, right: 8, padding: '3px 9px', borderRadius: 999, background: 'rgba(196,146,42,.95)', color: 'var(--ink)', fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', zIndex: 2, boxShadow: '0 1px 4px rgba(0,0,0,.18)', backdropFilter: 'blur(4px)' }}>
+            ★ Recommended
+          </span>
+        )}
         {photos.length > 1 && (
           <span className="pick-loc-photo-counter">{photoIdx + 1} / {photos.length}</span>
         )}
