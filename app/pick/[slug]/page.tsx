@@ -7,7 +7,7 @@ import ImageLightbox from '@/components/ImageLightbox'
 import { useServerPlacePhotos } from '@/hooks/useServerPlacePhotos'
 import { thumbUrl, mediumUrl } from '@/lib/image'
 import type { ClientLocation } from '@/components/ClientMap'
-import { resolveTemplate, googleFontHref, type PickTemplate } from '@/lib/pick-template'
+import { resolveTemplate, googleFontHref, type PickTemplate, type LayoutKind } from '@/lib/pick-template'
 
 const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false })
 
@@ -639,22 +639,27 @@ export default function ClientPickerPage() {
               // saved order within each group. The list shows them with
               // a "⭐ Recommended" badge in PickListItem.
               const sorted = [...locations].sort((a, b) => Number(!!b.highlighted) - Number(!!a.highlighted))
-              return sorted.map((loc, i) => {
-                const isChosen   = chosenSet.has(String(loc.id))
-                const isActive   = String(activeId) === String(loc.id)
-                const isDisabled = !isChosen && disabledSet.has(String(loc.id))
-                return (
-                  <PickListItem
-                    key={String(loc.id)}
-                    loc={loc}
-                    index={i}
-                    isChosen={isChosen}
-                    isActive={isActive}
-                    isDisabled={isDisabled}
-                    onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
-                  />
-                )
-              })
+              return (
+                <div className="pick-loc-list" data-layout={tpl.layout}>
+                  {sorted.map((loc, i) => {
+                    const isChosen   = chosenSet.has(String(loc.id))
+                    const isActive   = String(activeId) === String(loc.id)
+                    const isDisabled = !isChosen && disabledSet.has(String(loc.id))
+                    return (
+                      <PickListItem
+                        key={String(loc.id)}
+                        loc={loc}
+                        index={i}
+                        layout={tpl.layout}
+                        isChosen={isChosen}
+                        isActive={isActive}
+                        isDisabled={isDisabled}
+                        onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
+                      />
+                    )
+                  })}
+                </div>
+              )
             })()}
             <div style={{ height: 80 }} />
           </div>
@@ -904,18 +909,16 @@ export default function ClientPickerPage() {
         .pick-map-col { position: relative; }
         .pick-mobile-toggle { display: none; }
 
-        /* Single vertical-hero card layout across every viewport — desktop,
-           tablet, and mobile all show one full-width photo per card with the
-           name + meta stacked below. Sidebar is 420px on desktop/tablet so
-           the rendered photo width is roughly 420px there, full viewport
-           width on mobile. The sizes hint on the <img> below must stay in
-           sync with these widths so retina screens don't pick the 480w
-           thumbnail and upscale it. */
-        .pick-loc-card     { display: flex; flex-direction: column; gap: 0; padding: 0; align-items: stretch; }
+        /* Default 'card' layout — vertical-hero card with full-width
+           photo + name/meta below. Photographer can switch to one of
+           four other layouts via their template; per-layout overrides
+           live further down via [data-layout="..."] selectors. The
+           sizes hint on the <img> assumes ~420px sidebar on desktop/
+           tablet and full viewport width on mobile. */
+        .pick-loc-list { display: flex; flex-direction: column; }
+        .pick-loc-card     { display: flex; flex-direction: column; gap: 0; padding: 0; align-items: stretch; border-bottom: 1px solid var(--cream-dark); }
         /* 4:3 aspect ratio on every viewport so a typical landscape
-           photo fits without being cropped top/bottom. Width fills the
-           sidebar (~420px on desktop/tablet, full viewport on mobile);
-           height follows automatically from the aspect ratio. */
+           photo fits without being cropped top/bottom. */
         .pick-loc-photo    { width: 100%; aspect-ratio: 4 / 3; border-radius: 0; overflow: hidden; position: relative; flex-shrink: 0; }
         .pick-loc-photo-strip {
           position: absolute; inset: 0;
@@ -941,6 +944,69 @@ export default function ClientPickerPage() {
         .pick-loc-name     { font-family: var(--font-playfair),serif; font-size: 17px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
         .pick-loc-city     { font-size: 13px; color: var(--ink-soft); margin-bottom: 8px; }
         .pick-loc-cta      { align-self: flex-start; padding: 0 1.25rem 14px; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+
+        /* ── 'list' layout — compact row: small thumb left, text right.
+           Photographer's choice when they want clients to scroll a long
+           list quickly without scrolling past full-bleed hero photos.
+           Hides the CTA arrow + photo-overlay badges so the row stays
+           skinny. */
+        .pick-loc-list[data-layout="list"] { padding: 8px; gap: 8px; }
+        .pick-loc-list[data-layout="list"] .pick-loc-card {
+          flex-direction: row; align-items: stretch; gap: 12px;
+          padding: 10px; border: 1px solid var(--cream-dark); border-radius: 6px;
+        }
+        .pick-loc-list[data-layout="list"] .pick-loc-photo { width: 88px; aspect-ratio: 1 / 1; border-radius: 4px; flex-shrink: 0; }
+        .pick-loc-list[data-layout="list"] .pick-loc-body  { padding: 2px 0; }
+        .pick-loc-list[data-layout="list"] .pick-loc-name  { font-size: 15px; margin-bottom: 2px; }
+        .pick-loc-list[data-layout="list"] .pick-loc-city  { font-size: 12px; margin-bottom: 6px; }
+        .pick-loc-list[data-layout="list"] .pick-loc-cta   { padding: 0; align-self: center; flex-shrink: 0; }
+
+        /* ── 'grid' layout — 2-column grid of mini cards. Squarer than
+           the default and shows two locations per row even on mobile. */
+        .pick-loc-list[data-layout="grid"] { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+        .pick-loc-list[data-layout="grid"] .pick-loc-card {
+          flex-direction: column; border: 1px solid var(--cream-dark);
+          border-radius: 6px; overflow: hidden;
+        }
+        .pick-loc-list[data-layout="grid"] .pick-loc-photo { aspect-ratio: 4 / 3; }
+        .pick-loc-list[data-layout="grid"] .pick-loc-body  { padding: 8px 10px 4px; }
+        .pick-loc-list[data-layout="grid"] .pick-loc-name  { font-size: 14px; margin-bottom: 2px; }
+        .pick-loc-list[data-layout="grid"] .pick-loc-city  { font-size: 11px; margin-bottom: 6px; }
+        .pick-loc-list[data-layout="grid"] .pick-loc-cta   { display: none; }
+
+        /* ── 'magazine' layout — first card spans both columns as a
+           hero, the rest fill a 2-up grid below. Reads like the cover
+           of a print magazine. */
+        .pick-loc-list[data-layout="magazine"] { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-card {
+          flex-direction: column; border: 1px solid var(--cream-dark);
+          border-radius: 6px; overflow: hidden;
+        }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-card:first-child {
+          grid-column: 1 / -1;
+        }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-card:first-child .pick-loc-photo { aspect-ratio: 16 / 9; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-card:first-child .pick-loc-name  { font-size: 19px; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-photo { aspect-ratio: 4 / 3; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-body  { padding: 8px 10px 4px; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-name  { font-size: 14px; margin-bottom: 2px; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-city  { font-size: 11px; margin-bottom: 6px; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-cta   { display: none; }
+
+        /* ── 'minimal' layout — bare row: tiny thumb, name only, faint
+           separator. For photographers who want the photo to live in
+           the detail view, not the list. */
+        .pick-loc-list[data-layout="minimal"] .pick-loc-card {
+          flex-direction: row; align-items: center; gap: 12px;
+          padding: 10px 1.25rem; border: none;
+          border-bottom: 1px solid var(--cream-dark);
+        }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-photo { width: 44px; aspect-ratio: 1 / 1; border-radius: 4px; flex-shrink: 0; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-body  { padding: 0; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-name  { font-size: 14px; margin-bottom: 0; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-city  { font-size: 11px; margin-bottom: 0; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-body > div:last-child { display: none; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-cta   { padding: 0; align-self: center; flex-shrink: 0; font-size: 11px; }
 
         /* Mobile inherits the 4:3 aspect-ratio above — no override
            needed. The width naturally fills the viewport so the photo
@@ -994,6 +1060,7 @@ export default function ClientPickerPage() {
 function PickListItem({
   loc,
   index,
+  layout,
   isChosen,
   isActive,
   isDisabled,
@@ -1001,6 +1068,7 @@ function PickListItem({
 }: {
   loc:            FullLocation
   index:          number
+  layout:         LayoutKind
   isChosen:       boolean
   isActive:       boolean
   isDisabled:     boolean
@@ -1011,6 +1079,12 @@ function PickListItem({
     : (loc.photoUrl ? [loc.photoUrl] : [])
   const [photoIdx, setPhotoIdx] = useState(0)
   const stripRef = useRef<HTMLDivElement>(null)
+
+  // Compact layouts (list/minimal) show a single small thumb — a
+  // swipeable carousel at 60–80px wide is meaningless and noisy.
+  // Photo / grid / magazine all keep the multi-photo strip.
+  const compact = layout === 'list' || layout === 'minimal'
+  const visiblePhotos = compact ? photos.slice(0, 1) : photos
 
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget
@@ -1024,7 +1098,6 @@ function PickListItem({
       onClick={onSelect}
       className="pick-loc-card"
       style={{
-        borderBottom: '1px solid var(--cream-dark)',
         cursor: 'pointer',
         background: isActive ? 'rgba(196,146,42,.06)' : 'white',
         borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`,
@@ -1032,14 +1105,14 @@ function PickListItem({
         opacity: isDisabled ? 0.45 : 1,
       }}
     >
-      <div className={`pick-loc-photo${photos.length === 0 ? ' ' + loc.bg : ''}`}>
-        {photos.length > 0 && (
+      <div className={`pick-loc-photo${visiblePhotos.length === 0 ? ' ' + loc.bg : ''}`}>
+        {visiblePhotos.length > 0 && (
           <div
             ref={stripRef}
             className="pick-loc-photo-strip"
             onScroll={handleScroll}
           >
-            {photos.map((src, i) => {
+            {visiblePhotos.map((src, i) => {
               // Every viewport now renders this image as a full-width hero
               // — phone uses the full viewport (~1200px on a 3× retina
               // device), tablet/desktop use the 420px sidebar (~1260px on
@@ -1082,7 +1155,7 @@ function PickListItem({
             ★ Recommended
           </span>
         )}
-        {photos.length > 1 && (
+        {!compact && photos.length > 1 && (
           <span className="pick-loc-photo-counter">{photoIdx + 1} / {photos.length}</span>
         )}
       </div>

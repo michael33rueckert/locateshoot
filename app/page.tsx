@@ -112,10 +112,10 @@ function PricingTiers({ onSignup }: { onSignup: () => void }) {
           <div className="price-period">{yearly ? 'Billed $250/year · cancel anytime' : 'Billed monthly · cancel anytime'}</div>
           <ul className="price-features">
             <li>Everything in Starter</li>
-            <li>🌐 <strong>Custom domain</strong> for your Location Guides</li>
-            <li>🎨 <strong>White-label pages</strong> — your logo, not ours</li>
-            <li>🖌 <strong>Customizable Location Guide templates</strong> — layout, font, colors</li>
-            <li>Custom message &amp; branding</li>
+            <li>🌐 Custom domain for your Location Guides</li>
+            <li>🎨 White-label pages with your own logo</li>
+            <li>🖌 Customizable Location Guide templates</li>
+            <li>Layout, font &amp; color editor</li>
           </ul>
           <button className="btn btn-dark" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={onSignup}>
             Start 14-day free trial
@@ -410,16 +410,6 @@ export default function HomePage() {
 
       {/* ── COMMUNITY CTA ── */}
       <section className="community-section">
-        <div className="section-eyebrow" style={{ justifyContent: 'center' }}>Join the community</div>
-        <h2 className="section-title">Be part of something <em>bigger</em></h2>
-        <p className="section-sub" style={{ margin: '0 auto 3rem' }}>
-          Add a location today and help a fellow photographer find their perfect shot. Free, always.
-        </p>
-        <div className="community-badges">
-          {['📷 Portrait photographers','🎬 Videographers','🌅 Landscape artists','💒 Wedding photographers','👗 Fashion & editorial','🏙 Urban explorers','🎨 Content creators'].map(b => (
-            <span key={b} className="community-badge">{b}</span>
-          ))}
-        </div>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>Create Free Account</button>
           <button className="btn btn-dark btn-lg" onClick={() => scrollTo('pricing')}>See Pro features →</button>
