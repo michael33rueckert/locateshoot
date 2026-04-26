@@ -269,10 +269,61 @@ export default function ExplorePage() {
   }, [])
 
   useEffect(() => {
-    if(!locations.length)return
-    const ids=locations.map((l:any)=>l.id)
-    supabase.from('location_photos').select('location_id,url').in('location_id',ids).eq('is_private',false).limit(1000)
-      .then(({data})=>{if(!data)return;const m:Record<string,string>={};data.forEach((p:any)=>{if(!m[p.location_id])m[p.location_id]=p.url});setPhotoMap(m)})
+    if (!locations.length) return
+    const ids = locations.map((l: any) => l.id)
+    let cancelled = false
+    ;(async () => {
+      // Bumped from limit(1000) — with ~500 explore locations and
+      // multiple photos per source location, the old cap could starve
+      // some tiles of any photo at all (same row-limit issue as the
+      // dashboard fix earlier).
+      const { data } = await supabase
+        .from('location_photos')
+        .select('location_id,url')
+        .in('location_id', ids)
+        .eq('is_private', false)
+        .limit(5000)
+      if (cancelled || !data) return
+      const m: Record<string, string> = {}
+      data.forEach((p: any) => { if (!m[p.location_id]) m[p.location_id] = p.url })
+      setPhotoMap(m)
+
+      // Lazy-fetch Google Place photos for locations with no DB photo.
+      // Same sessionStorage cache key as dashboard/portfolio so once a
+      // photo is resolved on any page, all three pages reuse it without
+      // re-spending Google API credits in the same browser session.
+      const numCoerce = (v: any): number => typeof v === 'number' ? v : parseFloat(v)
+      const missing = locations.filter((l: any) => {
+        if (m[l.id]) return false
+        const lat = numCoerce(l.lat); const lng = numCoerce(l.lng)
+        return Number.isFinite(lat) && Number.isFinite(lng)
+      })
+      missing.forEach(async (loc: any) => {
+        if (cancelled) return
+        const cacheKey = `google-photo:${loc.id}`
+        const lat = numCoerce(loc.lat); const lng = numCoerce(loc.lng)
+        try {
+          const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
+          if (cached) {
+            setPhotoMap(prev => ({ ...prev, [loc.id]: cached }))
+            return
+          }
+          const res = await fetch('/api/place-photos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: loc.name, city: loc.city, lat, lng }),
+          })
+          if (!res.ok) return
+          const json = await res.json()
+          const url = json?.photos?.[0]?.url
+          if (!url) return
+          try { sessionStorage.setItem(cacheKey, url) } catch { /* quota etc. */ }
+          if (cancelled) return
+          setPhotoMap(prev => ({ ...prev, [loc.id]: url }))
+        } catch { /* non-fatal */ }
+      })
+    })()
+    return () => { cancelled = true }
   }, [locations])
 
   useEffect(() => {
