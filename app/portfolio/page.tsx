@@ -102,11 +102,44 @@ export default function PortfolioPage() {
         })
       }
 
-      setLocs(rows.map((p: any) => ({
+      const initial = rows.map((p: any) => ({
         ...p,
         photo_count: ownCount[p.id] ?? 0,
         preview_url: ownUrl[p.id] ?? (p.source_location_id ? sourceUrl[p.source_location_id] ?? null : null),
-      })))
+      }))
+      setLocs(initial)
+
+      // Lazy-fetch Google Place photos for any locations that still have
+      // no preview after the own/source DB lookups — these are typically
+      // explore-added locations whose source row has no rows in
+      // location_photos but Google has photos available. Cached in
+      // sessionStorage so navigating between dashboard ↔ /portfolio in
+      // the same session reuses results. See dashboard page.tsx for the
+      // longer note on Google URL expiry.
+      const stillMissing = initial.filter((l: any) => !l.preview_url && Number.isFinite(l.latitude) && Number.isFinite(l.longitude))
+      if (stillMissing.length > 0) {
+        stillMissing.forEach(async (loc: any) => {
+          const cacheKey = `google-photo:${loc.id}`
+          try {
+            const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
+            if (cached) {
+              setLocs(prev => prev.map(l => l.id === loc.id ? { ...l, preview_url: cached } : l))
+              return
+            }
+            const res = await fetch('/api/place-photos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: loc.name, city: loc.city, state: loc.state, lat: loc.latitude, lng: loc.longitude }),
+            })
+            if (!res.ok) return
+            const json = await res.json()
+            const url = json?.photos?.[0]?.url
+            if (!url) return
+            try { sessionStorage.setItem(cacheKey, url) } catch { /* quota etc. */ }
+            setLocs(prev => prev.map(l => l.id === loc.id ? { ...l, preview_url: url } : l))
+          } catch { /* non-fatal */ }
+        })
+      }
     } finally { setLoading(false) }
   }, [])
 

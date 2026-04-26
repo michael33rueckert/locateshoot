@@ -117,11 +117,46 @@ export default function DashboardPage() {
           })
         }
 
-        setPortfolioLocs(portfolioRes.data.map((p: any) => ({
+        const initialLocs = portfolioRes.data.map((p: any) => ({
           ...p,
           photo_count: ownCount[p.id] ?? 0,
           preview_url: ownUrl[p.id] ?? (p.source_location_id ? sourceUrl[p.source_location_id] ?? null : null),
-        })))
+        }))
+        setPortfolioLocs(initialLocs)
+
+        // Locations that still have no preview after the own/source
+        // lookups rely on Google Place photos, which our DB doesn't
+        // store. Fetch them lazily through the existing /api/place-photos
+        // endpoint and patch each tile's preview_url as it resolves so
+        // they fill in within a second or two of dashboard load. Cache
+        // results in sessionStorage so navigating between dashboard and
+        // /portfolio in the same session doesn't re-spend Google API
+        // calls. (Google photo URLs expire ~60 min, so we don't try to
+        // persist longer than the session.)
+        const stillMissing = initialLocs.filter((l: any) => !l.preview_url && Number.isFinite(l.latitude) && Number.isFinite(l.longitude))
+        if (stillMissing.length > 0) {
+          stillMissing.forEach(async (loc: any) => {
+            const cacheKey = `google-photo:${loc.id}`
+            try {
+              const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
+              if (cached) {
+                setPortfolioLocs(prev => prev.map(l => l.id === loc.id ? { ...l, preview_url: cached } : l))
+                return
+              }
+              const res = await fetch('/api/place-photos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: loc.name, city: loc.city, state: loc.state, lat: loc.latitude, lng: loc.longitude }),
+              })
+              if (!res.ok) return
+              const json = await res.json()
+              const url = json?.photos?.[0]?.url
+              if (!url) return
+              try { sessionStorage.setItem(cacheKey, url) } catch { /* quota etc. */ }
+              setPortfolioLocs(prev => prev.map(l => l.id === loc.id ? { ...l, preview_url: url } : l))
+            } catch { /* non-fatal */ }
+          })
+        }
       } else {
         setPortfolioLocs([])
       }
