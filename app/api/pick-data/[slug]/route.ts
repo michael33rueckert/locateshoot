@@ -9,21 +9,29 @@ export async function GET(request: Request, context: any) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Try with highlighted_location_ids (migration 20260425_share_link_highlights);
-  // fall back to the pre-migration shape so pick pages still load when that
-  // column doesn't exist yet. Both shapes are passed through to the client
-  // as-is, so widen to `any` instead of fighting the inferred union type.
+  // Try with all the optional columns from later migrations
+  // (highlighted_location_ids + pick_template_id). Each falls back
+  // independently so a Supabase missing-column error on one doesn't
+  // block the rest of the page from loading. Both shapes are passed
+  // through to the client, so widen to `any` instead of fighting the
+  // inferred union type.
   const baseShareCols = 'id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio,max_picks,max_pick_distance_miles,expire_on_submit'
-  const initial = await admin
-    .from('share_links')
-    .select(`${baseShareCols},highlighted_location_ids`)
-    .eq('slug', slug)
-    .single()
-  let share: any = initial.data
-  let shareErr = initial.error
+  let share: any = null
+  let shareErr: any = null
+  // 1: try the full select (both optional columns)
+  {
+    const r = await admin.from('share_links').select(`${baseShareCols},highlighted_location_ids,pick_template_id`).eq('slug', slug).single()
+    share = r.data; shareErr = r.error
+  }
+  // 2: try without pick_template_id (newer migration)
+  if (shareErr && /pick_template_id/.test(shareErr.message ?? '')) {
+    const r = await admin.from('share_links').select(`${baseShareCols},highlighted_location_ids`).eq('slug', slug).single()
+    share = r.data; shareErr = r.error
+  }
+  // 3: try without either optional column
   if (shareErr && /highlighted_location_ids/.test(shareErr.message ?? '')) {
-    const fb = await admin.from('share_links').select(baseShareCols).eq('slug', slug).single()
-    share = fb.data; shareErr = fb.error
+    const r = await admin.from('share_links').select(baseShareCols).eq('slug', slug).single()
+    share = r.data; shareErr = r.error
   }
 
   if (shareErr || !share) {
@@ -57,34 +65,49 @@ export async function GET(request: Request, context: any) {
     }
   }
 
-  // Pull plan + branding + Pick page template in a single query. Plan
-  // gates permit info below (Starter+); branding drives white-label
-  // rendering; pick_template is the Pro-tier customization (font,
-  // colors, header, background) the Pick page applies on render.
+  // Pull plan + branding. Plan gates permit info below (Starter+);
+  // branding drives white-label rendering. The Pick page template is
+  // resolved separately (multi-template world) — see below.
   let branding: any = null
   let photographerPlan: string | null = null
-  let pickTemplate: any = null
   if (share.user_id) {
-    // Try with pick_template; fall back without if migration hasn't
-    // run on this database yet.
-    let prof: any = null
-    const initial = await admin.from('profiles').select('plan,preferences,pick_template').eq('id', share.user_id).single()
-    if (initial.error && /pick_template/.test(initial.error.message ?? '')) {
-      const fb = await admin.from('profiles').select('plan,preferences').eq('id', share.user_id).single()
-      prof = fb.data
-    } else {
-      prof = initial.data
-    }
+    const { data: prof } = await admin.from('profiles').select('plan,preferences').eq('id', share.user_id).single()
     branding         = prof?.preferences ?? null
     photographerPlan = prof?.plan ?? null
-    pickTemplate     = prof?.pick_template ?? null
   }
-  // pick_template only takes effect on Pro shares — Starter / Free
-  // photographers' Pick pages stay on the default render. Strip the
-  // template for non-Pro so a downgraded photographer's clients see the
-  // unbranded version immediately.
+
+  // Pick page template resolution (Pro-only feature):
+  //   1. share_links.pick_template_id explicit per-guide selection
+  //   2. else: photographer's default pick_templates row
+  //   3. else: legacy profiles.pick_template (single-template world)
+  //   4. else: null → unbranded default render
+  // Falls back gracefully on each step when the relevant migration
+  // hasn't been applied to this Supabase instance yet.
+  let pickTemplate: any = null
   const isProTemplate = photographerPlan === 'pro' || photographerPlan === 'Pro'
-  if (!isProTemplate) pickTemplate = null
+  if (isProTemplate && share.user_id) {
+    // Step 1: explicit pick_template_id on the guide
+    const explicitId = (share as any).pick_template_id as string | null | undefined
+    if (explicitId) {
+      const { data: row } = await admin.from('pick_templates').select('config').eq('id', explicitId).maybeSingle()
+      if (row?.config) pickTemplate = row.config
+    }
+    // Step 2: photographer's default template
+    if (!pickTemplate) {
+      const { data: defRow } = await admin
+        .from('pick_templates')
+        .select('config')
+        .eq('user_id', share.user_id)
+        .eq('is_default', true)
+        .maybeSingle()
+      if (defRow?.config) pickTemplate = defRow.config
+    }
+    // Step 3: legacy single-template column
+    if (!pickTemplate) {
+      const { data: legacy } = await admin.from('profiles').select('pick_template').eq('id', share.user_id).maybeSingle()
+      if ((legacy as any)?.pick_template) pickTemplate = (legacy as any).pick_template
+    }
+  }
   // Permit info ("Permit verified", fee, notes, website) is a Starter+
   // feature — photographers on Free can't surface it to clients on
   // share pages. For Free shares we strip those fields from every

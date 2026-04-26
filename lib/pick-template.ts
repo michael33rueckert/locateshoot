@@ -102,3 +102,15 @@ export function googleFontHref(fontName: string): string | null {
 export function isValidHex(s: string): boolean {
   return /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s.trim())
 }
+
+// A user-saved template (row from pick_templates). The Profile editor
+// lists/edits these; the Location Guide modal picks one per guide.
+export interface SavedTemplate {
+  id:         string
+  user_id:    string
+  name:       string
+  config:     PickTemplate
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}

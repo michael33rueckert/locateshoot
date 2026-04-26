@@ -1,0 +1,250 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import PickTemplateEditor from '@/components/PickTemplateEditor'
+import type { SavedTemplate } from '@/lib/pick-template'
+
+// Pro-tier UI for managing multiple named Location Guide templates.
+// Lists the photographer's saved templates, lets them pick which one to
+// edit (or add a new one), set a default, rename, or delete.
+//
+// The actual styling editor (font / colors / header / background) is
+// PickTemplateEditor — this component owns the list + persistence
+// metadata (name, default flag) and renders the editor for whichever
+// template is currently selected.
+//
+// Falls back gracefully when the pick_templates migration hasn't been
+// applied: shows an inline notice and disables the multi-template UI.
+
+interface Props {
+  userId: string
+  isPro:  boolean
+}
+
+export default function SavedTemplatesPanel({ userId, isPro }: Props) {
+  const [templates, setTemplates] = useState<SavedTemplate[]>([])
+  const [activeId,  setActiveId]  = useState<string | null>(null)
+  const [loading,   setLoading]   = useState(true)
+  const [migrationMissing, setMigrationMissing] = useState(false)
+  const [error,     setError]     = useState<string | null>(null)
+  const [renaming,  setRenaming]  = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+
+  const load = useCallback(async () => {
+    if (!userId || !isPro) return
+    setLoading(true); setError(null)
+    const { data, error } = await supabase
+      .from('pick_templates')
+      .select('id,user_id,name,config,is_default,created_at,updated_at')
+      .eq('user_id', userId)
+      .order('is_default', { ascending: false })
+      .order('updated_at', { ascending: false })
+    setLoading(false)
+    if (error) {
+      // Most likely the migration 20260426_pick_templates hasn't been
+      // applied yet — Supabase returns a 42P01-class "relation does
+      // not exist" error. Set a flag so we render a notice instead of
+      // the picker UI.
+      if (/relation .* does not exist|pick_templates/.test(error.message)) {
+        setMigrationMissing(true)
+        return
+      }
+      setError(error.message)
+      return
+    }
+    setTemplates((data ?? []) as SavedTemplate[])
+    if (data && data.length > 0 && !activeId) setActiveId(data[0].id)
+  }, [userId, isPro, activeId])
+
+  useEffect(() => { load() }, [load])
+
+  async function addTemplate() {
+    setError(null)
+    // First template a user adds becomes default automatically. After
+    // that, new templates start non-default — they have to explicitly
+    // promote one.
+    const isFirst = templates.length === 0
+    const name    = `Template ${templates.length + 1}`
+    const { data, error } = await supabase
+      .from('pick_templates')
+      .insert({ user_id: userId, name, config: {}, is_default: isFirst })
+      .select('id,user_id,name,config,is_default,created_at,updated_at')
+      .single()
+    if (error || !data) { setError(error?.message ?? 'Could not add template'); return }
+    const next = [data as SavedTemplate, ...templates]
+    setTemplates(next)
+    setActiveId(data.id)
+    setRenaming(data.id)
+    setRenameValue(name)
+  }
+
+  async function deleteTemplate(id: string) {
+    if (!confirm('Delete this template? Any Location Guides using it will fall back to your default template (or the unbranded default if none).')) return
+    const { error } = await supabase.from('pick_templates').delete().eq('id', id)
+    if (error) { setError(error.message); return }
+    const next = templates.filter(t => t.id !== id)
+    setTemplates(next)
+    if (activeId === id) setActiveId(next[0]?.id ?? null)
+  }
+
+  async function setAsDefault(id: string) {
+    setError(null)
+    // Two-step: clear any existing default for this user, then set the
+    // new one. Wrapped in two updates because Supabase doesn't support
+    // arbitrary multi-row update statements via the JS client. The
+    // partial unique index in the migration would catch a race, but
+    // sequential calls from a single client are fine in practice.
+    const clear = await supabase.from('pick_templates').update({ is_default: false }).eq('user_id', userId).eq('is_default', true)
+    if (clear.error) { setError(clear.error.message); return }
+    const set = await supabase.from('pick_templates').update({ is_default: true }).eq('id', id)
+    if (set.error) { setError(set.error.message); return }
+    setTemplates(prev => prev.map(t => ({ ...t, is_default: t.id === id })))
+  }
+
+  async function renameTemplate(id: string, name: string) {
+    const trimmed = name.trim().slice(0, 80)
+    if (!trimmed) { setRenaming(null); return }
+    const { error } = await supabase.from('pick_templates').update({ name: trimmed }).eq('id', id)
+    if (error) { setError(error.message); return }
+    setTemplates(prev => prev.map(t => t.id === id ? { ...t, name: trimmed } : t))
+    setRenaming(null)
+  }
+
+  // When the editor saves a new config, patch our local state so the
+  // saved-X-ago hint stays accurate without a re-fetch.
+  function handleConfigChange(id: string, next: any) {
+    setTemplates(prev => prev.map(t => t.id === id ? { ...t, config: next, updated_at: new Date().toISOString() } : t))
+  }
+
+  if (!isPro) {
+    return (
+      <div style={{ background: 'var(--cream)', border: '1px solid var(--sand)', borderRadius: 10, padding: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>🎨 Location Guide templates</span>
+          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)', fontWeight: 500 }}>Pro only</span>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>
+          Save multiple named templates and pick which one applies to each Location Guide. Customize layout, font, colors, and header to match your studio's branding. Available on the Pro plan.
+        </div>
+      </div>
+    )
+  }
+
+  if (migrationMissing) {
+    return (
+      <div style={{ background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 10, padding: '1.25rem' }}>
+        <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>🎨 Location Guide templates</div>
+        <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 300, lineHeight: 1.55 }}>
+          Run migration <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>20260426_pick_templates.sql</code> in Supabase to enable saved templates.
+        </div>
+      </div>
+    )
+  }
+
+  const active = templates.find(t => t.id === activeId) ?? null
+
+  return (
+    <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>🎨 Location Guide templates</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Save multiple templates and pick one per Location Guide. Mark one as your default — guides without an explicit template fall back to it.</div>
+        </div>
+        <button onClick={addTemplate} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ New template</button>
+      </div>
+
+      {/* Template list — each row is clickable to switch the editor
+          below to that template. The active one is highlighted. */}
+      {loading ? (
+        <div style={{ padding: '1rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)' }}>Loading templates…</div>
+      ) : templates.length === 0 ? (
+        <div style={{ padding: '1.25rem', textAlign: 'center', background: 'var(--cream)', border: '1px dashed var(--cream-dark)', borderRadius: 8 }}>
+          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 8 }}>No templates yet — create one to start customizing your Location Guide pages.</div>
+          <button onClick={addTemplate} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add your first template</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: '1.25rem' }}>
+          {templates.map(t => {
+            const isActive = activeId === t.id
+            const isRenaming = renaming === t.id
+            return (
+              <div
+                key={t.id}
+                onClick={() => { if (!isRenaming) setActiveId(t.id) }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 12px', borderRadius: 6,
+                  border: `1.5px solid ${isActive ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                  background: isActive ? 'rgba(196,146,42,.06)' : 'white',
+                  cursor: isRenaming ? 'text' : 'pointer',
+                  transition: 'all .12s',
+                }}
+              >
+                {isRenaming ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onBlur={() => renameTemplate(t.id, renameValue)}
+                    onKeyDown={e => { if (e.key === 'Enter') renameTemplate(t.id, renameValue); if (e.key === 'Escape') setRenaming(null) }}
+                    style={{ flex: 1, padding: '4px 8px', border: '1px solid var(--gold)', borderRadius: 4, fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+                  />
+                ) : (
+                  <div
+                    onDoubleClick={e => { e.stopPropagation(); setRenaming(t.id); setRenameValue(t.name) }}
+                    style={{ flex: 1, fontSize: 13, fontWeight: isActive ? 500 : 400, color: 'var(--ink)' }}
+                    title="Double-click to rename"
+                  >
+                    {t.name}
+                  </div>
+                )}
+                {t.is_default && (
+                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600, background: 'rgba(74,103,65,.12)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.25)' }}>Default</span>
+                )}
+                {!t.is_default && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setAsDefault(t.id) }}
+                    style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 10, fontWeight: 500, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >Make default</button>
+                )}
+                <button
+                  onClick={e => { e.stopPropagation(); setRenaming(t.id); setRenameValue(t.name) }}
+                  style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 10, fontWeight: 500, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
+                >Rename</button>
+                <button
+                  onClick={e => { e.stopPropagation(); deleteTemplate(t.id) }}
+                  style={{ padding: '3px 8px', borderRadius: 4, border: '1px solid rgba(181,75,42,.2)', background: 'rgba(181,75,42,.06)', fontSize: 10, fontWeight: 500, color: 'var(--rust)', cursor: 'pointer', fontFamily: 'inherit' }}
+                >Delete</button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Active template editor — only shown when there's something to
+          edit. The PickTemplateEditor handles its own debounced save
+          to pick_templates by id. */}
+      {active && (
+        <div style={{ borderTop: '1px solid var(--cream-dark)', paddingTop: '1rem' }}>
+          <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Editing: {active.name}</div>
+          <PickTemplateEditor
+            key={active.id}
+            userId={userId}
+            templateId={active.id}
+            initial={active.config}
+            isPro={isPro}
+            onChange={next => handleConfigChange(active.id, next)}
+          />
+        </div>
+      )}
+
+      {error && <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 12, color: 'var(--rust)' }}>{error}</div>}
+
+      <div style={{ marginTop: '1rem', fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>
+        Pick a template per guide in the <Link href="/dashboard" style={{ color: 'var(--gold)' }}>Location Guide editor</Link>.
+      </div>
+    </div>
+  )
+}

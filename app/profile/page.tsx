@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
-import PickTemplateEditor from '@/components/PickTemplateEditor'
-import type { PickTemplate } from '@/lib/pick-template'
+import SavedTemplatesPanel from '@/components/SavedTemplatesPanel'
 
 interface Template {
   id: string; name: string; body: string
@@ -103,10 +102,8 @@ export default function ProfilePage() {
 
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
   // Pro-only Pick page template (font/colors/header/background). Loaded
-  // alongside the rest of the profile fields. The editor saves directly
-  // to profiles.pick_template via supabase, so we just keep state in
-  // sync here for the initial render.
-  const [pickTemplate, setPickTemplate] = useState<PickTemplate | null>(null)
+  // alongside the rest of the profile fields. SavedTemplatesPanel now
+  // owns multi-template state — this single field is no longer needed.
   // Toggle between the read-only "📍 Loose Park, KC" pill and the
   // AddressSearch typeahead. We keep the typeahead hidden by default so
   // the profile form looks clean for users who set their home city
@@ -174,21 +171,16 @@ export default function ProfilePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { window.location.href = '/'; return }
     setUserId(user.id); setEmail(user.email ?? '')
-    // Try with pick_template (migration 20260426); fall back without it
-    // so the page still loads on databases where that column hasn't
-    // been added yet.
+    // SavedTemplatesPanel manages its own pick_templates fetch — no
+    // need to pull pick_template here anymore.
     const cols = 'full_name,preferences,plan,plan_renews_at,cancel_at_period_end,stripe_subscription_status'
-    let profileRes = await supabase.from('profiles').select(`${cols},pick_template`).eq('id', user.id).single()
-    if (profileRes.error && /pick_template/.test(profileRes.error.message ?? '')) {
-      profileRes = await supabase.from('profiles').select(cols).eq('id', user.id).single() as any
-    }
+    const profileRes = await supabase.from('profiles').select(cols).eq('id', user.id).single()
     const profile = profileRes.data
     if (profile) {
       setFullName(profile.full_name ?? ''); setPlan(profile.plan ?? 'free')
       setPlanRenewsAt((profile as any).plan_renews_at ?? null)
       setCancelAtPeriodEnd(!!(profile as any).cancel_at_period_end)
       setSubStatus((profile as any).stripe_subscription_status ?? null)
-      setPickTemplate((profile as any).pick_template ?? null)
       const p = profile.preferences as Preferences | null
       if (p) {
         setPrefs({ ...DEFAULT_PREFS, ...p })
@@ -779,17 +771,13 @@ export default function ProfilePage() {
               {saving ? 'Saving…' : 'Save branding'}
             </button>
 
-            {/* Pick page template — Pro tier. Editor handles its own
-                save (writes to profiles.pick_template directly), so
-                it sits below the branding save button rather than
-                being bundled into it. */}
+            {/* Location Guide templates — Pro tier. Multi-template
+                manager (list + add/rename/default/delete) wraps the
+                actual styling editor. Each template saves itself, so
+                the panel sits below the branding save button as its
+                own card. */}
             <div style={{ marginTop: '2rem' }}>
-              <PickTemplateEditor
-                userId={userId ?? ''}
-                initial={pickTemplate}
-                isPro={isPro}
-                onChange={setPickTemplate}
-              />
+              <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} />
             </div>
           </div>
         )}

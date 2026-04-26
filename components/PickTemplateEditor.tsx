@@ -10,22 +10,25 @@ import {
   googleFontHref,
 } from '@/lib/pick-template'
 
-// Pro-only Pick page template editor. Reads / writes profiles.pick_template.
-// Lives inside the Profile page's Branding section as its own card.
+// Pro-only Location Guide template editor. Saves debounced as the
+// photographer edits — no manual Save button.
 //
-// Saves are immediate per-field — the photographer doesn't have to hit
-// a separate Save button after every tweak (matches the rest of the
-// Profile page's "edit then save" flows feeling, but for template
-// settings small-and-frequent saves are fine and safer).
+// Two persistence modes:
+//   1. templateId set    → updates pick_templates.config for that row
+//      (the new multi-template world managed by SavedTemplatesPanel).
+//   2. templateId null   → legacy single-template mode, writes to
+//      profiles.pick_template. Kept for the transition period before
+//      the pick_templates migration lands.
 
 interface Props {
-  userId:    string
-  initial:   PickTemplate | null | undefined
-  isPro:     boolean
-  onChange?: (next: PickTemplate) => void
+  userId:     string
+  templateId?: string | null     // when set, write to pick_templates by id
+  initial:    PickTemplate | null | undefined
+  isPro:      boolean
+  onChange?:  (next: PickTemplate) => void
 }
 
-export default function PickTemplateEditor({ userId, initial, isPro, onChange }: Props) {
+export default function PickTemplateEditor({ userId, templateId, initial, isPro, onChange }: Props) {
   const [tpl, setTpl]       = useState<PickTemplate>(initial ?? {})
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
@@ -53,13 +56,16 @@ export default function PickTemplateEditor({ userId, initial, isPro, onChange }:
   }
   async function save(payload: PickTemplate) {
     setSaving(true)
-    const { error } = await supabase.from('profiles').update({ pick_template: payload }).eq('id', userId)
+    const { error } = templateId
+      ? await supabase.from('pick_templates').update({ config: payload }).eq('id', templateId)
+      : await supabase.from('profiles').update({ pick_template: payload }).eq('id', userId)
     setSaving(false)
     if (error) {
-      // Most likely cause: migration 20260426_three_tier_plans.sql
-      // hasn't been applied yet (pick_template column missing).
-      if (/pick_template/.test(error.message)) {
-        setError('Pick template column missing — run migration 20260426_three_tier_plans.sql in Supabase.')
+      // Most likely cause: the relevant migration hasn't been applied
+      // yet — pick_templates table missing OR profiles.pick_template
+      // column missing (depending on which path we took above).
+      if (/pick_template|relation .* does not exist/.test(error.message)) {
+        setError('Template storage missing — run the latest migrations in Supabase.')
       } else {
         setError(error.message)
       }

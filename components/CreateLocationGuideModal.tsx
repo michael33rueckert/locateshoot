@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { tileUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
+import type { SavedTemplate } from '@/lib/pick-template'
 
 const MAX_HIGHLIGHTS = 3
 
@@ -95,6 +96,14 @@ export default function CreateLocationGuideModal({
   // Loaded from the existing guide on edit (see effect below); enforced
   // <= MAX_HIGHLIGHTS in toggleHighlight.
   const [highlightedIds, setHighlightedIds] = useState<string[]>([])
+  // Pro-tier: which saved template applies to this guide. null = use
+  // the photographer's default template (or no template if they have
+  // none). Loaded from share_links.pick_template_id on edit.
+  const [pickTemplateId, setPickTemplateId] = useState<string | null>(null)
+  // Photographer's saved templates — for the picker dropdown. Empty
+  // when the migration hasn't landed or the photographer hasn't
+  // created any templates yet.
+  const [availableTemplates, setAvailableTemplates] = useState<SavedTemplate[]>([])
   // Set to true on save when the highlighted_location_ids column is
   // missing in Supabase — surfaces a notice to the user so they know
   // their stars weren't actually persisted.
@@ -117,24 +126,29 @@ export default function CreateLocationGuideModal({
   // show only photos from locations the photographer has included in the guide.
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ pid: string; url: string }[]>([])
 
-  // Load existing message, expiration, cover photo, multi-pick, highlights
-  // when editing. The highlighted_location_ids column may not exist yet
-  // (migration 20260425_share_link_highlights.sql) — try with the column
-  // first, then fall back without it so editing works either way.
+  // Load existing message, expiration, cover photo, multi-pick,
+  // highlights, and template selection when editing. Both
+  // highlighted_location_ids (20260425_share_link_highlights) and
+  // pick_template_id (20260426_pick_templates) columns may not exist
+  // yet — try the full select first, then fall back so editing works
+  // either way.
   useEffect(() => {
     if (!editLink) return
     const baseCols = 'message,expires_at,is_permanent,expire_on_submit,cover_photo_url,max_picks,max_pick_distance_miles'
     ;(async () => {
       let { data } = await supabase.from('share_links')
-        .select(`${baseCols},highlighted_location_ids`)
+        .select(`${baseCols},highlighted_location_ids,pick_template_id`)
         .eq('id', editLink.id)
         .single()
       if (!data) {
-        // Probably the migration hasn't landed yet — re-fetch without it.
+        // Probably one or both migrations haven't landed yet — re-fetch
+        // without the optional columns.
         const fb = await supabase.from('share_links').select(baseCols).eq('id', editLink.id).single()
         data = fb.data as any
       }
       if (!data) return
+      const tid = (data as any).pick_template_id as string | null | undefined
+      setPickTemplateId(tid ?? null)
       if (data.message) setMessage(data.message)
       if (data.cover_photo_url) setCoverUrl(data.cover_photo_url)
       if (data.expire_on_submit) { setExpirationMode('on_submit') }
@@ -150,6 +164,33 @@ export default function CreateLocationGuideModal({
       if (Array.isArray(hl)) setHighlightedIds(hl.slice(0, MAX_HIGHLIGHTS))
     })()
   }, [editLink])
+
+  // Pull the photographer's saved templates once so the picker below
+  // has options. Falls back silently when the pick_templates migration
+  // hasn't been applied — the picker just won't render.
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('pick_templates')
+        .select('id,user_id,name,config,is_default,created_at,updated_at')
+        .eq('user_id', userId)
+        .order('is_default', { ascending: false })
+        .order('updated_at', { ascending: false })
+      if (cancelled) return
+      if (error) { setAvailableTemplates([]); return }
+      setAvailableTemplates((data ?? []) as SavedTemplate[])
+      // For new (non-edit) guides, default-pick the photographer's
+      // default template if they have one. Edit guides keep whatever
+      // pick_template_id was loaded above.
+      if (!editLink) {
+        const def = (data ?? []).find((t: any) => t.is_default)
+        if (def) setPickTemplateId((curr: any) => curr ?? def.id)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [userId, editLink])
 
   // For full-portfolio guides, keep selectedIds in sync with the live
   // portfolio so the cover picker shows photos from every saved location
@@ -254,18 +295,19 @@ export default function CreateLocationGuideModal({
           max_pick_distance_miles: finalMaxMiles,
         }
         if (!isFullPortfolio) updatePayload.portfolio_location_ids = selectedIds
+        // Both highlighted_location_ids and pick_template_id are
+        // optional columns from later migrations — strip whichever the
+        // server complains about and retry. Saves the rest of the
+        // payload either way.
+        const optional = { highlighted_location_ids: validHighlights, pick_template_id: pickTemplateId }
         let { data, error: updateErr } = await supabase.from('share_links')
-          .update({ ...updatePayload, highlighted_location_ids: validHighlights })
+          .update({ ...updatePayload, ...optional })
           .eq('id', editLink.id)
           .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
           .single()
-        if (updateErr && /highlighted_location_ids/.test(updateErr.message ?? '')) {
-          // Migration 20260425_share_link_highlights.sql not run yet —
-          // retry without that column. Highlights get dropped, and we
-          // surface a notice to the user so they know to run the
-          // migration instead of assuming their stars were saved.
-          console.warn('share_links.highlighted_location_ids missing — saving without highlights (run migration to enable)')
-          if (validHighlights.length > 0) setHighlightsDropped(true)
+        if (updateErr && /highlighted_location_ids|pick_template_id/.test(updateErr.message ?? '')) {
+          console.warn('share_links optional cols missing — saving without them (run latest migrations to enable)', updateErr.message)
+          if (validHighlights.length > 0 && /highlighted_location_ids/.test(updateErr.message ?? '')) setHighlightsDropped(true)
           const fb = await supabase.from('share_links').update(updatePayload).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
           data = fb.data; updateErr = fb.error
         }
@@ -290,13 +332,14 @@ export default function CreateLocationGuideModal({
         max_picks:               finalMaxPicks,
         max_pick_distance_miles: finalMaxMiles,
       }
+      const optional = { highlighted_location_ids: validHighlights, pick_template_id: pickTemplateId }
       let { data, error: insertErr } = await supabase.from('share_links')
-        .insert({ ...insertBase, highlighted_location_ids: validHighlights })
+        .insert({ ...insertBase, ...optional })
         .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
         .single()
-      if (insertErr && /highlighted_location_ids/.test(insertErr.message ?? '')) {
-        console.warn('share_links.highlighted_location_ids missing — creating without highlights (run migration to enable)')
-        if (validHighlights.length > 0) setHighlightsDropped(true)
+      if (insertErr && /highlighted_location_ids|pick_template_id/.test(insertErr.message ?? '')) {
+        console.warn('share_links optional cols missing — creating without them (run latest migrations to enable)', insertErr.message)
+        if (validHighlights.length > 0 && /highlighted_location_ids/.test(insertErr.message ?? '')) setHighlightsDropped(true)
         const fb = await supabase.from('share_links').insert(insertBase).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
         data = fb.data; insertErr = fb.error
       }
@@ -564,6 +607,41 @@ export default function CreateLocationGuideModal({
               </Link>
             </div>
           </div>}
+
+          {/* Template picker — Pro feature. Hidden when the photographer
+              hasn't saved any templates yet (or hasn't run the
+              pick_templates migration). Default option falls back to
+              the photographer's marked-default template at render
+              time, so leaving this on "Default" works whether or not
+              they have a default set. */}
+          {availableTemplates.length > 0 && (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={labelStyle}>Location Guide template</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', flexWrap: 'wrap' }}>
+                <select
+                  value={pickTemplateId ?? ''}
+                  onChange={e => setPickTemplateId(e.target.value || null)}
+                  style={{ ...inputStyle, flex: 1, minWidth: 200, cursor: 'pointer' }}
+                >
+                  <option value="">— Use my default template —</option>
+                  {availableTemplates.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.is_default ? ' (default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <Link
+                  href="/profile#branding"
+                  style={{ display: 'inline-flex', alignItems: 'center', padding: '9px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                >
+                  Edit templates →
+                </Link>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>
+                Controls the layout, font, and colors clients see when they open this guide. Different guides can use different templates.
+              </div>
+            </div>
+          )}
 
           {/* Cover photo picker — used as the card thumbnail + link preview */}
           <div style={{ marginBottom: '1.5rem' }}>
