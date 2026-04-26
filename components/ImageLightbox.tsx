@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Props {
   /** URLs to show. Accepts a single string for backwards compatibility; null/undefined hides the lightbox. */
@@ -20,19 +20,31 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
   const images = Array.isArray(src) ? src.filter(Boolean) as string[] : (src ? [src] : [])
   const hasMultiple = images.length > 1
   const [idx, setIdx] = useState(0)
-  const [touchStart, setTouchStart] = useState<number | null>(null)
+  // Horizontal scroll-snap strip — same pattern the pick page detail
+  // panel uses for its hero. Lets the OS handle the swipe gesture
+  // (1:1 finger tracking + momentum + snap) instead of our old
+  // touchstart/touchend handlers, which just swapped the displayed
+  // image with no animation and felt delayed because the next image
+  // wasn't in the DOM until after the swipe completed.
+  const stripRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Reset to the caller's starting index whenever the source changes.
-    setIdx(Math.max(0, Math.min(startIndex, images.length - 1)))
+    const next = Math.max(0, Math.min(startIndex, images.length - 1))
+    setIdx(next)
+    // Jump the strip to the right slot without animating (instant).
+    requestAnimationFrame(() => {
+      const el = stripRef.current
+      if (el) el.scrollTo({ left: next * el.clientWidth, behavior: 'instant' as ScrollBehavior })
+    })
   }, [src, startIndex])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (images.length === 0) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
-      else if (e.key === 'ArrowLeft'  && hasMultiple) setIdx(i => (i - 1 + images.length) % images.length)
-      else if (e.key === 'ArrowRight' && hasMultiple) setIdx(i => (i + 1) % images.length)
+      else if (e.key === 'ArrowLeft'  && hasMultiple) goPrev()
+      else if (e.key === 'ArrowRight' && hasMultiple) goNext()
     }
     window.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -41,21 +53,33 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
-  }, [images.length, hasMultiple, onClose])
+  }, [images.length, hasMultiple, onClose])  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (images.length === 0) return null
 
-  const current = images[Math.max(0, Math.min(idx, images.length - 1))]
-  const goPrev = () => setIdx(i => (i - 1 + images.length) % images.length)
-  const goNext = () => setIdx(i => (i + 1) % images.length)
+  // Programmatic navigation scrolls the strip — keeps the same animated
+  // motion as the swipe gesture. Wraps around at both ends.
+  function scrollToIdx(next: number, smooth = true) {
+    const el = stripRef.current
+    if (!el) return
+    el.scrollTo({ left: next * el.clientWidth, behavior: smooth ? 'smooth' : 'instant' as ScrollBehavior })
+  }
+  const goPrev = () => {
+    const next = (idx - 1 + images.length) % images.length
+    scrollToIdx(next)
+  }
+  const goNext = () => {
+    const next = (idx + 1) % images.length
+    scrollToIdx(next)
+  }
 
-  // Swipe-to-navigate on touch devices.
-  const onTouchStart = (e: React.TouchEvent) => setTouchStart(e.touches[0].clientX)
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchStart == null || !hasMultiple) return
-    const dx = e.changedTouches[0].clientX - touchStart
-    if (Math.abs(dx) > 50) dx < 0 ? goNext() : goPrev()
-    setTouchStart(null)
+  // Keep idx in sync with where the user has scrolled, so the counter
+  // ("3 / 8") and arrow buttons reflect the current image.
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget
+    if (el.clientWidth === 0) return
+    const next = Math.round(el.scrollLeft / el.clientWidth)
+    if (next !== idx) setIdx(next)
   }
 
   const arrowStyle: React.CSSProperties = {
@@ -81,34 +105,71 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
   return (
     <div
       onClick={onClose}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
       style={{
         position: 'fixed',
         inset: 0,
         background: 'rgba(10,8,6,.92)',
         backdropFilter: 'blur(6px)',
         zIndex: 10000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem',
         cursor: 'zoom-out',
       }}
     >
-      <img
-        src={current}
-        alt={alt ?? ''}
+      {/* Horizontal scroll-snap strip. Touch swipes are handled by the
+          OS for 1:1 finger tracking + momentum + snap. All images are
+          rendered (not just the active one) so the next slide is
+          already loaded by the time the user finishes swiping —
+          eliminates the "tap, wait, see" delay the old single-img
+          lightbox had. */}
+      <div
+        ref={stripRef}
+        onScroll={handleScroll}
         onClick={e => e.stopPropagation()}
+        className="lightbox-strip"
         style={{
-          maxWidth: '100%',
-          maxHeight: '100%',
-          objectFit: 'contain',
-          borderRadius: 8,
-          boxShadow: '0 24px 80px rgba(0,0,0,.6)',
-          cursor: 'default',
+          position: 'absolute', inset: 0,
+          display: 'flex',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollSnapType: 'x mandatory',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
         }}
-      />
+      >
+        {images.map((url, i) => (
+          <div
+            key={i}
+            onClick={onClose}
+            style={{
+              flex: '0 0 100%',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem',
+              boxSizing: 'border-box',
+              scrollSnapAlign: 'start',
+              scrollSnapStop: 'always',
+            }}
+          >
+            <img
+              src={url}
+              alt={alt ?? ''}
+              onClick={e => e.stopPropagation()}
+              loading={Math.abs(i - idx) <= 1 ? 'eager' : 'lazy'}
+              decoding="async"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                borderRadius: 8,
+                boxShadow: '0 24px 80px rgba(0,0,0,.6)',
+                cursor: 'default',
+              }}
+            />
+          </div>
+        ))}
+      </div>
 
       <button
         onClick={onClose}
@@ -202,6 +263,7 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
         </>
       )}
       <style>{`
+        .lightbox-strip::-webkit-scrollbar { display: none; }
         @media (max-width: 1023px) {
           .lightbox-side-arrow, .lightbox-bottom-arrow { display: none !important; }
         }
