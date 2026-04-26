@@ -144,20 +144,12 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
     }
   }, [activeFont])
 
-  // Pull saved-template fields back into local state when the prop
-  // changes (e.g. profile reload from another tab).
-  useEffect(() => {
-    if (initial) {
-      setTpl(initial)
-      setColorDrafts({
-        background: initial.colors?.background ?? DEFAULT_TEMPLATE.colors.background,
-        text:       initial.colors?.text       ?? DEFAULT_TEMPLATE.colors.text,
-        accent:     initial.colors?.accent     ?? DEFAULT_TEMPLATE.colors.accent,
-        accentText: initial.colors?.accentText ?? DEFAULT_TEMPLATE.colors.accentText,
-      })
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial?.font, initial?.layout, initial?.colors?.background, initial?.colors?.text, initial?.colors?.accent, initial?.colors?.accentText])
+  // Note: no resync-from-initial effect here. SavedTemplatesPanel uses
+  // <PickTemplateEditor key={active.id}> to remount on template switch,
+  // which already re-seeds local state from the new initial. An effect
+  // that watched individual color/font deps would loop: every save
+  // calls onChange → parent updates templates → new initial flows in →
+  // effect overwrites the user's draft mid-edit.
 
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
   const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }

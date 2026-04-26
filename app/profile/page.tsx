@@ -52,15 +52,13 @@ const DEFAULT_PREFS: Preferences = {
 
 const NAV_ITEMS = [
   { id: 'profile',     icon: '👤', label: 'Profile'                },
-  { id: 'branding',    icon: '🎨', label: 'Branding'               },
+  { id: 'branding',    icon: '🎨', label: 'Location Guide Layouts' },
   { id: 'domain',      icon: '🌐', label: 'Custom Domain'          },
   { id: 'templates',   icon: '✉️',  label: 'Message Templates'      },
   { id: 'preferences', icon: '⚙',  label: 'Preferences'            },
   { id: 'billing',     icon: '💳', label: 'Subscription & Billing' },
   { id: 'password',    icon: '🔒', label: 'Password & Security'    },
 ]
-
-const ACCENT_COLORS = ['#c4922a','#4a6741','#3d6e8c','#b54b2a','#7c5cbf','#1a1612','#d4626a','#4a7a9b']
 
 // Feature flag — Custom Sending Email is hidden until we upgrade the
 // Resend plan to fit more than one verified domain. Each photographer
@@ -705,7 +703,7 @@ export default function ProfilePage() {
         {/* ── BRANDING ── */}
         {active === 'branding' && (
           <div>
-            {sectionTitle('Branding', 'Your logo and colors appear on client share pages.')}
+            {sectionTitle('Location Guide Layouts', 'Build and manage the templates that style the Location Guides you send to clients.')}
             <div style={{ background: isPro ? 'white' : 'var(--cream)', border: `1px solid ${isPro ? 'var(--cream-dark)' : 'var(--sand)'}`, borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div>
@@ -732,20 +730,6 @@ export default function ProfilePage() {
                   <button onClick={() => logoInputRef.current?.click()} style={{ display: 'block', padding: '9px 18px', borderRadius: 4, border: '1.5px solid var(--sand)', background: 'white', fontSize: 13, fontWeight: 500, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 8 }}>Upload logo</button>
                   {logoPreview && <button onClick={() => setLogoPreview(null)} style={{ display: 'block', padding: '6px 12px', borderRadius: 4, border: 'none', background: 'transparent', fontSize: 12, color: 'var(--rust)', cursor: 'pointer', fontFamily: 'inherit' }}>Remove logo</button>}
                   <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 4, lineHeight: 1.5 }}>PNG or JPG · Square, at least 200×200px</div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>Accent color</div>
-              <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem' }}>Used for buttons and highlights on your client share pages.</div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: '1rem', flexWrap: 'wrap' }}>
-                {ACCENT_COLORS.map(color => (
-                  <div key={color} onClick={() => setBrandAccent(color)} style={{ width: 36, height: 36, borderRadius: '50%', background: color, cursor: 'pointer', border: `3px solid ${brandAccent === color ? 'var(--ink)' : 'transparent'}`, boxSizing: 'border-box', transition: 'all .15s' }} />
-                ))}
-                <div style={{ position: 'relative', width: 36, height: 36 }}>
-                  <input type="color" value={brandAccent} onChange={e => setBrandAccent(e.target.value)} style={{ opacity: 0, position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: 'pointer', border: 'none' }} />
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>+</div>
                 </div>
               </div>
             </div>

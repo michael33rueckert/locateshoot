@@ -511,11 +511,23 @@ export default function ClientPickerPage() {
   const tpl = resolveTemplate(pickTemplate)
   const fontHref = googleFontHref(tpl.font)
 
+  // Optional background image from the photographer's template — sits
+  // behind the entire page. The header / sidebar / map all have their
+  // own opaque backgrounds, so it only peeks through where they don't
+  // (mostly between/around cards on desktop). Match the in-editor
+  // preview: cover + center.
+  const tplBgImage = tpl.background.type === 'image' && tpl.background.imageUrl
+    ? `url(${tpl.background.imageUrl})`
+    : 'none'
+
   return (
     <div
       style={{
         height: '100svh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        background: 'var(--ink)',
+        backgroundColor: 'var(--ink)',
+        backgroundImage: tplBgImage,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
         // Map template colors onto our existing CSS variables so all
         // the existing component styles (which use var(--cream),
         // var(--ink), var(--gold)) inherit the photographer's palette
@@ -655,6 +667,7 @@ export default function ClientPickerPage() {
                         isActive={isActive}
                         isDisabled={isDisabled}
                         onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
+                        onToggleChoice={() => toggleChoice(loc.id)}
                       />
                     )
                   })}
@@ -698,7 +711,20 @@ export default function ClientPickerPage() {
           }
         </div>
         <button onClick={confirmChoice} disabled={chosenLocs.length === 0 || submitting}
-          style={{ padding: '12px 24px', borderRadius: 4, border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: chosenLocs.length > 0 ? 'pointer' : 'default', background: isGoldAccent ? 'var(--gold)' : accentColor, color: isGoldAccent ? 'var(--ink)' : 'white', opacity: chosenLocs.length > 0 ? 1 : 0.35, flexShrink: 0, whiteSpace: 'nowrap' }}>
+          style={{
+            padding: '12px 24px', borderRadius: 4, border: 'none', fontFamily: 'inherit',
+            fontSize: 14, fontWeight: 600,
+            cursor: chosenLocs.length > 0 ? 'pointer' : 'default',
+            background: isGoldAccent ? 'var(--gold)' : accentColor,
+            color: isGoldAccent ? 'var(--ink)' : 'white',
+            opacity: chosenLocs.length > 0 ? 1 : 0.35,
+            // Soft glow + lift when a pick is active so the photographer's
+            // accent color reads as "ready to send" instead of just "darker".
+            boxShadow: chosenLocs.length > 0 ? `0 0 0 3px ${isGoldAccent ? 'rgba(196,146,42,.25)' : 'rgba(255,255,255,.18)'}, 0 4px 12px rgba(0,0,0,.25)` : 'none',
+            transform: chosenLocs.length > 0 ? 'translateY(-1px)' : 'none',
+            transition: 'opacity .2s, box-shadow .2s, transform .2s',
+            flexShrink: 0, whiteSpace: 'nowrap',
+          }}>
           {submitting ? 'Sending…' : maxPicks > 1 ? 'Send my picks →' : 'Send my choice →'}
         </button>
       </div>
@@ -943,7 +969,7 @@ export default function ClientPickerPage() {
         .pick-loc-body     { flex: 1; min-width: 0; padding: 14px 1.25rem 4px; }
         .pick-loc-name     { font-family: var(--font-playfair),serif; font-size: 17px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
         .pick-loc-city     { font-size: 13px; color: var(--ink-soft); margin-bottom: 8px; }
-        .pick-loc-cta      { align-self: flex-start; padding: 0 1.25rem 14px; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+        .pick-loc-cta      { align-self: flex-start; margin: 0 1.25rem 14px; padding: 8px 16px; font-size: 13px; flex-shrink: 0; }
 
         /* ── 'list' layout — compact row: small thumb left, text right.
            Photographer's choice when they want clients to scroll a long
@@ -959,7 +985,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="list"] .pick-loc-body  { padding: 2px 0; }
         .pick-loc-list[data-layout="list"] .pick-loc-name  { font-size: 15px; margin-bottom: 2px; }
         .pick-loc-list[data-layout="list"] .pick-loc-city  { font-size: 12px; margin-bottom: 6px; }
-        .pick-loc-list[data-layout="list"] .pick-loc-cta   { padding: 0; align-self: center; flex-shrink: 0; }
+        .pick-loc-list[data-layout="list"] .pick-loc-cta   { align-self: center; flex-shrink: 0; margin: 0; padding: 8px 14px; font-size: 12px; }
 
         /* ── 'grid' layout — 2-column grid of mini cards. Squarer than
            the default and shows two locations per row even on mobile. */
@@ -972,7 +998,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="grid"] .pick-loc-body  { padding: 8px 10px 4px; }
         .pick-loc-list[data-layout="grid"] .pick-loc-name  { font-size: 14px; margin-bottom: 2px; }
         .pick-loc-list[data-layout="grid"] .pick-loc-city  { font-size: 11px; margin-bottom: 6px; }
-        .pick-loc-list[data-layout="grid"] .pick-loc-cta   { display: none; }
+        .pick-loc-list[data-layout="grid"] .pick-loc-cta   { margin: 0 10px 10px; font-size: 12px; padding: 6px 10px; }
 
         /* ── 'magazine' layout — first card spans both columns as a
            hero, the rest fill a 2-up grid below. Reads like the cover
@@ -991,7 +1017,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="magazine"] .pick-loc-body  { padding: 8px 10px 4px; }
         .pick-loc-list[data-layout="magazine"] .pick-loc-name  { font-size: 14px; margin-bottom: 2px; }
         .pick-loc-list[data-layout="magazine"] .pick-loc-city  { font-size: 11px; margin-bottom: 6px; }
-        .pick-loc-list[data-layout="magazine"] .pick-loc-cta   { display: none; }
+        .pick-loc-list[data-layout="magazine"] .pick-loc-cta   { margin: 0 10px 10px; font-size: 12px; padding: 6px 10px; }
 
         /* ── 'minimal' layout — bare row: tiny thumb, name only, faint
            separator. For photographers who want the photo to live in
@@ -1006,7 +1032,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="minimal"] .pick-loc-name  { font-size: 14px; margin-bottom: 0; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-city  { font-size: 11px; margin-bottom: 0; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-body > div:last-child { display: none; }
-        .pick-loc-list[data-layout="minimal"] .pick-loc-cta   { padding: 0; align-self: center; flex-shrink: 0; font-size: 11px; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-cta   { align-self: center; flex-shrink: 0; font-size: 12px; padding: 6px 12px; }
 
         /* Mobile inherits the 4:3 aspect-ratio above — no override
            needed. The width naturally fills the viewport so the photo
@@ -1065,6 +1091,7 @@ function PickListItem({
   isActive,
   isDisabled,
   onSelect,
+  onToggleChoice,
 }: {
   loc:            FullLocation
   index:          number
@@ -1073,6 +1100,7 @@ function PickListItem({
   isActive:       boolean
   isDisabled:     boolean
   onSelect:       () => void
+  onToggleChoice: () => void
 }) {
   const photos = loc.photoUrls.length > 0
     ? loc.photoUrls
@@ -1144,9 +1172,29 @@ function PickListItem({
             })}
           </div>
         )}
-        <div style={{ position: 'absolute', top: 8, left: 8, width: 24, height: 24, borderRadius: '50%', background: isChosen ? 'rgba(74,103,65,.92)' : 'rgba(26,22,18,.72)', color: 'white', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, backdropFilter: 'blur(4px)' }}>
+        {/* Tappable selection checkbox — toggles selection without
+            opening the detail panel. Stops propagation so the card's
+            onClick (which opens the detail) doesn't also fire.
+            Doubles as the index pill when not chosen. */}
+        <button
+          onClick={e => { e.stopPropagation(); if (!isDisabled || isChosen) onToggleChoice() }}
+          aria-label={isChosen ? 'Deselect this location' : 'Select this location'}
+          style={{
+            position: 'absolute', top: 8, left: 8,
+            width: 32, height: 32, borderRadius: '50%',
+            background: isChosen ? 'rgba(74,103,65,.95)' : 'rgba(255,255,255,.92)',
+            color: isChosen ? 'white' : 'var(--ink)',
+            fontSize: 14, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 2, backdropFilter: 'blur(4px)',
+            border: isChosen ? '2px solid rgba(74,103,65,1)' : '2px solid rgba(26,22,18,.25)',
+            cursor: isDisabled && !isChosen ? 'not-allowed' : 'pointer',
+            padding: 0, fontFamily: 'inherit',
+            boxShadow: '0 1px 4px rgba(0,0,0,.18)',
+          }}
+        >
           {isChosen ? '✓' : index + 1}
-        </div>
+        </button>
         {/* Photographer-recommended badge — shown for the 1-3 locations
             the photographer marked as a "highlight" when building the
             guide. Sits opposite the index pill so the two don't crowd. */}
@@ -1169,9 +1217,23 @@ function PickListItem({
           {isDisabled && <span style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic' }}>Too far from your other pick</span>}
         </div>
       </div>
-      <div className="pick-loc-cta" style={{ color: isChosen ? 'var(--sage)' : 'var(--sky)' }}>
-        {isChosen ? '✓ Selected' : 'View →'}
-      </div>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); if (!isDisabled || isChosen) onToggleChoice() }}
+        disabled={isDisabled && !isChosen}
+        className="pick-loc-cta"
+        style={{
+          background: isChosen ? 'rgba(74,103,65,.1)' : 'var(--gold)',
+          color: isChosen ? 'var(--sage)' : 'var(--ink)',
+          border: isChosen ? '1px solid rgba(74,103,65,.3)' : 'none',
+          borderRadius: 4,
+          fontWeight: 600, fontFamily: 'inherit',
+          cursor: isDisabled && !isChosen ? 'not-allowed' : 'pointer',
+          opacity: isDisabled && !isChosen ? 0.5 : 1,
+        }}
+      >
+        {isChosen ? '✓ Selected' : 'Select'}
+      </button>
     </div>
   )
 }
