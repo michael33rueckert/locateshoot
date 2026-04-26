@@ -849,7 +849,11 @@ export default function ClientPickerPage() {
            sync with these widths so retina screens don't pick the 480w
            thumbnail and upscale it. */
         .pick-loc-card     { display: flex; flex-direction: column; gap: 0; padding: 0; align-items: stretch; }
-        .pick-loc-photo    { width: 100%; height: 210px; border-radius: 0; overflow: hidden; position: relative; flex-shrink: 0; }
+        /* 4:3 aspect ratio on every viewport so a typical landscape
+           photo fits without being cropped top/bottom. Width fills the
+           sidebar (~420px on desktop/tablet, full viewport on mobile);
+           height follows automatically from the aspect ratio. */
+        .pick-loc-photo    { width: 100%; aspect-ratio: 4 / 3; border-radius: 0; overflow: hidden; position: relative; flex-shrink: 0; }
         .pick-loc-photo-strip {
           position: absolute; inset: 0;
           display: flex;
@@ -875,12 +879,11 @@ export default function ClientPickerPage() {
         .pick-loc-city     { font-size: 13px; color: var(--ink-soft); margin-bottom: 8px; }
         .pick-loc-cta      { align-self: flex-start; padding: 0 1.25rem 14px; font-size: 13px; font-weight: 600; flex-shrink: 0; }
 
-        /* Phones get a slightly taller hero — they're holding the device
-           closer than someone at a desktop is sitting from a 27" screen,
-           so the photo can take more of the viewport without dominating. */
-        @media (max-width: 768px) {
-          .pick-loc-photo { height: 240px; }
-        }
+        /* Mobile inherits the 4:3 aspect-ratio above — no override
+           needed. The width naturally fills the viewport so the photo
+           is taller on phones (where the viewport is narrow) and a bit
+           shorter on desktop (where the sidebar is 420px), but the
+           proportion stays correct everywhere. */
 
         /* Mobile map toggle (below, unchanged). */
         @media (max-width: 768px) {
