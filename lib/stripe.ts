@@ -17,21 +17,15 @@ export function getStripe(): Stripe {
 export type Tier    = 'starter' | 'pro'
 export type Cadence = 'monthly'  | 'yearly'
 
-// Price-id resolution per (tier, cadence). Each combo has its own Stripe
-// price. Env vars:
+// Price-id resolution per (tier, cadence). Each combo has its own
+// Stripe price + env var:
 //   STRIPE_STARTER_MONTHLY_PRICE_ID  ($12/mo)
 //   STRIPE_STARTER_YEARLY_PRICE_ID   ($120/yr)
 //   STRIPE_PRO_MONTHLY_PRICE_ID      ($25/mo)
 //   STRIPE_PRO_YEARLY_PRICE_ID       ($250/yr)
-//
-// Backwards-compat: the old STRIPE_BASE_PRICE_ID / STRIPE_PREMIUM_PRICE_ID
-// (used while we only had one paid tier) fall through as Starter monthly
-// + yearly so existing Vercel envs keep working until they're renamed.
 export function getPriceId(tier: Tier, cadence: Cadence): string {
   const key = `STRIPE_${tier.toUpperCase()}_${cadence.toUpperCase()}_PRICE_ID`
   const id  = process.env[key]
-    ?? (tier === 'starter' && cadence === 'monthly' ? process.env.STRIPE_BASE_PRICE_ID    : undefined)
-    ?? (tier === 'starter' && cadence === 'yearly'  ? process.env.STRIPE_PREMIUM_PRICE_ID : undefined)
   if (!id) throw new Error(`Stripe price id missing: ${key}`)
   return id
 }
@@ -46,9 +40,6 @@ export function tierFromPriceId(priceId: string | null | undefined): Tier | null
   if (priceId === process.env.STRIPE_PRO_YEARLY_PRICE_ID)      return 'pro'
   if (priceId === process.env.STRIPE_STARTER_MONTHLY_PRICE_ID) return 'starter'
   if (priceId === process.env.STRIPE_STARTER_YEARLY_PRICE_ID)  return 'starter'
-  // Legacy env var support — see getPriceId above.
-  if (priceId === process.env.STRIPE_BASE_PRICE_ID)    return 'starter'
-  if (priceId === process.env.STRIPE_PREMIUM_PRICE_ID) return 'starter'
   return null
 }
 
