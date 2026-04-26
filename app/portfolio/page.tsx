@@ -109,14 +109,21 @@ export default function PortfolioPage() {
       }))
       setLocs(initial)
 
-      // Lazy-fetch Google Place photos for any locations that still have
-      // no preview after the own/source DB lookups — these are typically
-      // explore-added locations whose source row has no rows in
-      // location_photos but Google has photos available. Cached in
-      // sessionStorage so navigating between dashboard ↔ /portfolio in
-      // the same session reuses results. See dashboard page.tsx for the
-      // longer note on Google URL expiry.
-      const stillMissing = initial.filter((l: any) => !l.preview_url && Number.isFinite(l.latitude) && Number.isFinite(l.longitude))
+      // Lazy-fetch Google Place photos for locations that need a fresh
+      // lookup. Includes both:
+      //   - preview_url null (no rows in location_photos)
+      //   - preview_url is a stale Google CDN URL (those expire ~60 min,
+      //     and most "seeded from Google" rows in location_photos are
+      //     long since dead — the <img> just fails silently and the
+      //     gradient bleeds through)
+      // See dashboard page.tsx for the longer note on Google URL expiry
+      // and why sessionStorage caches the resolved URL.
+      const isStaleGoogleUrl = (u: string | null) =>
+        !!u && /googleusercontent\.com|googleapis\.com\/v1\/places/.test(u)
+      const stillMissing = initial.filter((l: any) =>
+        (!l.preview_url || isStaleGoogleUrl(l.preview_url))
+        && Number.isFinite(l.latitude) && Number.isFinite(l.longitude)
+      )
       if (stillMissing.length > 0) {
         stillMissing.forEach(async (loc: any) => {
           const cacheKey = `google-photo:${loc.id}`

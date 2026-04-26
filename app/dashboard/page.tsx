@@ -124,16 +124,24 @@ export default function DashboardPage() {
         }))
         setPortfolioLocs(initialLocs)
 
-        // Locations that still have no preview after the own/source
-        // lookups rely on Google Place photos, which our DB doesn't
-        // store. Fetch them lazily through the existing /api/place-photos
-        // endpoint and patch each tile's preview_url as it resolves so
-        // they fill in within a second or two of dashboard load. Cache
-        // results in sessionStorage so navigating between dashboard and
-        // /portfolio in the same session doesn't re-spend Google API
-        // calls. (Google photo URLs expire ~60 min, so we don't try to
-        // persist longer than the session.)
-        const stillMissing = initialLocs.filter((l: any) => !l.preview_url && Number.isFinite(l.latitude) && Number.isFinite(l.longitude))
+        // Locations that need a fresh Google Place photo lookup. Two
+        // cases qualify:
+        //   1. preview_url is null — no row in location_photos and no
+        //      photographer upload; needs a Google fallback.
+        //   2. preview_url looks like a Google CDN URL — those expire
+        //      ~60 min after issuance, so any URL we have in
+        //      location_photos that points at Google is stale and the
+        //      <img> would just fail silently. Treat it as if it was
+        //      null and re-resolve.
+        // Cached in sessionStorage so dashboard ↔ /portfolio navigation
+        // in the same session reuses lookups instead of re-spending
+        // Google API credits.
+        const isStaleGoogleUrl = (u: string | null) =>
+          !!u && /googleusercontent\.com|googleapis\.com\/v1\/places/.test(u)
+        const stillMissing = initialLocs.filter((l: any) =>
+          (!l.preview_url || isStaleGoogleUrl(l.preview_url))
+          && Number.isFinite(l.latitude) && Number.isFinite(l.longitude)
+        )
         if (stillMissing.length > 0) {
           stillMissing.forEach(async (loc: any) => {
             const cacheKey = `google-photo:${loc.id}`
