@@ -79,16 +79,26 @@ export default function PortfolioPage() {
         if (r.first_url) ownUrl[r.portfolio_location_id] = r.first_url
       })
 
+      // Per-source-id parallel queries instead of one bulk fetch — the
+      // bulk approach hits Supabase's 1000-row default limit when the
+      // user's portfolio includes popular source locations with lots of
+      // community photos, leaving other locations' tiles starved of any
+      // fallback photo. See dashboard page.tsx for the same pattern +
+      // the longer note.
       const sourceUrl: Record<string, string> = {}
       if (sourceIds.length > 0) {
-        const { data: srcPhotos } = await supabase
-          .from('location_photos')
-          .select('location_id,url,created_at')
-          .in('location_id', sourceIds)
-          .eq('is_private', false)
-          .order('created_at', { ascending: true })
-        ;(srcPhotos ?? []).forEach((r: any) => {
-          if (r.location_id && r.url && !sourceUrl[r.location_id]) sourceUrl[r.location_id] = r.url
+        const photoQueries = sourceIds.map((id: string) =>
+          supabase.from('location_photos')
+            .select('url')
+            .eq('location_id', id)
+            .eq('is_private', false)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+        )
+        const results = await Promise.all(photoQueries)
+        results.forEach((r, idx) => {
+          if (r.data?.url) sourceUrl[sourceIds[idx]] = r.data.url
         })
       }
 

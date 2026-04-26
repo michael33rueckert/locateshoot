@@ -89,17 +89,31 @@ export default function DashboardPage() {
           if (r.first_url) ownUrl[k] = r.first_url
         })
 
-        // Fallback: one representative photo from the public source location (Wikipedia seed)
+        // Fallback: one representative photo from each public source
+        // location (Wikipedia seed or community uploads). The previous
+        // approach fetched every photo for every source location in one
+        // query and picked the first per id, but Supabase's default
+        // 1000-row limit means a couple of popular source locations
+        // (e.g. major parks with dozens of community photos) could
+        // dominate the response and starve out the user's other source
+        // locations — leaving those tiles with a permanent gradient.
+        // Now we run one limit(1) query per source id in parallel,
+        // bounded by the user's portfolio size instead of the global
+        // photo count.
         const sourceUrl: Record<string, string> = {}
         if (sourceIds.length > 0) {
-          const { data: srcPhotos } = await supabase
-            .from('location_photos')
-            .select('location_id,url,created_at')
-            .in('location_id', sourceIds)
-            .eq('is_private', false)
-            .order('created_at', { ascending: true })
-          ;(srcPhotos ?? []).forEach((r: any) => {
-            if (r.location_id && r.url && !sourceUrl[r.location_id]) sourceUrl[r.location_id] = r.url
+          const photoQueries = sourceIds.map((id: string) =>
+            supabase.from('location_photos')
+              .select('url')
+              .eq('location_id', id)
+              .eq('is_private', false)
+              .order('created_at', { ascending: true })
+              .limit(1)
+              .maybeSingle()
+          )
+          const results = await Promise.all(photoQueries)
+          results.forEach((r, idx) => {
+            if (r.data?.url) sourceUrl[sourceIds[idx]] = r.data.url
           })
         }
 
