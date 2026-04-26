@@ -1,0 +1,330 @@
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import {
+  DEFAULT_TEMPLATE,
+  FONT_OPTIONS,
+  type PickTemplate,
+  isValidHex,
+} from '@/lib/pick-template'
+
+// Pro-only Pick page template editor. Reads / writes profiles.pick_template.
+// Lives inside the Profile page's Branding section as its own card.
+//
+// Saves are immediate per-field — the photographer doesn't have to hit
+// a separate Save button after every tweak (matches the rest of the
+// Profile page's "edit then save" flows feeling, but for template
+// settings small-and-frequent saves are fine and safer).
+
+interface Props {
+  userId:    string
+  initial:   PickTemplate | null | undefined
+  isPro:     boolean
+  onChange?: (next: PickTemplate) => void
+}
+
+export default function PickTemplateEditor({ userId, initial, isPro, onChange }: Props) {
+  const [tpl, setTpl]       = useState<PickTemplate>(initial ?? {})
+  const [saving, setSaving] = useState(false)
+  const [error,  setError]  = useState<string | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  // Color text-input drafts so the user can type a hex value freely
+  // without each keystroke triggering validation feedback. Validate on
+  // blur or when they hit a valid hex.
+  const colorKeys = ['background', 'text', 'accent', 'accentText'] as const
+  type ColorKey = typeof colorKeys[number]
+  const [colorDrafts, setColorDrafts] = useState<Record<ColorKey, string>>({
+    background: tpl.colors?.background ?? DEFAULT_TEMPLATE.colors.background,
+    text:       tpl.colors?.text       ?? DEFAULT_TEMPLATE.colors.text,
+    accent:     tpl.colors?.accent     ?? DEFAULT_TEMPLATE.colors.accent,
+    accentText: tpl.colors?.accentText ?? DEFAULT_TEMPLATE.colors.accentText,
+  })
+
+  // Debounced save — coalesce a burst of edits (e.g. dragging a color
+  // slider) into a single DB write at most every 600ms.
+  const saveTimer = useRef<any>(null)
+  function scheduleSave(next: PickTemplate) {
+    setError(null)
+    onChange?.(next)
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => save(next), 600)
+  }
+  async function save(payload: PickTemplate) {
+    setSaving(true)
+    const { error } = await supabase.from('profiles').update({ pick_template: payload }).eq('id', userId)
+    setSaving(false)
+    if (error) {
+      // Most likely cause: migration 20260426_three_tier_plans.sql
+      // hasn't been applied yet (pick_template column missing).
+      if (/pick_template/.test(error.message)) {
+        setError('Pick template column missing — run migration 20260426_three_tier_plans.sql in Supabase.')
+      } else {
+        setError(error.message)
+      }
+      return
+    }
+    setSavedAt(Date.now())
+  }
+
+  function setLayout(layout: 'card' | 'list') {
+    const next = { ...tpl, layout }
+    setTpl(next); scheduleSave(next)
+  }
+  function setFont(font: string) {
+    const next = { ...tpl, font }
+    setTpl(next); scheduleSave(next)
+  }
+  function setColor(key: ColorKey, value: string) {
+    setColorDrafts(prev => ({ ...prev, [key]: value }))
+    if (!isValidHex(value)) return
+    const next: PickTemplate = { ...tpl, colors: { ...(tpl.colors ?? {}), [key]: value } }
+    setTpl(next); scheduleSave(next)
+  }
+  function setHeader<K extends keyof NonNullable<PickTemplate['header']>>(key: K, value: NonNullable<PickTemplate['header']>[K]) {
+    const next: PickTemplate = { ...tpl, header: { ...(tpl.header ?? {}), [key]: value } }
+    setTpl(next); scheduleSave(next)
+  }
+  function setBackground(type: 'none' | 'image', imageUrl?: string) {
+    const next: PickTemplate = { ...tpl, background: { type, imageUrl: imageUrl ?? tpl.background?.imageUrl ?? '' } }
+    setTpl(next); scheduleSave(next)
+  }
+
+  function resetAll() {
+    if (!confirm('Reset all template settings to default?')) return
+    setTpl({})
+    setColorDrafts({
+      background: DEFAULT_TEMPLATE.colors.background,
+      text:       DEFAULT_TEMPLATE.colors.text,
+      accent:     DEFAULT_TEMPLATE.colors.accent,
+      accentText: DEFAULT_TEMPLATE.colors.accentText,
+    })
+    save({})
+  }
+
+  // Background image upload — same Supabase Storage bucket the
+  // photographer's logo + photos use. Stored under <userId>/template/.
+  const fileRef = useRef<HTMLInputElement>(null)
+  async function handleBgUpload(file: File) {
+    setError(null)
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const path = `${userId}/template/bg-${Date.now()}.${ext}`
+    const { error: ue } = await supabase.storage.from('location-photos').upload(path, file, { contentType: file.type || 'image/jpeg' })
+    if (ue) { setError(ue.message); return }
+    const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
+    setBackground('image', pub.publicUrl)
+  }
+
+  // Pull saved-template fields back into local state when the prop
+  // changes (e.g. profile reload from another tab).
+  useEffect(() => {
+    if (initial) {
+      setTpl(initial)
+      setColorDrafts({
+        background: initial.colors?.background ?? DEFAULT_TEMPLATE.colors.background,
+        text:       initial.colors?.text       ?? DEFAULT_TEMPLATE.colors.text,
+        accent:     initial.colors?.accent     ?? DEFAULT_TEMPLATE.colors.accent,
+        accentText: initial.colors?.accentText ?? DEFAULT_TEMPLATE.colors.accentText,
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial?.font, initial?.layout, initial?.colors?.background, initial?.colors?.text, initial?.colors?.accent, initial?.colors?.accentText])
+
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
+
+  if (!isPro) {
+    return (
+      <div style={{ background: 'var(--cream)', border: '1px solid var(--sand)', borderRadius: 10, padding: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>🎨 Pick page template</span>
+          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)', fontWeight: 500 }}>Pro only</span>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>
+          Customize the layout, font, colors, and header of the Pick page so client share links match your studio's branding. Available on the Pro plan.
+        </div>
+      </div>
+    )
+  }
+
+  const layouts: { value: 'card' | 'list'; label: string; desc: string }[] = [
+    { value: 'card', label: 'Card', desc: 'Tall photo per location with name + meta below (default).' },
+    { value: 'list', label: 'Compact list', desc: 'Smaller thumbnail on the left, info on the right. Denser.' },
+  ]
+  const currentLayout = tpl.layout ?? DEFAULT_TEMPLATE.layout
+
+  return (
+    <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>🎨 Pick page template</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>Match the Pick page to your studio's branding. Saves automatically as you edit.</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--ink-soft)' }}>
+          {saving ? '💾 Saving…' : savedAt ? '✓ Saved' : ''}
+          <button onClick={resetAll} style={{ padding: '5px 10px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
+        </div>
+      </div>
+
+      {/* Layout */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <label style={labelStyle}>Layout</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+          {layouts.map(opt => {
+            const active = currentLayout === opt.value
+            return (
+              <label key={opt.value} style={{ display: 'flex', gap: 10, padding: '10px 12px', borderRadius: 6, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--gold)' : 'var(--cream-dark)'}`, background: active ? 'rgba(196,146,42,.05)' : 'white', transition: 'all .15s' }}>
+                <input type="radio" name="layout" checked={active} onChange={() => setLayout(opt.value)} style={{ marginTop: 3, accentColor: 'var(--gold)' }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>{opt.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.45 }}>{opt.desc}</div>
+                </div>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Font */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <label style={labelStyle}>Font (used for headers + names)</label>
+        <select value={tpl.font ?? DEFAULT_TEMPLATE.font} onChange={e => setFont(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+          {FONT_OPTIONS.map(f => (
+            <option key={f.name} value={f.name} style={{ fontFamily: f.name }}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+        <div style={{ marginTop: 8, padding: '14px 16px', background: 'var(--cream)', borderRadius: 6, border: '1px solid var(--cream-dark)' }}>
+          <div style={{ fontFamily: `'${tpl.font ?? DEFAULT_TEMPLATE.font}', serif`, fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>
+            Sample headline
+          </div>
+          <div style={{ fontFamily: `'${tpl.font ?? DEFAULT_TEMPLATE.font}', serif`, fontSize: 13, color: 'var(--ink-soft)' }}>
+            And a smaller line of text underneath.
+          </div>
+        </div>
+      </div>
+
+      {/* Colors */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <label style={labelStyle}>Colors</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {colorKeys.map(key => {
+            const labels: Record<ColorKey, string> = {
+              background: 'Background',
+              text:       'Body text',
+              accent:     'Accent (buttons / headers)',
+              accentText: 'Accent text (button labels)',
+            }
+            const draft = colorDrafts[key]
+            const valid = isValidHex(draft)
+            return (
+              <div key={key}>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>{labels[key]}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="color"
+                    value={valid ? draft : DEFAULT_TEMPLATE.colors[key]}
+                    onChange={e => setColor(key, e.target.value)}
+                    aria-label={`${labels[key]} color picker`}
+                    style={{ width: 40, height: 36, border: '1px solid var(--cream-dark)', borderRadius: 4, cursor: 'pointer', padding: 2, background: 'white' }}
+                  />
+                  <input
+                    type="text"
+                    value={draft}
+                    onChange={e => setColor(key, e.target.value)}
+                    placeholder="#hex"
+                    style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 13, padding: '8px 10px', borderColor: valid ? 'var(--cream-dark)' : 'rgba(181,75,42,.4)' }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Header */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <label style={labelStyle}>Header</label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Logo placement</div>
+            <select
+              value={tpl.header?.logoPlacement ?? DEFAULT_TEMPLATE.header.logoPlacement}
+              onChange={e => setHeader('logoPlacement', e.target.value as 'left' | 'center' | 'hidden')}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+            >
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="hidden">Hide logo</option>
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Studio name</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, cursor: 'pointer', background: 'white' }}>
+              <input
+                type="checkbox"
+                checked={tpl.header?.showStudioName ?? DEFAULT_TEMPLATE.header.showStudioName}
+                onChange={e => setHeader('showStudioName', e.target.checked)}
+                style={{ accentColor: 'var(--gold)' }}
+              />
+              <span style={{ fontSize: 13, color: 'var(--ink)' }}>Show studio name</span>
+            </label>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Intro line (optional)</div>
+          <input
+            type="text"
+            value={tpl.header?.intro ?? ''}
+            onChange={e => setHeader('intro', e.target.value)}
+            placeholder="Default: from your Branding tab tagline"
+            style={inputStyle}
+          />
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Override the welcome line shown above the locations. Leave blank to use your branding tagline.</div>
+        </div>
+      </div>
+
+      {/* Background */}
+      <div>
+        <label style={labelStyle}>Background</label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          {(['none', 'image'] as const).map(t => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setBackground(t)}
+              style={{
+                padding: '7px 14px', borderRadius: 4, fontSize: 12, fontWeight: 500,
+                border: `1.5px solid ${(tpl.background?.type ?? 'none') === t ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                background: (tpl.background?.type ?? 'none') === t ? 'rgba(196,146,42,.05)' : 'white',
+                color: 'var(--ink)', cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {t === 'none' ? 'Solid color' : 'Image'}
+            </button>
+          ))}
+        </div>
+        {tpl.background?.type === 'image' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 6 }}>
+            {tpl.background.imageUrl ? (
+              <>
+                <div style={{ width: 60, height: 40, borderRadius: 4, overflow: 'hidden', flexShrink: 0, background: 'var(--cream-dark)' }}>
+                  <img src={tpl.background.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+                <button onClick={() => setBackground('image', '')} style={{ padding: '5px 10px', borderRadius: 4, background: 'rgba(181,75,42,.08)', color: 'var(--rust)', border: '1px solid rgba(181,75,42,.2)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Remove</button>
+              </>
+            ) : (
+              <button onClick={() => fileRef.current?.click()} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Upload background image</button>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) handleBgUpload(f); if (fileRef.current) fileRef.current.value = '' }} style={{ display: 'none' }} />
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 12, color: 'var(--rust)' }}>{error}</div>
+      )}
+    </div>
+  )
+}

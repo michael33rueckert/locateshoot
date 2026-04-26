@@ -7,6 +7,7 @@ import ImageLightbox from '@/components/ImageLightbox'
 import { useServerPlacePhotos } from '@/hooks/useServerPlacePhotos'
 import { thumbUrl, mediumUrl } from '@/lib/image'
 import type { ClientLocation } from '@/components/ClientMap'
+import { resolveTemplate, googleFontHref, type PickTemplate } from '@/lib/pick-template'
 
 const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false })
 
@@ -77,6 +78,10 @@ export default function ClientPickerPage() {
 
   const [shareData,        setShareData]        = useState<any>(null)
   const [branding,         setBranding]         = useState<any>(null)
+  // Pro-tier customizable template (font / colors / header / bg).
+  // null when the photographer hasn't configured one or isn't on Pro
+  // — we render the default Pick page in that case.
+  const [pickTemplate,     setPickTemplate]     = useState<PickTemplate | null>(null)
   const [logoIsLight,      setLogoIsLight]      = useState<boolean | null>(null)
   const [lightboxSrc,      setLightboxSrc]      = useState<string | string[] | null>(null)
   const [lightboxStart,    setLightboxStart]    = useState(0)
@@ -228,9 +233,10 @@ export default function ClientPickerPage() {
             : 'This share link could not be found.')
           return
         }
-        const { share, branding, locations: locs, secrets } = json
+        const { share, branding, locations: locs, secrets, pickTemplate: tpl } = json
         setShareData(share)
         setBranding(branding)
+        setPickTemplate(tpl ?? null)
 
         // Photographer's recommended picks for this guide. Stored as
         // portfolio_location ids on share_links.highlighted_location_ids
@@ -499,8 +505,45 @@ export default function ClientPickerPage() {
     )
   }
 
+  // Resolve the photographer's Pro template (or defaults if none).
+  // Applied via CSS variable overrides + Google Fonts injection so we
+  // don't have to thread template values through every nested style.
+  const tpl = resolveTemplate(pickTemplate)
+  const fontHref = googleFontHref(tpl.font)
+
   return (
-    <div style={{ height: '100svh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--ink)' }}>
+    <div
+      style={{
+        height: '100svh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        background: 'var(--ink)',
+        // Map template colors onto our existing CSS variables so all
+        // the existing component styles (which use var(--cream),
+        // var(--ink), var(--gold)) inherit the photographer's palette
+        // without any per-element refactoring. Default values match
+        // the originals, so an unconfigured template renders identically.
+        ['--cream' as any]: tpl.colors.background,
+        ['--ink' as any]: tpl.colors.text,
+        ['--gold' as any]: tpl.colors.accent,
+      }}
+    >
+      {/* Inject the chosen Google Font so the playfair var below picks
+          it up. preconnect kicks the DNS earlier for faster paint. */}
+      {fontHref && (
+        <>
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="stylesheet" href={fontHref} />
+        </>
+      )}
+      <style>{`
+        /* Replace the playfair display var globally on the pick page so
+           every header / location name / photographer name picks up the
+           photographer's chosen font without per-element edits. */
+        :root { --font-playfair: '${tpl.font.replace(/'/g, '')}', serif; }
+        /* Accent button text — the existing CSS uses 'var(--ink)' for
+           button labels on top of gold. Override per-button via inline
+           style would be too invasive; this is close enough. */
+      `}</style>
 
       {/* Header */}
       {(() => {

@@ -57,20 +57,34 @@ export async function GET(request: Request, context: any) {
     }
   }
 
-  // Pull plan + branding in a single query — plan is what gates whether
-  // permit info is included in the response below (Pro feature), branding
-  // drives white-label rendering on the share page itself.
-  let branding = null
+  // Pull plan + branding + Pick page template in a single query. Plan
+  // gates permit info below (Starter+); branding drives white-label
+  // rendering; pick_template is the Pro-tier customization (font,
+  // colors, header, background) the Pick page applies on render.
+  let branding: any = null
   let photographerPlan: string | null = null
+  let pickTemplate: any = null
   if (share.user_id) {
-    const { data: prof } = await admin
-      .from('profiles')
-      .select('plan,preferences')
-      .eq('id', share.user_id)
-      .single()
-    branding = prof?.preferences ?? null
-    photographerPlan = (prof as any)?.plan ?? null
+    // Try with pick_template; fall back without if migration hasn't
+    // run on this database yet.
+    let prof: any = null
+    const initial = await admin.from('profiles').select('plan,preferences,pick_template').eq('id', share.user_id).single()
+    if (initial.error && /pick_template/.test(initial.error.message ?? '')) {
+      const fb = await admin.from('profiles').select('plan,preferences').eq('id', share.user_id).single()
+      prof = fb.data
+    } else {
+      prof = initial.data
+    }
+    branding         = prof?.preferences ?? null
+    photographerPlan = prof?.plan ?? null
+    pickTemplate     = prof?.pick_template ?? null
   }
+  // pick_template only takes effect on Pro shares — Starter / Free
+  // photographers' Pick pages stay on the default render. Strip the
+  // template for non-Pro so a downgraded photographer's clients see the
+  // unbranded version immediately.
+  const isProTemplate = photographerPlan === 'pro' || photographerPlan === 'Pro'
+  if (!isProTemplate) pickTemplate = null
   // Permit info ("Permit verified", fee, notes, website) is a Starter+
   // feature — photographers on Free can't surface it to clients on
   // share pages. For Free shares we strip those fields from every
@@ -242,5 +256,5 @@ export async function GET(request: Request, context: any) {
     }
   }
 
-  return NextResponse.json({ share, branding, locations, secrets })
+  return NextResponse.json({ share, branding, locations, secrets, pickTemplate })
 }

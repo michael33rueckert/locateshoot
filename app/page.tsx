@@ -37,38 +37,86 @@ const SHARE_STEPS = [
   { icon: '✉️', headline: 'You get the confirmation',   body: 'Email the moment they pick. No email chains.' },
 ]
 
-// ── Pricing toggle ────────────────────────────────────────────────────────────
-function PricingToggle({ onSignup }: { onSignup: () => void }) {
+// ── Pricing (3 tiers) ─────────────────────────────────────────────────────────
+// Three side-by-side cards: Free / Starter / Pro. One monthly/yearly
+// toggle at the top drives both paid cards' price strings — keeps the
+// two paid cadences visually in sync.
+function PricingTiers({ onSignup }: { onSignup: () => void }) {
   const [yearly, setYearly] = useState(false)
+  const starterMonthly = '$12'
+  const starterYearly  = '$10'   // $120/yr ÷ 12
+  const proMonthly     = '$25'
+  const proYearly      = '$21'   // $250/yr ÷ 12 ≈ $20.83
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: '1.75rem' }}>
         <span style={{ fontSize: 13, color: !yearly ? 'var(--ink)' : 'var(--ink-soft)', fontWeight: !yearly ? 500 : 400 }}>Monthly</span>
         <div onClick={() => setYearly(p => !p)} style={{ width: 40, height: 22, borderRadius: 11, background: yearly ? 'var(--gold)' : 'var(--cream-dark)', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
           <div style={{ position: 'absolute', top: 3, left: yearly ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
         </div>
         <span style={{ fontSize: 13, color: yearly ? 'var(--ink)' : 'var(--ink-soft)', fontWeight: yearly ? 500 : 400 }}>
-          Yearly <span style={{ fontSize: 11, color: 'var(--sage)', fontWeight: 600 }}>Save $24</span>
+          Yearly <span style={{ fontSize: 11, color: 'var(--sage)', fontWeight: 600 }}>Save ~16%</span>
         </span>
       </div>
-      <div className="price-amount">{yearly ? '$10' : '$12'}<span>/mo</span></div>
-      <div className="price-period">
-        {yearly ? 'Billed $120/year · cancel anytime' : 'Billed monthly · cancel anytime'}
+
+      <div className="pricing-grid">
+        {/* FREE */}
+        <div className="price-card">
+          <div className="price-plan">Free</div>
+          <div className="price-amount">$0</div>
+          <div className="price-period">No credit card required</div>
+          <ul className="price-features">
+            <li>1 active client share guide</li>
+            <li>Up to 5 portfolio locations</li>
+            <li>Auto-generated Portfolio share guide</li>
+            <li>Email when a client picks (sent to you)</li>
+            <li>Full access to the location map</li>
+            <li>Search by location &amp; category</li>
+          </ul>
+          <button className="btn btn-dark" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={onSignup}>
+            Get started free
+          </button>
+        </div>
+
+        {/* STARTER — most popular */}
+        <div className="price-card is-featured">
+          <div className="popular-badge">Most popular</div>
+          <div className="price-plan" style={{ color: 'var(--gold)' }}>Starter</div>
+          <div className="price-amount">{yearly ? starterYearly : starterMonthly}<span>/mo</span></div>
+          <div className="price-period">{yearly ? 'Billed $120/year · cancel anytime' : 'Billed monthly · cancel anytime'}</div>
+          <ul className="price-features">
+            <li>Everything in Free</li>
+            <li><strong>Unlimited share guides</strong></li>
+            <li><strong>Unlimited portfolio locations</strong></li>
+            <li>✉ Client confirmation email with directions</li>
+            <li>📊 Share analytics — views &amp; time spent</li>
+            <li>📌 Pinterest &amp; blog post links per location</li>
+            <li>📋 Permit info fields on each location</li>
+          </ul>
+          <button className="btn btn-gold" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={onSignup}>
+            Start with Starter
+          </button>
+          <p className="price-note">Cancel anytime. No contract.</p>
+        </div>
+
+        {/* PRO */}
+        <div className="price-card">
+          <div className="price-plan" style={{ color: 'var(--gold)' }}>Pro</div>
+          <div className="price-amount">{yearly ? proYearly : proMonthly}<span>/mo</span></div>
+          <div className="price-period">{yearly ? 'Billed $250/year · cancel anytime' : 'Billed monthly · cancel anytime'}</div>
+          <ul className="price-features">
+            <li>Everything in Starter</li>
+            <li>🌐 <strong>Custom domain</strong> — share links on <code>locations.yoursite.com</code></li>
+            <li>🎨 <strong>White-label share pages</strong> — your logo, not ours</li>
+            <li>🖌 <strong>Customizable Pick page templates</strong> — layout, font, colors, header</li>
+            <li>Custom message &amp; branding</li>
+          </ul>
+          <button className="btn btn-dark" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={onSignup}>
+            Start 14-day free trial
+          </button>
+          <p className="price-note">Card required. No charge until day 15.</p>
+        </div>
       </div>
-      <ul className="price-features">
-        <li>Everything in Free</li>
-        <li><strong>Unlimited client share links</strong></li>
-        <li>🌐 <strong>Custom domain</strong> — share links on <code>locations.yoursite.com</code></li>
-        <li>🔒 <strong>Permit info &amp; access details</strong> on every location</li>
-        <li>✉ <strong>Client confirmation email</strong> with location details &amp; directions</li>
-        <li>📊 Share analytics — views &amp; time spent</li>
-        <li>🎨 <strong>White-label share pages</strong> — your logo, not ours</li>
-        <li>Custom message &amp; branding</li>
-      </ul>
-      <button className="btn btn-gold" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={onSignup}>
-        Start 14-day free trial
-      </button>
-      <p className="price-note">No charge until your trial ends. Cancel anytime.</p>
     </>
   )
 }
@@ -340,44 +388,13 @@ export default function HomePage() {
       <section className="section pricing-section" id="pricing">
         <div className="pricing-center">
           <div className="section-eyebrow" style={{ justifyContent: 'center' }}>Simple, honest pricing</div>
-          <h2 className="section-title">Free to explore.<br /><em>Pro</em> to grow.</h2>
+          <h2 className="section-title">Free to start.<br /><em>Starter</em> to grow. <em>Pro</em> to brand.</h2>
           <p className="section-sub" style={{ margin: '0 auto' }}>
-            LocateShoot is free for every photographer. Upgrade to Pro for the tools that save you real time with clients.
+            Three tiers — start with what fits today, upgrade when you outgrow it.
           </p>
         </div>
-        <div className="pricing-grid">
-          {/* FREE */}
-          <div className="price-card">
-            <div className="price-plan">Free forever</div>
-            <div className="price-amount">$0</div>
-            <div className="price-period">No credit card required</div>
-            <ul className="price-features">
-              <li>Full access to the location map</li>
-              <li>Save unlimited favorites</li>
-              <li>Search by location &amp; category</li>
-              <li>1 active client share link</li>
-              <li>Email when a client picks (sent to you)</li>
-              <li>Auto-generated Portfolio share guide</li>
-              <li className="dim">Unlimited client share links</li>
-              <li className="dim">Custom domain</li>
-              <li className="dim">Permit info &amp; access details</li>
-              <li className="dim">Client confirmation email with directions</li>
-              <li className="dim">Share analytics — views &amp; time spent</li>
-              <li className="dim">White-label share pages</li>
-              <li className="dim">Custom message &amp; branding</li>
-            </ul>
-            <button className="btn btn-dark" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={() => openModal('signup')}>
-              Get started free
-            </button>
-          </div>
 
-          {/* PRO */}
-          <div className="price-card is-featured">
-            <div className="popular-badge">Most popular</div>
-            <div className="price-plan" style={{ color: 'var(--gold)' }}>Pro</div>
-            <PricingToggle onSignup={() => openModal('signup')} />
-          </div>
-        </div>
+        <PricingTiers onSignup={() => openModal('signup')} />
       </section>
 
       {/* ── COMMUNITY CTA ── */}

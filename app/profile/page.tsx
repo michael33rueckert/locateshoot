@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import PickTemplateEditor from '@/components/PickTemplateEditor'
+import type { PickTemplate } from '@/lib/pick-template'
 
 interface Template {
   id: string; name: string; body: string
@@ -100,6 +102,11 @@ export default function ProfilePage() {
   const [templSaving,   setTemplSaving]   = useState(false)
 
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
+  // Pro-only Pick page template (font/colors/header/background). Loaded
+  // alongside the rest of the profile fields. The editor saves directly
+  // to profiles.pick_template via supabase, so we just keep state in
+  // sync here for the initial render.
+  const [pickTemplate, setPickTemplate] = useState<PickTemplate | null>(null)
   // Toggle between the read-only "📍 Loose Park, KC" pill and the
   // AddressSearch typeahead. We keep the typeahead hidden by default so
   // the profile form looks clean for users who set their home city
@@ -114,10 +121,11 @@ export default function ProfilePage() {
   const [mfaBusy,      setMfaBusy]      = useState(false)
 
   // Stripe billing
-  const [planRenewsAt,    setPlanRenewsAt]    = useState<string | null>(null)
+  const [planRenewsAt,      setPlanRenewsAt]      = useState<string | null>(null)
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState<boolean>(false)
-  const [billingBusy,     setBillingBusy]     = useState(false)
-  const [billingError,    setBillingError]    = useState<string | null>(null)
+  const [subStatus,         setSubStatus]         = useState<string | null>(null)
+  const [billingBusy,       setBillingBusy]       = useState(false)
+  const [billingError,      setBillingError]      = useState<string | null>(null)
 
   // Custom domain
   const [domainInput,   setDomainInput]   = useState('')
@@ -166,11 +174,21 @@ export default function ProfilePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { window.location.href = '/'; return }
     setUserId(user.id); setEmail(user.email ?? '')
-    const { data: profile } = await supabase.from('profiles').select('full_name,preferences,plan,plan_renews_at,cancel_at_period_end').eq('id', user.id).single()
+    // Try with pick_template (migration 20260426); fall back without it
+    // so the page still loads on databases where that column hasn't
+    // been added yet.
+    const cols = 'full_name,preferences,plan,plan_renews_at,cancel_at_period_end,stripe_subscription_status'
+    let profileRes = await supabase.from('profiles').select(`${cols},pick_template`).eq('id', user.id).single()
+    if (profileRes.error && /pick_template/.test(profileRes.error.message ?? '')) {
+      profileRes = await supabase.from('profiles').select(cols).eq('id', user.id).single() as any
+    }
+    const profile = profileRes.data
     if (profile) {
       setFullName(profile.full_name ?? ''); setPlan(profile.plan ?? 'free')
       setPlanRenewsAt((profile as any).plan_renews_at ?? null)
       setCancelAtPeriodEnd(!!(profile as any).cancel_at_period_end)
+      setSubStatus((profile as any).stripe_subscription_status ?? null)
+      setPickTemplate((profile as any).pick_template ?? null)
       const p = profile.preferences as Preferences | null
       if (p) {
         setPrefs({ ...DEFAULT_PREFS, ...p })
@@ -266,10 +284,11 @@ export default function ProfilePage() {
     } finally { setSenderBusy(false) }
   }
 
-  // Stripe — start checkout for the selected cadence. Returns a hosted
-  // Stripe URL we redirect the browser to; subscription state syncs back
-  // via the webhook on completion.
-  async function startCheckout(cadence: 'monthly' | 'yearly') {
+  // Stripe — start checkout for a (tier, cadence) pair. Returns a
+  // hosted Stripe URL we redirect the browser to; subscription state
+  // syncs back via the webhook on completion. Pro tier comes with a
+  // 14-day trial baked in server-side.
+  async function startCheckout(tier: 'starter' | 'pro', cadence: 'monthly' | 'yearly') {
     setBillingError(null); setBillingBusy(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -277,12 +296,12 @@ export default function ProfilePage() {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ cadence }),
+        body: JSON.stringify({ tier, cadence }),
       })
       const data = await res.json()
-      if (data.alreadyPro) {
-        // Edge case: somehow we think they're free but they have an
-        // active subscription — bounce them through the portal instead.
+      if (data.alreadyPaid) {
+        // They already have a subscription — switching tiers happens
+        // through the Stripe Customer Portal, not a fresh checkout.
         await openBillingPortal()
         return
       }
@@ -759,6 +778,19 @@ export default function ProfilePage() {
             <button onClick={saveBranding} disabled={saving} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 24px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Saving…' : 'Save branding'}
             </button>
+
+            {/* Pick page template — Pro tier. Editor handles its own
+                save (writes to profiles.pick_template directly), so
+                it sits below the branding save button rather than
+                being bundled into it. */}
+            <div style={{ marginTop: '2rem' }}>
+              <PickTemplateEditor
+                userId={userId ?? ''}
+                initial={pickTemplate}
+                isPro={isPro}
+                onChange={setPickTemplate}
+              />
+            </div>
           </div>
         )}
 
@@ -992,11 +1024,13 @@ export default function ProfilePage() {
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--cream)', marginBottom: 3 }}>{tierLabel} Plan</div>
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,.45)' }}>
                   {isPaid
-                    ? cancelAtPeriodEnd
-                      ? `Cancels on ${planRenewsAt ? new Date(planRenewsAt).toLocaleDateString() : 'period end'} — won't renew`
-                      : planRenewsAt
-                        ? `Renews ${new Date(planRenewsAt).toLocaleDateString()}`
-                        : 'Active subscription'
+                    ? subStatus === 'trialing'
+                      ? `Free trial — first charge on ${planRenewsAt ? new Date(planRenewsAt).toLocaleDateString() : 'trial end'}`
+                      : cancelAtPeriodEnd
+                        ? `Cancels on ${planRenewsAt ? new Date(planRenewsAt).toLocaleDateString() : 'period end'} — won't renew`
+                        : planRenewsAt
+                          ? `Renews ${new Date(planRenewsAt).toLocaleDateString()}`
+                          : 'Active subscription'
                     : 'Upgrade to Starter or Pro for the full toolset'}
                 </div>
               </div>
@@ -1006,27 +1040,70 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {!isPro && (
-              <div style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, marginBottom: '1rem' }}>
-                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Upgrade to Pro</div>
-                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
-                  Unlimited client share links, custom domain, white-label pages, the client confirmation email with directions, share analytics, and permit info. Cancel anytime — no contract.
+            {/* Free user — show two upgrade cards side by side. Starter
+                (entry paid tier) on the left, Pro (with 14-day trial)
+                on the right. Once they're on a paid tier this whole
+                block is replaced by the Manage subscription card below. */}
+            {!isPaid && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginBottom: '1rem' }}>
+                <div style={{ padding: '1.25rem', background: 'white', border: '1.5px solid var(--gold)', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>Starter</div>
+                    <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)' }}>Most popular</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
+                    Unlimited share guides + portfolio locations, client confirmation email with directions, share analytics, permit-info fields, Pinterest + blog links.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => startCheckout('starter', 'monthly')} disabled={billingBusy} style={{ flex: 1, background: 'var(--gold)', color: 'var(--ink)', padding: '11px 18px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 600, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                      {billingBusy ? 'Loading…' : '$12 / month'}
+                    </button>
+                    <button onClick={() => startCheckout('starter', 'yearly')} disabled={billingBusy} style={{ flex: 1, background: 'var(--ink)', color: 'var(--cream)', padding: '11px 18px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                      {billingBusy ? '…' : '$120 / year'}
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button onClick={() => startCheckout('monthly')} disabled={billingBusy} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '11px 22px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 600, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
-                    {billingBusy ? 'Loading…' : 'Upgrade — $12/month'}
-                  </button>
-                  <button onClick={() => startCheckout('yearly')} disabled={billingBusy} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '11px 22px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
-                    {billingBusy ? 'Loading…' : 'Upgrade yearly — save $24'}
-                  </button>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 10, fontWeight: 300 }}>
-                  Secure checkout via Stripe. We never see your card details.
+
+                <div style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10 }}>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Pro <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--gold)', marginLeft: 4 }}>14-day free trial</span></div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
+                    Everything in Starter + custom domain, white-label share pages, customizable Pick page templates (layout, font, colors, header). Card required at signup; no charge until day 15.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => startCheckout('pro', 'monthly')} disabled={billingBusy} style={{ flex: 1, background: 'var(--ink)', color: 'var(--cream)', padding: '11px 18px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 600, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                      {billingBusy ? 'Loading…' : 'Try Pro · $25/mo'}
+                    </button>
+                    <button onClick={() => startCheckout('pro', 'yearly')} disabled={billingBusy} style={{ flex: 1, background: 'transparent', color: 'var(--ink)', padding: '11px 18px', borderRadius: 4, border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                      {billingBusy ? '…' : 'Yearly · $250'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
-            {isPro && (
+            {/* Starter user — single Upgrade-to-Pro card alongside the
+                Manage subscription card below. */}
+            {isStarter && (
+              <div style={{ padding: '1.25rem', background: 'white', border: '1.5px solid var(--gold)', borderRadius: 10, marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>Upgrade to Pro</div>
+                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: 'rgba(196,146,42,.12)', color: 'var(--gold)' }}>14-day free trial</span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
+                  Add custom domain, white-label share pages, and customizable Pick page templates. Card required; no charge until day 15. After that, $25/mo or $250/yr.
+                </div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button onClick={() => startCheckout('pro', 'monthly')} disabled={billingBusy} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '11px 22px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 600, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
+                    {billingBusy ? 'Loading…' : 'Start Pro trial — $25/mo'}
+                  </button>
+                  <button onClick={() => startCheckout('pro', 'yearly')} disabled={billingBusy} style={{ background: 'var(--ink)', color: 'var(--cream)', padding: '11px 22px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1 }}>
+                    {billingBusy ? '…' : 'Yearly trial — $250'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isPaid && (
               <div style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, marginBottom: '1rem' }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>Manage subscription</div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
