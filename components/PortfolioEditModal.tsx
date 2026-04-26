@@ -100,7 +100,13 @@ export default function PortfolioEditModal({
   async function save() {
     if (!name.trim()) { setErr('Name is required.'); return }
     setSaving(true); setErr('')
-    const { error } = await supabase.from('portfolio_locations').update({
+    // Always attempt the full update (including pinterest_url + blog_url
+    // from migration 20260425_portfolio_links). When that migration
+    // hasn't been run yet, Supabase returns "Could not find the
+    // 'pinterest_url' column" / similar — retry without those two fields
+    // so the rest of the edit still saves. Once the migration lands the
+    // first attempt succeeds and the fallback never runs.
+    const baseUpdate = {
       name:               name.trim(),
       description:        desc.trim() || null,
       city:               city.trim() || null,
@@ -111,13 +117,21 @@ export default function PortfolioEditModal({
       permit_notes:       permitNotes.trim() || null,
       best_time:          bestTime.trim() || null,
       parking_info:       parkingInfo.trim() || null,
-      pinterest_url:      pinterestUrl.trim() || null,
-      blog_url:           blogUrl.trim() || null,
       is_secret:          false,
       hide_google_photos: hideGooglePhotos,
       latitude:           lat,
       longitude:          lng,
+    }
+    let { error } = await supabase.from('portfolio_locations').update({
+      ...baseUpdate,
+      pinterest_url: pinterestUrl.trim() || null,
+      blog_url:      blogUrl.trim() || null,
     }).eq('id', portfolioId)
+    if (error && /pinterest_url|blog_url/.test(error.message ?? '')) {
+      console.warn('portfolio_locations link cols missing — retrying without (run migration 20260425_portfolio_links.sql to enable)')
+      const retry = await supabase.from('portfolio_locations').update(baseUpdate).eq('id', portfolioId)
+      error = retry.error
+    }
     setSaving(false)
     if (error) { setErr(error.message); return }
     onSaved()

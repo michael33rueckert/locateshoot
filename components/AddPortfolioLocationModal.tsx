@@ -71,7 +71,11 @@ export default function AddPortfolioLocationModal({
     if (!pin)         { setErr('Search for a location to set coordinates.'); return }
     setSaving(true); setErr('')
 
-    const { data: inserted, error } = await supabase.from('portfolio_locations').insert({
+    // Always attempt the full insert (incl. pinterest_url + blog_url
+    // from migration 20260425_portfolio_links). When that migration
+    // hasn't been run yet, retry without those two fields so the rest
+    // of the location still gets created.
+    const baseInsert = {
       user_id:            userId,
       source_location_id: null,
       name:               name.trim(),
@@ -86,11 +90,20 @@ export default function AddPortfolioLocationModal({
       permit_notes:       permitNotes.trim() || null,
       best_time:          bestTime.trim() || null,
       parking_info:       parkingInfo.trim() || null,
-      pinterest_url:      pinterestUrl.trim() || null,
-      blog_url:           blogUrl.trim() || null,
       is_secret:          false,
       hide_google_photos: hideGooglePhotos,
+    }
+    let { data: inserted, error } = await supabase.from('portfolio_locations').insert({
+      ...baseInsert,
+      pinterest_url: pinterestUrl.trim() || null,
+      blog_url:      blogUrl.trim() || null,
     }).select('id').single()
+    if (error && /pinterest_url|blog_url/.test(error.message ?? '')) {
+      console.warn('portfolio_locations link cols missing — retrying without (run migration 20260425_portfolio_links.sql to enable)')
+      const retry = await supabase.from('portfolio_locations').insert(baseInsert).select('id').single()
+      inserted = retry.data
+      error    = retry.error
+    }
 
     if (error || !inserted) { setSaving(false); setErr(error?.message ?? 'Could not add location.'); return }
 
