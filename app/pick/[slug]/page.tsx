@@ -732,7 +732,11 @@ export default function ClientPickerPage() {
       {/* Detail panel */}
       {detailLoc && (
         <>
-          <div onClick={() => setDetailLoc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(4px)', zIndex: 400 }} />
+          {/* Z-index bumped above 800 so the detail panel sits above
+              Leaflet's .leaflet-control (attribution + zoom), which
+              otherwise pokes through the panel on tablet where the
+              map column stays visible alongside the sidebar. */}
+          <div onClick={() => setDetailLoc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(4px)', zIndex: 1000 }} />
           <div style={{
             position: 'fixed', bottom: 0, left: '50%',
             transform: `translate(-50%, ${detailDragY}px)`,
@@ -741,7 +745,7 @@ export default function ClientPickerPage() {
             // snaps back to 0 with this transition.
             transition: detailDragStart.current != null ? 'none' : 'transform .2s ease',
             width: '100%', maxWidth: 580, background: 'white',
-            borderRadius: '16px 16px 0 0', zIndex: 500,
+            borderRadius: '16px 16px 0 0', zIndex: 1001,
             maxHeight: '85vh', overflowY: 'auto',
             boxShadow: '0 -8px 48px rgba(26,22,18,.3)',
           }}>
@@ -986,6 +990,8 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="list"] .pick-loc-name  { font-size: 15px; margin-bottom: 2px; }
         .pick-loc-list[data-layout="list"] .pick-loc-city  { font-size: 12px; margin-bottom: 6px; }
         .pick-loc-list[data-layout="list"] .pick-loc-cta   { align-self: center; flex-shrink: 0; margin: 0; padding: 8px 14px; font-size: 12px; }
+        .pick-loc-list[data-layout="list"] .pick-loc-rec-badge { display: none; }
+        .pick-loc-list[data-layout="list"] .pick-loc-rec-inline { display: inline !important; }
 
         /* ── 'grid' layout — 2-column grid of mini cards. Squarer than
            the default and shows two locations per row even on mobile. */
@@ -1033,6 +1039,8 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="minimal"] .pick-loc-city  { font-size: 11px; margin-bottom: 0; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-body > div:last-child { display: none; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-cta   { align-self: center; flex-shrink: 0; font-size: 12px; padding: 6px 12px; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-rec-badge { display: none; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-rec-inline { display: inline !important; }
 
         /* Mobile inherits the 4:3 aspect-ratio above — no override
            needed. The width naturally fills the viewport so the photo
@@ -1128,7 +1136,12 @@ function PickListItem({
       style={{
         cursor: 'pointer',
         background: isActive ? 'rgba(196,146,42,.06)' : 'white',
-        borderLeft: `3px solid ${isChosen ? 'var(--sage)' : isActive ? 'var(--gold)' : 'transparent'}`,
+        // Chosen/active accent stripe rendered as an inset box-shadow
+        // on the left so it doesn't overwrite the per-layout border.
+        // (Previously this was borderLeft, which clobbered the 1px
+        // border on grid/magazine cards and made them look like the
+        // left edge was cut off.)
+        boxShadow: isChosen ? 'inset 3px 0 0 var(--sage)' : isActive ? 'inset 3px 0 0 var(--gold)' : 'none',
         transition: 'all .15s',
         opacity: isDisabled ? 0.45 : 1,
       }}
@@ -1195,11 +1208,13 @@ function PickListItem({
         >
           {isChosen ? '✓' : index + 1}
         </button>
-        {/* Photographer-recommended badge — shown for the 1-3 locations
-            the photographer marked as a "highlight" when building the
-            guide. Sits opposite the index pill so the two don't crowd. */}
+        {/* Photographer-recommended badge (photo-overlay variant). Sits
+            opposite the index pill on the photo. Hidden in compact
+            layouts (list / minimal) where the photo is too small to
+            host it without dominating — those layouts show an inline
+            ★ pill in the body instead. */}
         {loc.highlighted && (
-          <span style={{ position: 'absolute', top: 8, right: 8, padding: '3px 9px', borderRadius: 999, background: 'rgba(196,146,42,.95)', color: 'var(--ink)', fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', zIndex: 2, boxShadow: '0 1px 4px rgba(0,0,0,.18)', backdropFilter: 'blur(4px)' }}>
+          <span className="pick-loc-rec-badge" style={{ position: 'absolute', top: 8, right: 8, padding: '3px 9px', borderRadius: 999, background: 'rgba(196,146,42,.95)', color: 'var(--ink)', fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', zIndex: 2, boxShadow: '0 1px 4px rgba(0,0,0,.18)', backdropFilter: 'blur(4px)' }}>
             ★ Recommended
           </span>
         )}
@@ -1208,7 +1223,12 @@ function PickListItem({
         )}
       </div>
       <div className="pick-loc-body">
-        <div className="pick-loc-name">{loc.name}</div>
+        <div className="pick-loc-name">
+          {loc.highlighted && (
+            <span className="pick-loc-rec-inline" title="Recommended by your photographer" style={{ display: 'none', marginRight: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--gold)', verticalAlign: '2px' }}>★ REC</span>
+          )}
+          {loc.name}
+        </div>
         <div className="pick-loc-city">📍 {loc.city}</div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
