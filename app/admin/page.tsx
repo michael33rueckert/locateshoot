@@ -149,13 +149,19 @@ export default function AdminPage() {
 
     const merged: ScanResult = { success: true, inserted: 0, errors: 0, scans: 0, locations: [], errorList: [] }
     let failedCount = 0
+    // Grab the current Supabase session token — the scan endpoint
+    // verifies bearer auth + admin email before doing any work.
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) { setScanRunning(false); return }
     for (let i = 0; i < pairs.length; i++) {
       const { city, category } = pairs[i]
       setScanProgress({ done: i, total: pairs.length, current: `${category} in ${city.split(',')[0]}` })
       try {
         const res = await fetch('/api/scan-locations', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cities: [city], categories: [category], userId }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ cities: [city], categories: [category] }),
         })
         if (!res.ok) {
           failedCount++

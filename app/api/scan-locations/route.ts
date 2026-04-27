@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { isAdminEmail } from '@/lib/admin'
 
 function getServiceClient() {
   return createClient(
@@ -174,12 +175,26 @@ export const maxDuration = 60
 export async function POST(request: Request) {
   try {
     const supabase    = getServiceClient()
+
+    // Admin-only endpoint — burns Anthropic credits and writes to the
+    // shared `locations` table. Without auth, anyone could trigger
+    // scans by passing any userId in the body. Verify the bearer
+    // token belongs to a real user AND that user is the admin.
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
+    const { data: { user: authUser } } = await supabase.auth.getUser(authHeader.slice(7))
+    if (!authUser || !isAdminEmail(authUser.email)) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+    // Use the verified auth user's id rather than trusting the body.
+    const userId = authUser.id
+
     const body        = await request.json().catch(() => ({}))
     const cities: string[]     = body.cities     ?? []
-    const userId: string       = body.userId      ?? ''
     const categories: string[] = body.categories  ?? SCAN_CATEGORIES.map(c => c.name)
 
-    if (!userId)          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!cities.length)   return NextResponse.json({ error: 'No cities provided' }, { status: 400 })
 
     const allInserted: string[] = []
