@@ -213,10 +213,13 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
 
       {/* Layout — thumbnail cards rendered with TemplatePreview so each
           option shows the actual layout proportions + the photographer's
-          current colors and font. Click a card to apply that layout. */}
+          current colors and font. Title at the top of each card so
+          you can scan layouts by name; bottom band is the action
+          state (gold filled = currently selected; cream outline = tap
+          to switch) so the picked layout reads immediately. */}
       <div style={{ marginBottom: '1.25rem' }}>
         <label style={labelStyle}>Layout</label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           {layouts.map(opt => {
             const active = currentLayout === opt.value
             return (
@@ -225,22 +228,41 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
                 type="button"
                 onClick={() => setLayout(opt.value)}
                 style={{
-                  display: 'flex', flexDirection: 'column', gap: 8,
-                  padding: 8, borderRadius: 8, cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', gap: 10,
+                  padding: 10, borderRadius: 10, cursor: 'pointer',
                   border: `2px solid ${active ? 'var(--gold)' : 'var(--cream-dark)'}`,
-                  background: active ? 'rgba(196,146,42,.05)' : 'white',
+                  background: active ? 'rgba(196,146,42,.04)' : 'white',
+                  boxShadow: active ? '0 4px 14px rgba(196,146,42,.15)' : 'none',
                   transition: 'all .15s', textAlign: 'left',
                   fontFamily: 'inherit',
                 }}
               >
-                <TemplatePreview template={{ ...livePreview, layout: opt.value }} variant="thumb" studioName="Studio" intro="Pick a location" />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 2px' }}>
-                  <div style={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0, border: `1.5px solid ${active ? 'var(--gold)' : 'var(--sand)'}`, background: active ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'var(--ink)' }}>
-                    {active ? '✓' : ''}
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{opt.label}</div>
+                {/* Title — sits at the TOP so the layout name reads
+                    before the visual sample below, making it easier
+                    to scan a row of cards. */}
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2, padding: '0 2px' }}>
+                  {opt.label}
                 </div>
+                <TemplatePreview template={{ ...livePreview, layout: opt.value }} variant="thumb" studioName="Studio" intro="Pick a location" />
                 <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.4, padding: '0 2px' }}>{opt.desc}</div>
+                {/* Bottom action band — solid gold when this layout is
+                    the active one (clear, big, hard to miss); cream
+                    outline + 'Use this layout' when not, signaling
+                    the tap target. */}
+                <div
+                  style={{
+                    marginTop: 2,
+                    padding: '10px 12px',
+                    borderRadius: 6,
+                    background: active ? 'var(--gold)' : 'transparent',
+                    color: active ? 'var(--ink)' : 'var(--ink-soft)',
+                    border: active ? '1.5px solid var(--gold)' : '1.5px solid var(--cream-dark)',
+                    fontSize: 13, fontWeight: 600, textAlign: 'center',
+                    letterSpacing: active ? '.02em' : 'normal',
+                  }}
+                >
+                  {active ? '✓ Currently selected' : 'Use this layout'}
+                </div>
               </button>
             )
           })}
