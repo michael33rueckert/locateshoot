@@ -1001,7 +1001,10 @@ body {
   /* PRICING */
   .pricing-section { padding: 3rem 1.25rem !important; }
   .pricing-grid    { grid-template-columns: 1fr !important; max-width: 100% !important; gap: 1rem !important; }
-  .price-card.is-featured { order: -1; }
+  /* Source order is Free → Starter → Pro (cheapest → most expensive)
+     and we want that order to hold on every viewport. Previously this
+     pushed Starter ('is-featured') above Free on phones to highlight
+     the upsell, but that broke the visual price progression. */
   .price-card { padding: 1.5rem !important; }
 
   /* COMMUNITY */

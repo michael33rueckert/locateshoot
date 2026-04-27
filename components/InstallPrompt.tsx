@@ -41,7 +41,12 @@ export default function InstallPrompt() {
 
   // Never nag clients viewing a share pick link — those pages are for the
   // photographer's client and have nothing to do with PWA install.
+  // Also skip the marketing surfaces (home + coming-soon) so first-time
+  // visitors don't get an install nag before they've signed up. The
+  // install option is still available via the user-menu's 'Install app'
+  // entry once they're signed in.
   const onPickPage = pathname.startsWith('/pick')
+  const onMarketing = pathname === '/' || pathname === '/coming-soon' || pathname === '/privacy' || pathname === '/terms'
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -99,7 +104,7 @@ export default function InstallPrompt() {
     setVisible(false)
   }
 
-  if (onPickPage || !visible) return null
+  if (onPickPage || onMarketing || !visible) return null
 
   const pill: React.CSSProperties = {
     position: 'fixed',
