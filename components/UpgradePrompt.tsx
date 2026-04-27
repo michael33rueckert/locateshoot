@@ -29,6 +29,10 @@ interface Props {
   // have). 'pro' shouldn't render this component at all — caller bug.
   // Defaults to 'free' for backwards compat with older callers.
   currentPlan?: CurrentPlan
+  // Set when the locked feature is Pro-only (e.g. white-label, custom
+  // domain). Hides the Starter card regardless of currentPlan since
+  // Starter wouldn't unlock the feature either. Defaults false.
+  proOnly?: boolean
 }
 
 const STARTER_FEATURES = [
@@ -49,8 +53,8 @@ const PRO_FEATURES = [
   'Layout, font & color editor',
 ]
 
-export default function UpgradePrompt({ feature, description, variant = 'card', className, currentPlan = 'free' }: Props) {
-  const showStarter = currentPlan === 'free'
+export default function UpgradePrompt({ feature, description, variant = 'card', className, currentPlan = 'free', proOnly = false }: Props) {
+  const showStarter = currentPlan === 'free' && !proOnly
   const router = useRouter()
   const [busyTier, setBusyTier] = useState<Tier | null>(null)
   const [error, setError] = useState<string | null>(null)

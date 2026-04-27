@@ -675,6 +675,7 @@ export default function ProfilePage() {
                   feature="white-label Location Guides + custom templates"
                   description="Replace LocateShoot branding with your own logo, build custom Location Guide templates, and serve guides from your own domain. Available on Pro."
                   currentPlan={isStarter ? 'starter' : 'free'}
+                  proOnly
                 />
               </div>
             )}
@@ -735,6 +736,7 @@ export default function ProfilePage() {
                   feature="custom domain for your Location Guides"
                   description="Serve your Location Guides from your own subdomain (e.g. locations.yoursite.com) instead of locateshoot.com. Available on Pro."
                   currentPlan={isStarter ? 'starter' : 'free'}
+                  proOnly
                 />
               </div>
             )}
@@ -787,6 +789,7 @@ export default function ProfilePage() {
                     feature="custom sending email"
                     description="Send client confirmation emails from your own address (e.g. you@yoursite.com) instead of notifications@locateshoot.com. Available on Pro."
                     currentPlan={isStarter ? 'starter' : 'free'}
+                    proOnly
                   />
                 </div>
               )}
