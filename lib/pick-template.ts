@@ -29,8 +29,9 @@ export interface PickTemplate {
     accentText?: string           // text color on top of accent (button labels)
   }
   header?: {
-    logoPlacement?: 'left' | 'center' | 'hidden'
+    logoPlacement?: 'left' | 'center' | 'right' | 'hidden'
     logoSize?:     LogoSize       // size bucket for the photographer's logo
+    bgColor?:      string         // optional header background color (#hex)
     showStudioName?: boolean
     intro?: string                // override the welcome/intro line
   }
@@ -77,6 +78,7 @@ export const DEFAULT_TEMPLATE: Required<{
   header: {
     logoPlacement: 'left',
     logoSize: 'medium',
+    bgColor: '',                  // empty = use the auto-derived bg
     showStudioName: true,
     intro: '',
   },

@@ -42,6 +42,21 @@ function openDirections(loc: { name: string; city: string; lat: number; lng: num
 
 // Haversine distance in miles. Used to enforce the photographer's
 // max_pick_distance_miles setting on multi-location share links.
+// Approximate relative luminance of a hex color (0 dark → 1 light).
+// Used by the header to auto-pick light or dark text when the
+// photographer manually sets a custom header background. Coefficients
+// from the WCAG sRGB luma formula. Accepts #rgb, #rrggbb, #rrggbbaa.
+function hexLuminance(hex: string): number {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(hex.trim())
+  if (!m) return 0
+  let h = m[1]
+  if (h.length === 3) h = h.split('').map(c => c + c).join('')
+  const r = parseInt(h.slice(0, 2), 16) / 255
+  const g = parseInt(h.slice(2, 4), 16) / 255
+  const b = parseInt(h.slice(4, 6), 16) / 255
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
 function distMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
   if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return Infinity
   const R = 3958.7613
@@ -540,9 +555,12 @@ export default function ClientPickerPage() {
         // var(--ink), var(--gold)) inherit the photographer's palette
         // without any per-element refactoring. Default values match
         // the originals, so an unconfigured template renders identically.
+        // --gold-text is the photographer's accentText choice, used
+        // for button labels on top of the accent (--gold) background.
         ['--cream' as any]: tpl.colors.background,
         ['--ink' as any]: tpl.colors.text,
         ['--gold' as any]: tpl.colors.accent,
+        ['--gold-text' as any]: tpl.colors.accentText,
       }}
     >
       {/* Inject the chosen Google Font so the playfair var below picks
@@ -567,15 +585,31 @@ export default function ClientPickerPage() {
       {/* Header */}
       {(() => {
         const whiteLabel    = branding?.remove_ls_branding && branding?.logo_url
-        // When the logo is visually dark (text/marks on transparent or light
-        // bg), flip the header to a cream background so the logo stays legible.
-        const lightHeader   = whiteLabel && logoIsLight === false
-        const headerBg      = lightHeader ? '#f9f6f1' : 'var(--ink)'
+        // Header background — explicit template choice wins, otherwise
+        // fall back to the auto-detected dark-or-cream pair based on
+        // the logo's luminance (white-label only). When the photographer
+        // picks a custom bgColor, derive the text color from the
+        // chosen color's luminance so we don't end up with white text
+        // on a cream header (or vice versa).
+        const customBg      = (tpl.header.bgColor && /^#[0-9a-f]{3,8}$/i.test(tpl.header.bgColor)) ? tpl.header.bgColor : ''
+        const lightHeader   = customBg
+          ? hexLuminance(customBg) > 0.55
+          : (whiteLabel && logoIsLight === false)
+        const headerBg      = customBg || (lightHeader ? '#f9f6f1' : 'var(--ink)')
         const headerBorder  = lightHeader ? '1px solid var(--cream-dark)' : '1px solid rgba(255,255,255,.08)'
         const primaryText   = lightHeader ? 'var(--ink)' : 'var(--cream)'
         const secondaryText = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.55)'
         const mutedText     = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.4)'
         const studioNameCol = lightHeader ? 'rgba(26,22,18,.75)' : 'rgba(245,240,232,.7)'
+
+        // Logo placement — controls horizontal alignment of the
+        // logo + studio name lockup at the top of the header. 'hidden'
+        // suppresses the logo block entirely (white-label users who
+        // want studio-name-only headers, etc.).
+        const logoPlacement = (tpl.header.logoPlacement ?? 'left') as 'left' | 'center' | 'right' | 'hidden'
+        const logoAlign     = logoPlacement === 'center' ? 'center'
+                            : logoPlacement === 'right'  ? 'flex-end'
+                            : 'flex-start'
 
         const studioName = branding?.show_studio_name !== false ? branding?.studio_name : null
         const instagramRaw = branding?.instagram ? String(branding.instagram).trim() : ''
@@ -600,16 +634,21 @@ export default function ClientPickerPage() {
 
         return (
           <div style={{ background: headerBg, padding: '1.25rem 1.5rem', flexShrink: 0, borderBottom: headerBorder, transition: 'background .2s' }}>
-            {whiteLabel ? (
-              <div style={{ marginBottom: '1rem' }}>
-                <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: logoBox.maxHeight, maxWidth: logoBox.maxWidth, width: 'auto', height: 'auto', objectFit: 'contain' }} />
-                {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: studioNameCol, marginTop: 6 }}>{studioName}</div>}
+            {/* Logo block. Suppressed entirely when logoPlacement is
+                'hidden'. Otherwise the lockup aligns left/center/right
+                via display:flex + the logoAlign computed above. */}
+            {logoPlacement !== 'hidden' && (whiteLabel ? (
+              <div style={{ display: 'flex', justifyContent: logoAlign, marginBottom: '1rem' }}>
+                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: logoPlacement === 'center' ? 'center' : logoPlacement === 'right' ? 'flex-end' : 'flex-start' }}>
+                  <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: logoBox.maxHeight, maxWidth: logoBox.maxWidth, width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                  {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: studioNameCol, marginTop: 6 }}>{studioName}</div>}
+                </div>
               </div>
             ) : (
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1rem' }}>
+              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', justifyContent: logoAlign, gap: 6, marginBottom: '1rem' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
               </div>
-            )}
+            ))}
 
             <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: primaryText, marginBottom: '.4rem' }}>
               Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
@@ -740,7 +779,7 @@ export default function ClientPickerPage() {
             fontSize: 14, fontWeight: 600,
             cursor: chosenLocs.length > 0 ? 'pointer' : 'default',
             background: isGoldAccent ? 'var(--gold)' : accentColor,
-            color: isGoldAccent ? 'var(--ink)' : 'white',
+            color: 'var(--gold-text)',
             opacity: chosenLocs.length > 0 ? 1 : 0.35,
             // Soft glow + lift when a pick is active so the photographer's
             // accent color reads as "ready to send" instead of just "darker".
@@ -901,7 +940,7 @@ export default function ClientPickerPage() {
                       style={{
                         flex: 2, padding: '12px', borderRadius: 4, border: 'none',
                         background: isSelected ? 'var(--sage)' : disabled ? 'rgba(26,22,18,.25)' : isGoldAccent ? 'var(--gold)' : accentColor,
-                        color: isSelected ? 'white' : disabled ? 'white' : isGoldAccent ? 'var(--ink)' : 'white',
+                        color: isSelected ? 'white' : disabled ? 'white' : 'var(--gold-text)',
                         fontSize: 14, fontWeight: 600,
                         cursor: disabled ? 'default' : 'pointer',
                         opacity: disabled ? 0.75 : 1,
@@ -954,7 +993,7 @@ export default function ClientPickerPage() {
               style={{ width: '100%', padding: '12px 14px', border: `1.5px solid ${emailError ? 'var(--rust)' : 'var(--cream-dark)'}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none', marginBottom: emailError ? 6 : 16 }} />
             {emailError && <div style={{ fontSize: 12, color: 'var(--rust)', marginBottom: 12, textAlign: 'center' }}>{emailError}</div>}
             <button onClick={submitEmail} disabled={submitting}
-              style={{ width: '100%', padding: '13px', borderRadius: 8, background: isGoldAccent ? 'var(--gold)' : accentColor, color: isGoldAccent ? 'var(--ink)' : 'white', border: 'none', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginBottom: 10, opacity: submitting ? 0.7 : 1 }}>
+              style={{ width: '100%', padding: '13px', borderRadius: 8, background: isGoldAccent ? 'var(--gold)' : accentColor, color: 'var(--gold-text)', border: 'none', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginBottom: 10, opacity: submitting ? 0.7 : 1 }}>
               {submitting ? 'Sending…' : 'Confirm my choice →'}
             </button>
             <button onClick={() => setShowEmailPrompt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--ink-soft)', fontFamily: 'inherit', display: 'block', margin: '0 auto' }}>Go back</button>
@@ -1451,7 +1490,7 @@ function PickListItem({
         className="pick-loc-cta"
         style={{
           background: isChosen ? 'rgba(74,103,65,.1)' : 'var(--gold)',
-          color: isChosen ? 'var(--sage)' : 'var(--ink)',
+          color: isChosen ? 'var(--sage)' : 'var(--gold-text)',
           border: isChosen ? '1px solid rgba(74,103,65,.3)' : 'none',
           borderRadius: 4,
           fontWeight: 600, fontFamily: 'inherit',

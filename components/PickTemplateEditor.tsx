@@ -314,11 +314,12 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Logo placement</div>
           <select
             value={tpl.header?.logoPlacement ?? DEFAULT_TEMPLATE.header.logoPlacement}
-            onChange={e => setHeader('logoPlacement', e.target.value as 'left' | 'center' | 'hidden')}
+            onChange={e => setHeader('logoPlacement', e.target.value as 'left' | 'center' | 'right' | 'hidden')}
             style={{ ...inputStyle, cursor: 'pointer', maxWidth: 240 }}
           >
             <option value="left">Left</option>
             <option value="center">Center</option>
+            <option value="right">Right</option>
             <option value="hidden">Hide logo</option>
           </select>
         </div>
@@ -350,6 +351,38 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
             </div>
           </div>
         )}
+        {/* Header background color — optional. Empty (or transparent
+            via the X button) means 'use the auto-derived bg' which
+            keeps the existing dark/cream-on-white-label behavior.
+            When the photographer picks a color, it overrides that
+            auto-detection and the text color in the header switches
+            light/dark based on the chosen color's luminance. */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Header background</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="color"
+              value={(tpl.header?.bgColor && /^#[0-9a-f]{6}$/i.test(tpl.header.bgColor)) ? tpl.header.bgColor : '#1a1612'}
+              onChange={e => setHeader('bgColor', e.target.value)}
+              aria-label="Header background color"
+              style={{ width: 40, height: 36, border: '1px solid var(--cream-dark)', borderRadius: 4, cursor: 'pointer', padding: 2, background: 'white' }}
+            />
+            <input
+              type="text"
+              value={tpl.header?.bgColor ?? ''}
+              onChange={e => setHeader('bgColor', e.target.value)}
+              placeholder="#hex (or leave blank for auto)"
+              style={{ ...inputStyle, fontFamily: 'monospace', fontSize: 13, padding: '8px 10px', flex: 1 }}
+            />
+            {tpl.header?.bgColor && (
+              <button
+                type="button"
+                onClick={() => setHeader('bgColor', '')}
+                style={{ padding: '6px 10px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
+              >Clear</button>
+            )}
+          </div>
+        </div>
         <div>
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Intro line (optional)</div>
           <input

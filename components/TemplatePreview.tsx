@@ -57,8 +57,16 @@ export default function TemplatePreview({ template, variant = 'panel', studioNam
   const introSize = isThumb ? 7 : 12
   const padding   = isThumb ? 6 : 16
   const innerGap  = isThumb ? 4 : 10
-  const headerJust = tpl.header.logoPlacement === 'center' ? 'center' : 'flex-start'
+  const headerJust = tpl.header.logoPlacement === 'center' ? 'center'
+                   : tpl.header.logoPlacement === 'right'  ? 'flex-end'
+                   : 'flex-start'
   const showLogo  = tpl.header.logoPlacement !== 'hidden'
+  // If the photographer set a custom header background, use it on
+  // the preview header strip instead of the auto-derived translucent
+  // bg. Falls back to the existing 85% opacity of colors.background.
+  const headerBg  = tpl.header.bgColor && /^#[0-9a-f]{3,8}$/i.test(tpl.header.bgColor)
+    ? tpl.header.bgColor
+    : hexWithAlpha(tpl.colors.background, 0.85)
 
   // Resolved bg layer — image overlay or solid color from the
   // background config; falls through to the colors.background.
@@ -83,7 +91,7 @@ export default function TemplatePreview({ template, variant = 'panel', studioNam
         display: 'flex', alignItems: 'center', justifyContent: headerJust, gap: innerGap,
         padding: `${padding * 0.75}px ${padding}px`,
         borderBottom: `1px solid ${hexWithAlpha(tpl.colors.text, 0.08)}`,
-        background: hexWithAlpha(tpl.colors.background, 0.85),
+        background: headerBg,
         height: headerHeight,
         boxSizing: 'border-box',
       }}>
