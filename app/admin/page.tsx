@@ -187,7 +187,7 @@ export default function AdminPage() {
     else setToast('Scan complete — no new locations')
   }
 
-  async function setUserPlan(userId: string, plan: 'pro' | 'free') {
+  async function setUserPlan(userId: string, plan: 'pro' | 'starter' | 'free') {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     const res = await fetch('/api/admin/users/plan', {
@@ -198,7 +198,8 @@ export default function AdminPage() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) { setToast(`⚠ ${data.message ?? data.error ?? 'Could not update'}`); return }
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan } : u))
-    setToast(plan === 'pro' ? '✓ Granted Pro access' : 'Reverted to Free')
+    const label = plan === 'pro' ? '✓ Set to Pro' : plan === 'starter' ? '✓ Set to Starter' : '✓ Set to Free'
+    setToast(label)
   }
 
   async function approveLocation(id: string) {
@@ -348,12 +349,47 @@ export default function AdminPage() {
                       <td style={{ padding: '9px 12px', color: 'var(--ink)', whiteSpace: 'nowrap' }}>{u.email}</td>
                       <td style={{ padding: '9px 12px', color: 'var(--ink-soft)' }}>{u.full_name ?? '—'}</td>
                       <td style={{ padding: '9px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: u.plan === 'pro' ? 'rgba(196,146,42,.1)' : 'var(--cream-dark)', color: u.plan === 'pro' ? 'var(--gold)' : 'var(--ink-soft)' }}>{u.plan ?? 'free'}</span>
-                          {u.plan === 'pro'
-                            ? <button onClick={() => { if (confirm(`Revert ${u.email} to Free? They'll lose Pro features.`)) setUserPlan(u.id, 'free') }} style={{ padding: '2px 7px', borderRadius: 4, background: 'transparent', border: '1px solid rgba(181,75,42,.25)', fontSize: 10, color: 'var(--rust)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Revert</button>
-                            : <button onClick={() => setUserPlan(u.id, 'pro')} style={{ padding: '2px 7px', borderRadius: 4, background: 'var(--ink)', border: 'none', fontSize: 10, fontWeight: 500, color: 'var(--cream)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>⭐ Grant Pro</button>}
-                        </div>
+                        {/* Plan picker — current pill + two 'switch to'
+                            buttons for the other two tiers. Confirm
+                            before downgrading (free) or moving sideways
+                            (free→starter is fine, but starter→free or
+                            pro→starter could surprise the user with a
+                            sudden feature loss). */}
+                        {(() => {
+                          const current = (u.plan ?? 'free') as 'free' | 'starter' | 'pro'
+                          const pillBg = current === 'pro' ? 'rgba(196,146,42,.1)' : current === 'starter' ? 'rgba(196,146,42,.06)' : 'var(--cream-dark)'
+                          const pillFg = current === 'pro' ? 'var(--gold)' : current === 'starter' ? 'var(--gold)' : 'var(--ink-soft)'
+                          const pillIcon = current === 'pro' ? '⭐ ' : current === 'starter' ? '✦ ' : ''
+                          function switchTo(target: 'free' | 'starter' | 'pro') {
+                            // Warn when moving to a less-featured tier.
+                            const downgradeRanks: Record<string, number> = { free: 0, starter: 1, pro: 2 }
+                            if (downgradeRanks[target] < downgradeRanks[current]) {
+                              if (!confirm(`Move ${u.email} from ${current} to ${target}? They'll lose tier-gated features (templates, custom domain, etc.) immediately.`)) return
+                            }
+                            setUserPlan(u.id, target)
+                          }
+                          const tiers: ('free' | 'starter' | 'pro')[] = ['free', 'starter', 'pro']
+                          const labels: Record<string, string> = { free: 'Free', starter: '✦ Starter', pro: '⭐ Pro' }
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: pillBg, color: pillFg }}>{pillIcon}{current}</span>
+                              {tiers.filter(t => t !== current).map(t => (
+                                <button
+                                  key={t}
+                                  onClick={() => switchTo(t)}
+                                  style={{
+                                    padding: '2px 7px', borderRadius: 4,
+                                    background: t === 'pro' ? 'var(--ink)' : t === 'starter' ? 'rgba(196,146,42,.12)' : 'transparent',
+                                    border: t === 'pro' ? 'none' : t === 'starter' ? '1px solid rgba(196,146,42,.4)' : '1px solid rgba(181,75,42,.25)',
+                                    fontSize: 10, fontWeight: 500,
+                                    color: t === 'pro' ? 'var(--cream)' : t === 'starter' ? 'var(--gold)' : 'var(--rust)',
+                                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                  }}
+                                >→ {labels[t]}</button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.portfolio_count}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.share_link_count}</td>

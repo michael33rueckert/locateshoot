@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminEmail } from '@/lib/admin'
 
-const ALLOWED_PLANS = ['free', 'pro'] as const
+const ALLOWED_PLANS = ['free', 'starter', 'pro'] as const
 
 export async function POST(request: Request) {
   const auth = request.headers.get('authorization')
