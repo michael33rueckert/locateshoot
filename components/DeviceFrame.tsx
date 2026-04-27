@@ -128,7 +128,14 @@ export function PhoneFrame({ src, alt, caption }: FrameProps) {
             alt={alt ?? ''}
             style={{
               width: '100%', height: '100%',
-              objectFit: 'cover', objectPosition: 'top',
+              // contain (not cover) so screenshots that aren't 9:19.5
+              // — most browser-captured pick page shots are ~9:16 to
+              // 9:18 — show their full width without left/right
+              // cropping. The screen background is white (set above)
+              // and the notch + home-indicator pills cover the top
+              // and bottom edges, so the letterbox space looks
+              // intentional rather than empty.
+              objectFit: 'contain', objectPosition: 'top',
               display: 'block',
             }}
           />
