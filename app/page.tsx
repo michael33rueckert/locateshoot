@@ -25,25 +25,6 @@ const SHARE_STEPS = [
   { icon: '✉️', headline: 'You get the confirmation',   body: 'Email the moment they pick. No email chains.' },
 ]
 
-// One feature highlight on the home page. Renders a small product
-// mockup at the top (a real component, not a static screenshot) and
-// a headline + body below. Stacked layout works the same in the
-// auto-fit grid whether there are 2 or 3 cards visible per row.
-function FeatureCard({ eyebrow, title, body, mockup }: { eyebrow: string; title: string; body: string; mockup: React.ReactNode }) {
-  return (
-    <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 2px 10px rgba(26,22,18,.04)' }}>
-      <div style={{ background: 'var(--cream)', borderRadius: 8, padding: 12, minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: '100%' }}>{mockup}</div>
-      </div>
-      <div style={{ padding: '0 4px 4px' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 6 }}>{eyebrow}</div>
-        <h3 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 700, color: 'var(--ink)', margin: '0 0 6px', lineHeight: 1.3 }}>{title}</h3>
-        <p style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, margin: 0 }}>{body}</p>
-      </div>
-    </div>
-  )
-}
-
 // ── Pricing (3 tiers) ─────────────────────────────────────────────────────────
 // Three side-by-side cards: Free / Starter / Pro. One monthly/yearly
 // toggle at the top drives both paid cards' price strings — keeps the
@@ -239,7 +220,12 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, maxWidth: 1100, margin: '0 auto' }}>
+        {/* 1/2/3 grid — auto-fit was breaking down to 2 cols around
+            tablet width (Pixel Fold inner ~900px), leaving the third
+            card alone on row 2. Use a fixed 3-col grid above 768px so
+            the row stays intact, and stack to a single column on
+            phones for legibility. */}
+        <div className="share-steps-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18, maxWidth: 1100, margin: '0 auto' }}>
           {SHARE_STEPS.map((s, i) => (
             <div key={i} style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 14, padding: '1.5rem 1.5rem 1.75rem', boxShadow: '0 2px 10px rgba(26,22,18,.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -251,6 +237,11 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+        <style>{`
+          @media (max-width: 768px) {
+            .share-steps-grid { grid-template-columns: 1fr !important; }
+          }
+        `}</style>
 
         <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
           {user
@@ -315,89 +306,102 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── FEATURE HIGHLIGHTS — what the product actually looks like.
-             Replaces the old 'community map' block (we no longer accept
-             user-contributed locations to the public directory, so the
-             framing didn't fit). Each card is a small live mockup
-             rendered with real product components — TemplatePreview is
-             the same renderer we use inside the editor and on the
-             actual Pick page, so what visitors see here is what their
-             clients will see. */}
-      <section className="section" style={{ background: 'var(--cream)', padding: '4rem 1.5rem' }}>
+      {/* ── FEATURE STRIPES — two alternating rows, image-left/text-
+             right then text-left/image-right. Less card-heavy than the
+             previous 3-card grid (which felt redundant against the
+             SHARE_STEPS cards above and the HOW_STEPS cards below).
+             Each row gets more visual real estate, telling a longer-
+             form story than three small cards could. */}
+      <section className="section" style={{ background: 'var(--cream)', padding: '4.5rem 1.5rem' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-            <div className="section-eyebrow" style={{ justifyContent: 'center' }}>What you&apos;re shipping</div>
+          <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+            <div className="section-eyebrow" style={{ justifyContent: 'center' }}>Built around your brand</div>
             <h2 className="section-title" style={{ fontSize: 'clamp(24px,4vw,34px)' }}>
-              Polished, on-brand, <em>ridiculously easy</em>
+              Looks like <em>your studio</em>, works like a workflow tool
             </h2>
-            <p className="section-sub" style={{ maxWidth: 540, margin: '0 auto' }}>
-              Real product views — exactly what your clients see and what shows up in your dashboard the moment they pick.
-            </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+          {/* Row 1 — Templates (visual left, text right) */}
+          <div className="feature-stripe">
+            <div className="feature-stripe-visual">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: 14, background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 12, boxShadow: '0 4px 20px rgba(26,22,18,.05)' }}>
+                <TemplatePreview template={PRESETS[0].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+                <TemplatePreview template={PRESETS[1].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+                <TemplatePreview template={PRESETS[2].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+                <TemplatePreview template={PRESETS[3].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+              </div>
+            </div>
+            <div className="feature-stripe-text">
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 10 }}>Templates</div>
+              <h3 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 14px' }}>
+                Five starter looks. Or build your own.
+              </h3>
+              <p style={{ fontSize: 15, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, margin: '0 0 14px' }}>
+                Wedding-magazine editorial, modern minimal, romantic blush, bold studio dark, warm boho. Pick a starting point and tweak the font, colors, layout, and header to match your brand.
+              </p>
+              <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, margin: 0 }}>
+                Save as many templates as you want and pick a different one per Location Guide. Wedding clients see one look; engagement clients see another.
+              </p>
+            </div>
+          </div>
 
-            {/* Card 1 — Pick page */}
-            <FeatureCard
-              eyebrow="Client view"
-              title="Send one link. They tap a location. Done."
-              body="Your client opens a Location Guide, picks a spot, and you get the email. No back-and-forth thread, no Pinterest screenshots."
-              mockup={
-                <TemplatePreview template={PRESETS[0].config} variant="thumb" studioName="Your Studio" intro="Pick the location for our session" />
-              }
-            />
-
-            {/* Card 2 — Templates */}
-            <FeatureCard
-              eyebrow="Pro feature"
-              title="Templates that match your brand."
-              body="Five starter templates plus a full editor — fonts, colors, layout, header. Save as many as you want and pick one per guide."
-              mockup={
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <TemplatePreview template={PRESETS[1].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
-                  <TemplatePreview template={PRESETS[2].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
-                  <TemplatePreview template={PRESETS[3].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
-                  <TemplatePreview template={PRESETS[4].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+          {/* Row 2 — Dashboard (text left, visual right) */}
+          <div className="feature-stripe feature-stripe-reverse" style={{ marginTop: '3.5rem' }}>
+            <div className="feature-stripe-text">
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 10 }}>Your dashboard</div>
+              <h3 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 14px' }}>
+                Every pick, in one chronological log.
+              </h3>
+              <p style={{ fontSize: 15, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, margin: '0 0 14px' }}>
+                Client name, the location they chose, the timestamp. Push notifications hit your phone. Email lands in your inbox. The dashboard keeps the running history.
+              </p>
+              <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, margin: 0 }}>
+                No more digging through email threads to remember which spot Sarah picked for Saturday&apos;s shoot.
+              </p>
+            </div>
+            <div className="feature-stripe-visual">
+              <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 20px rgba(26,22,18,.05)' }}>
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>✓ Client Selections</div>
+                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.2)' }}>5</span>
                 </div>
-              }
-            />
-
-            {/* Card 3 — Dashboard picks list */}
-            <FeatureCard
-              eyebrow="Your dashboard"
-              title="Every pick, in one chronological log."
-              body="Client name, the location they chose, when they picked it. Push notifications and email keep you in the loop."
-              mockup={
-                <div style={{ background: 'white', border: '1px solid #e8e2d6', borderRadius: 6, overflow: 'hidden', fontSize: 11 }}>
-                  <div style={{ padding: '8px 10px', borderBottom: '1px solid #e8e2d6', fontWeight: 700, color: '#1a1612', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    ✓ Client Selections
-                    <span style={{ padding: '1px 6px', borderRadius: 20, fontSize: 9, fontWeight: 700, background: 'rgba(74,103,65,.1)', color: '#4a6741', border: '1px solid rgba(74,103,65,.2)' }}>3</span>
-                  </div>
-                  {[
-                    { name: 'Sarah Chen',     loc: 'Loose Park',    when: 'Apr 26 · 2:14 PM' },
-                    { name: 'James Patel',    loc: 'West Bottoms',  when: 'Apr 25 · 11:08 AM' },
-                    { name: 'Emily Rodriguez', loc: 'Liberty Memorial', when: 'Apr 23 · 6:42 PM' },
-                  ].map((row, i) => (
-                    <div key={i} style={{ padding: '7px 10px', borderBottom: i < 2 ? '1px solid #f0ece4' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, color: '#1a1612', fontSize: 11 }}>{row.name}</div>
-                        <div style={{ color: '#6b5f52', fontSize: 10 }}>📍 {row.loc}</div>
-                      </div>
-                      <div style={{ color: '#a89c8d', fontSize: 9, whiteSpace: 'nowrap' }}>{row.when}</div>
+                {[
+                  { name: 'Sarah Chen',      loc: 'Loose Park',           when: 'Apr 26 · 2:14 PM' },
+                  { name: 'James Patel',     loc: 'West Bottoms',         when: 'Apr 25 · 11:08 AM' },
+                  { name: 'Emily Rodriguez', loc: 'Liberty Memorial',     when: 'Apr 23 · 6:42 PM' },
+                  { name: 'Alex Bennett',    loc: 'Country Club Plaza',   when: 'Apr 22 · 10:21 AM' },
+                  { name: 'Marina Olsen',    loc: 'Kaufman Center',       when: 'Apr 21 · 4:55 PM' },
+                ].map((row, i, arr) => (
+                  <div key={i} style={{ padding: '11px 16px', borderBottom: i < arr.length - 1 ? '1px solid var(--cream-dark)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--ink)', fontSize: 13 }}>{row.name}</div>
+                      <div style={{ color: 'var(--ink-soft)', fontSize: 12, marginTop: 1 }}>📍 {row.loc}</div>
                     </div>
-                  ))}
-                </div>
-              }
-            />
-
+                    <div style={{ color: 'var(--ink-soft)', fontSize: 11, whiteSpace: 'nowrap', fontWeight: 300 }}>{row.when}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: '2.25rem' }}>
+          <div style={{ textAlign: 'center', marginTop: '3rem' }}>
             {user
               ? <Link href="/dashboard" className="btn btn-gold btn-lg">Go to your dashboard →</Link>
               : <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>Try it free — no card needed →</button>
             }
           </div>
+
+          <style>{`
+            .feature-stripe { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
+            .feature-stripe-visual { min-width: 0; }
+            .feature-stripe-text   { min-width: 0; }
+            @media (max-width: 768px) {
+              .feature-stripe { grid-template-columns: 1fr !important; gap: 1.5rem !important; }
+              /* On mobile, always show visual first regardless of row order */
+              .feature-stripe-reverse .feature-stripe-text   { order: 2; }
+              .feature-stripe-reverse .feature-stripe-visual { order: 1; }
+            }
+          `}</style>
         </div>
       </section>
 
