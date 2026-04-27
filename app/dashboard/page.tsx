@@ -479,19 +479,18 @@ export default function DashboardPage() {
                               onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
                               onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}
                             />
-                            {/* Share analytics — Pro feature. Free users
-                                see a one-line nudge that links to the
-                                upgrade flow. Pro users see live counts. */}
-                            {isProUser ? (
+                            {/* Live analytics for paid plans (Starter +
+                                Pro both unlock view tracking). Free
+                                users see no analytics row at all —
+                                we removed the upgrade teaser since
+                                analytics isn't currently called out
+                                as a tier feature. */}
+                            {isProUser && (
                               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', border: '1px solid var(--cream-dark)', fontSize: 11, color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
                                 <span title={`${views} total views`}>👁 {views}</span>
                                 <span title={`${uniques} unique viewers`}>🧑 {uniques}</span>
                                 <span title={`Avg ${avgSec}s per view`}>⏱ {avgSec >= 60 ? `${Math.round(avgSec / 60)}m` : `${avgSec}s`}</span>
                               </div>
-                            ) : (
-                              <Link href="/profile#billing" style={{ display: 'block', padding: '6px 10px', borderRadius: 6, background: 'rgba(196,146,42,.06)', border: '1px solid rgba(196,146,42,.2)', fontSize: 11, color: 'var(--ink-soft)', textAlign: 'center', textDecoration: 'none' }}>
-                                <span style={{ color: 'var(--gold)', fontWeight: 500 }}>📊 Share analytics</span> — Pro
-                              </Link>
                             )}
                           </div>
                         )

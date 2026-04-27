@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
+import UpgradePrompt from '@/components/UpgradePrompt'
 import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
+import { hasStarter, freePortfolioLocationCap } from '@/lib/plan'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
 // that the Dashboard's portfolio section does, so edits in either place stay in
@@ -32,6 +34,7 @@ interface ProfileLite {
   full_name: string | null
   custom_domain: string | null
   custom_domain_verified: boolean | null
+  plan: string | null
 }
 
 export default function PortfolioPage() {
@@ -43,6 +46,10 @@ export default function PortfolioPage() {
   const [filter,   setFilter]   = useState<'all' | 'with-photos' | 'needs-photos'>('all')
   const [editing,  setEditing]  = useState<string | null>(null)
   const [showAdd,  setShowAdd]  = useState(false)
+  // Toggled when a Free user clicks "+ Add new location" while
+  // already at the 5-location cap — drops the dual-plan UpgradePrompt
+  // inline instead of opening the Add modal.
+  const [showCapUpgrade, setShowCapUpgrade] = useState(false)
   const [toast,    setToast]    = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -53,7 +60,7 @@ export default function PortfolioPage() {
       setUserId(user.id)
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('id,full_name,custom_domain,custom_domain_verified')
+        .select('id,full_name,custom_domain,custom_domain_verified,plan')
         .eq('id', user.id)
         .single()
       if (profileData) setProfile(profileData as any)
@@ -218,11 +225,32 @@ export default function PortfolioPage() {
             </p>
           </div>
           <div className="portfolio-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
-            <button onClick={() => setShowAdd(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
+            {/* Free plan caps portfolio at 5 locations. If they're at
+                the cap, surface the dual-plan UpgradePrompt instead of
+                opening the Add modal — saves them filling out a form
+                they'd hit a wall on saving. Same gate as the dashboard's
+                portfolio section. */}
+            <button onClick={() => {
+              if (!hasStarter(profile?.plan) && locs.length >= freePortfolioLocationCap()) {
+                setShowCapUpgrade(true)
+                return
+              }
+              setShowAdd(true)
+            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
             <Link href="/explore" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>+ Add from Explore</Link>
             <Link href="/location-guides" style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>📚 Location Guides</Link>
           </div>
         </div>
+
+        {showCapUpgrade && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <UpgradePrompt
+              feature="unlimited portfolio locations"
+              description={`The Free plan includes up to ${freePortfolioLocationCap()} portfolio locations. Upgrade to Starter or Pro for unlimited portfolio locations and unlimited Location Guides.`}
+            />
+            <button onClick={() => setShowCapUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
+          </div>
+        )}
 
         <style>{`
           /* When the header wraps to a second row on narrow screens, the action

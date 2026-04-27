@@ -6,9 +6,11 @@ import AppNav from '@/components/AppNav'
 import CreateLocationGuideModal, { type GuideLinkLite, type PortfolioLocationLite } from '@/components/CreateLocationGuideModal'
 import LocationGuideCard from '@/components/LocationGuideCard'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
+import UpgradePrompt from '@/components/UpgradePrompt'
 import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio } from '@/lib/portfolio-share'
+import { hasStarter } from '@/lib/plan'
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
@@ -29,6 +31,7 @@ interface ProfileLite {
   full_name:              string | null
   custom_domain:          string | null
   custom_domain_verified: boolean
+  plan:                   string | null
 }
 
 export default function LocationGuidesPage() {
@@ -44,6 +47,12 @@ export default function LocationGuidesPage() {
   const [toast,        setToast]        = useState<string | null>(null)
   const [preselectIds, setPreselectIds] = useState<string[]>([])
   const [showAdd,      setShowAdd]      = useState(false)
+  // Toggled when a Free user clicks "+ New guide". Free plan only
+  // includes the auto-Portfolio guide, so any custom-guide attempt
+  // surfaces the dual-plan UpgradePrompt instead of opening the
+  // create modal. Same gate as the dashboard's Location Guides
+  // section.
+  const [showQuotaUpgrade, setShowQuotaUpgrade] = useState(false)
 
   useEffect(() => {
     if (!toast) return
@@ -57,7 +66,7 @@ export default function LocationGuidesPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/'; return }
       const [profRes, guidesRes, portRes] = await Promise.all([
-        supabase.from('profiles').select('id,full_name,custom_domain,custom_domain_verified').eq('id', user.id).single(),
+        supabase.from('profiles').select('id,full_name,custom_domain,custom_domain_verified,plan').eq('id', user.id).single(),
         supabase.from('share_links')
           .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
           .eq('user_id', user.id)
@@ -235,9 +244,25 @@ export default function LocationGuidesPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Link href="/portfolio" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>← Portfolio</Link>
-            <button onClick={() => setShowCreate(true)} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ New guide</button>
+            <button onClick={() => {
+              if (!hasStarter(profile?.plan)) {
+                setShowQuotaUpgrade(true)
+                return
+              }
+              setShowCreate(true)
+            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ New guide</button>
           </div>
         </div>
+
+        {showQuotaUpgrade && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <UpgradePrompt
+              feature="custom Location Guides"
+              description="The Free plan only includes your auto-generated Portfolio guide. Upgrade to Starter or Pro to create custom guides — one per city, theme, client, or session."
+            />
+            <button onClick={() => setShowQuotaUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
+          </div>
+        )}
 
         {/* Search */}
         <div style={{ marginBottom: '1rem' }}>
