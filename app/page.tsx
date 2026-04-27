@@ -294,14 +294,14 @@ export default function HomePage() {
           }} className="device-hero-grid">
             <div>
               <LaptopFrame
-                src="/marketing/screenshots/dashboard.png"
+                src="/marketing/screenshots/DashboardScreenshot.png"
                 alt="LocateShoot photographer dashboard with portfolio, Location Guides, and client picks"
                 caption="Photographer dashboard"
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <PhoneFrame
-                src="/marketing/screenshots/pick.png"
+                src="/marketing/screenshots/PickPageScreenshot1.png"
                 alt="A client viewing a Location Guide on their phone"
                 caption="What your client sees"
               />
