@@ -1094,18 +1094,30 @@ export default function ClientPickerPage() {
           display: grid;
           grid-template-columns: 1fr 1fr;
           grid-template-rows: 1fr auto;
-          gap: 18px 48px;
+          gap: 18px clamp(28px, 4vw, 56px);
           align-items: center;
-          padding: 56px clamp(20px, 4vw, 48px);
+          /* Wider stripes — content runs much closer to the viewport
+             edges on tablet + desktop. clamp() keeps the layout
+             readable on ultra-wide displays (caps at ~1600px) while
+             letting it expand near-edge-to-edge on more typical
+             1280-1440px screens. Padding shrinks slightly so the
+             text/photo blocks aren't visually constrained. */
+          padding: 56px clamp(20px, 3vw, 40px);
           border: none; border-bottom: 1px solid var(--cream-dark);
           background: transparent;
-          max-width: 1080px; margin: 0 auto; width: 100%;
+          max-width: min(1600px, 96vw);
+          margin: 0 auto;
+          width: 100%;
+          box-sizing: border-box;
         }
         .pick-loc-list[data-layout="editorial"] .pick-loc-card:last-child { border-bottom: none; }
-        /* Default row: photo left, body+cta right */
+        /* Default row: photo left, body+cta right. Photo at 4:3
+           landscape (was 4:5 portrait) — feels less editorial-vertical
+           and more documentary, which matches what photographers
+           usually shoot at locations. */
         .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-photo {
           grid-row: 1 / span 2; grid-column: 1;
-          aspect-ratio: 4 / 5; border-radius: 6px;
+          aspect-ratio: 4 / 3; border-radius: 6px;
           align-self: stretch;
         }
         .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-body {
