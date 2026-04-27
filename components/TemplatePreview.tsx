@@ -150,9 +150,12 @@ function LocationsLayout({ layout, variant, accent, accentText, text }: { layout
         {[0, 1, 2, 3].map(i => (
           <div key={i} style={{ background: 'white', borderRadius: radius, overflow: 'hidden', border: `1px solid ${hexWithAlpha(text, .06)}` }}>
             <div style={{ aspectRatio: '4 / 3', background: placeholderBg(i) }} />
-            <div style={{ padding: gap }}>
+            <div style={{ padding: gap, display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 2 : 6 }}>
               <SampleNameLine variant={variant} text={text} width="80%" />
               <SampleMetaLine variant={variant} text={text} width="55%" />
+              <div style={{ marginTop: variant === 'thumb' ? 2 : 4, alignSelf: 'flex-start' }}>
+                <SampleButton variant={variant} accent={accent} accentText={accentText} small />
+              </div>
             </div>
           </div>
         ))}
@@ -166,9 +169,12 @@ function LocationsLayout({ layout, variant, accent, accentText, text }: { layout
         {/* Hero card */}
         <div style={{ background: 'white', borderRadius: radius, overflow: 'hidden', border: `1px solid ${hexWithAlpha(text, .06)}` }}>
           <div style={{ aspectRatio: '16 / 9', background: placeholderBg(0) }} />
-          <div style={{ padding: gap }}>
+          <div style={{ padding: gap, display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 2 : 6 }}>
             <SampleNameLine variant={variant} text={text} width="50%" big />
             <SampleMetaLine variant={variant} text={text} width="35%" />
+            <div style={{ marginTop: variant === 'thumb' ? 2 : 4, alignSelf: 'flex-start' }}>
+              <SampleButton variant={variant} accent={accent} accentText={accentText} />
+            </div>
           </div>
         </div>
         {/* 2-up below */}
@@ -176,8 +182,11 @@ function LocationsLayout({ layout, variant, accent, accentText, text }: { layout
           {[1, 2].map(i => (
             <div key={i} style={{ background: 'white', borderRadius: radius, overflow: 'hidden', border: `1px solid ${hexWithAlpha(text, .06)}` }}>
               <div style={{ aspectRatio: '4 / 3', background: placeholderBg(i) }} />
-              <div style={{ padding: gap * 0.7 }}>
+              <div style={{ padding: gap * 0.7, display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 2 : 4 }}>
                 <SampleNameLine variant={variant} text={text} width="75%" />
+                <div style={{ marginTop: variant === 'thumb' ? 1 : 3, alignSelf: 'flex-start' }}>
+                  <SampleButton variant={variant} accent={accent} accentText={accentText} small />
+                </div>
               </div>
             </div>
           ))}
@@ -195,7 +204,9 @@ function LocationsLayout({ layout, variant, accent, accentText, text }: { layout
             <div style={{ flex: 1 }}>
               <SampleNameLine variant={variant} text={text} width="55%" />
             </div>
-            <div style={{ fontSize: isThumb ? 6 : 11, color: accent, fontWeight: 600 }}>VIEW →</div>
+            {/* Pill-style sample button instead of plain text so the accent
+                color is visibly applied at thumb sizes too. */}
+            <SampleButton variant={variant} accent={accent} accentText={accentText} small />
           </div>
         ))}
       </div>
@@ -208,9 +219,12 @@ function LocationsLayout({ layout, variant, accent, accentText, text }: { layout
       {[0, 1].map(i => (
         <div key={i} style={{ background: 'white', borderRadius: radius, overflow: 'hidden', border: `1px solid ${hexWithAlpha(text, .06)}` }}>
           <div style={{ aspectRatio: '4 / 3', background: placeholderBg(i) }} />
-          <div style={{ padding: gap }}>
+          <div style={{ padding: gap, display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 2 : 6 }}>
             <SampleNameLine variant={variant} text={text} width="65%" big />
             <SampleMetaLine variant={variant} text={text} width="40%" />
+            <div style={{ marginTop: variant === 'thumb' ? 2 : 4, alignSelf: 'flex-start' }}>
+              <SampleButton variant={variant} accent={accent} accentText={accentText} />
+            </div>
           </div>
         </div>
       ))}
