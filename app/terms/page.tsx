@@ -114,7 +114,7 @@ export default function TermsOfUsePage() {
         </Section>
 
         <Section title="16. Governing law and dispute resolution">
-          <P>These Terms are governed by the laws of the State of Missouri, USA, without regard to its conflict-of-laws principles. The exclusive venue for any dispute will be the state or federal courts located in Jackson County, Missouri, and you consent to the personal jurisdiction of those courts.</P>
+          <P>These Terms are governed by the laws of the State of Missouri, USA, without regard to its conflict-of-laws principles. The exclusive venue for any dispute will be the state or federal courts located in Buchanan County, Missouri, and you consent to the personal jurisdiction of those courts.</P>
         </Section>
 
         <Section title="17. General">
