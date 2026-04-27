@@ -134,11 +134,12 @@ export function PhoneFrame({ src, alt, caption }: FrameProps) {
               // contain (not cover) so screenshots that aren't 9:19.5
               // — most browser-captured pick page shots are ~9:16 to
               // 9:18 — show their full width without left/right
-              // cropping. The screen background is white (set above)
-              // and the notch + home-indicator pills cover the top
-              // and bottom edges, so the letterbox space looks
-              // intentional rather than empty.
-              objectFit: 'contain', objectPosition: 'top',
+              // cropping. Centered vertically (rather than top-
+              // anchored) so the letterbox splits evenly above + below
+              // the screenshot. That puts the notch pill in the top
+              // letterbox region instead of overlapping the screenshot's
+              // own header (where the photographer's logo lives).
+              objectFit: 'contain', objectPosition: 'center',
               display: 'block',
             }}
           />
