@@ -72,9 +72,8 @@ function PricingTiers({ onSignup }: { onSignup: () => void }) {
           <div className="price-amount">$0</div>
           <div className="price-period">No credit card required</div>
           <ul className="price-features">
-            <li>1 active client Location Guide</li>
-            <li>Up to 5 portfolio locations</li>
             <li>Auto-generated Portfolio Location Guide</li>
+            <li>Up to 5 portfolio locations</li>
             <li>Email when a client picks (sent to you)</li>
             <li>Full access to the location map</li>
             <li>Search by location &amp; category</li>
@@ -95,7 +94,6 @@ function PricingTiers({ onSignup }: { onSignup: () => void }) {
             <li><strong>Unlimited Location Guides</strong></li>
             <li><strong>Unlimited portfolio locations</strong></li>
             <li>✉ Client confirmation email with directions</li>
-            <li>📊 Share analytics — views &amp; time spent</li>
             <li>📌 Pinterest &amp; blog post links per location</li>
             <li>📋 Permit info fields on each location</li>
           </ul>

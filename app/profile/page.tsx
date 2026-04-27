@@ -934,7 +934,7 @@ export default function ProfilePage() {
                     <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)' }}>Most popular</span>
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1rem', lineHeight: 1.55 }}>
-                    Unlimited Location Guides + portfolio locations, client confirmation email with directions, share analytics, permit-info fields, Pinterest + blog links.
+                    Unlimited Location Guides + portfolio locations, client confirmation email with directions, permit-info fields, Pinterest + blog links.
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button onClick={() => startCheckout('starter', 'monthly')} disabled={billingBusy} style={{ flex: 1, background: 'var(--gold)', color: 'var(--ink)', padding: '11px 18px', borderRadius: 4, border: 'none', fontSize: 13, fontWeight: 600, cursor: billingBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: billingBusy ? 0.6 : 1, whiteSpace: 'nowrap' }}>

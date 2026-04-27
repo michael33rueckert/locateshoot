@@ -347,11 +347,11 @@ export default function CreateLocationGuideModal({
       onCreated(data); onClose()
     } catch (err: any) {
       // Postgres-side share-link quota check. The trigger raises
-      // 'free_plan_link_limit' for Free users who already have 1 active
-      // custom guide. Surface a clear upgrade message instead of the
-      // generic catch-all.
+      // 'free_plan_link_limit' for Free users on any custom guide
+      // (only the auto-Portfolio guide is allowed on Free). Surface
+      // a clear upgrade message instead of the generic catch-all.
       if (typeof err?.message === 'string' && err.message.includes('free_plan_link_limit')) {
-        setError('Free plan allows 1 active custom guide. Delete the existing guide or upgrade to Pro for unlimited guides.')
+        setError('Free plan only includes your auto-generated Portfolio guide. Upgrade to Starter or Pro to create custom Location Guides.')
       } else {
         setError(isEdit ? 'Could not save changes — please try again.' : 'Could not create the guide — please try again.')
       }

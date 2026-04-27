@@ -9,7 +9,7 @@ import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import CreateLocationGuideModal from '@/components/CreateLocationGuideModal'
 import LocationGuideCard from '@/components/LocationGuideCard'
 import UpgradePrompt from '@/components/UpgradePrompt'
-import { hasStarter, freePortfolioLocationCap } from '@/lib/plan'
+import { hasStarter, hasPro, normalizePlan, freePortfolioLocationCap } from '@/lib/plan'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio as shareFullPortfolioFn } from '@/lib/portfolio-share'
 import { thumbUrl } from '@/lib/image'
@@ -381,14 +381,12 @@ export default function DashboardPage() {
                 </div>
                 <button
                   onClick={() => {
-                    // Free plan = 1 active custom guide. Auto-portfolio
-                    // doesn't count. If they're already at the cap show
-                    // the upgrade prompt instead of opening the create
-                    // modal — saves them filling out a form they'd hit
-                    // a wall on saving.
-                    const isProUser = hasStarter(profile?.plan)
-                    const customCount = customGuides.length
-                    if (!isProUser && customCount >= 1) {
+                    // Free plan gets 0 custom guides — only the auto-
+                    // generated Portfolio guide. Any attempt to add a
+                    // custom guide drops the upgrade prompt instead of
+                    // opening the create modal. Starter + Pro have no
+                    // cap on custom guides.
+                    if (!hasStarter(profile?.plan)) {
                       setShowQuotaUpgrade(true)
                       return
                     }
@@ -400,8 +398,8 @@ export default function DashboardPage() {
               {showQuotaUpgrade && (
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                   <UpgradePrompt
-                    feature="unlimited Location Guides"
-                    description="The Free plan includes 1 active custom guide plus your auto-generated Portfolio guide. Upgrade to Pro for unlimited custom guides — one per city, theme, client, or session."
+                    feature="custom Location Guides"
+                    description="The Free plan only includes your auto-generated Portfolio guide. Upgrade to Starter or Pro to create custom guides — one per city, theme, client, or session."
                   />
                   <button onClick={() => setShowQuotaUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
                 </div>
@@ -633,14 +631,34 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1rem 1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 16 }}>⭐</span>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)' }}>Pro Plan</div>
-              </div>
-              <div style={{ fontSize: 12, color: 'rgba(245,240,232,.5)', lineHeight: 1.6, fontWeight: 300, marginBottom: 10 }}>Unlimited client shares, secret locations, custom branding, and priority support.</div>
-              <Link href="/profile#billing" style={{ fontSize: 11, color: 'var(--gold)', textDecoration: 'none' }}>Manage subscription →</Link>
-            </div>
+            {/* Plan card — reflects the photographer's current tier
+                rather than always showing 'Pro Plan'. CTA is 'Manage
+                subscription' for paid plans (deep-links into the
+                Stripe Customer Portal via the billing tab) and
+                'Upgrade your plan' for Free. */}
+            {(() => {
+              const plan = normalizePlan(profile?.plan)
+              const planLabel = plan === 'pro'    ? 'Pro Plan'
+                              : plan === 'starter' ? 'Starter Plan'
+                              :                      'Free Plan'
+              const planIcon  = plan === 'pro' ? '⭐' : plan === 'starter' ? '✦' : '◌'
+              const blurb     = plan === 'pro'
+                ? 'Unlimited Location Guides, white-label branding, custom domain, and customizable templates.'
+                : plan === 'starter'
+                ? 'Unlimited Location Guides + portfolio locations, client confirmation emails, permit info, and Pinterest/blog links.'
+                : `Up to ${freePortfolioLocationCap()} portfolio locations and your auto-generated Portfolio Location Guide.`
+              const ctaLabel  = hasStarter(profile?.plan) ? 'Manage subscription →' : 'Upgrade your plan →'
+              return (
+                <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 16 }}>{planIcon}</span>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: hasPro(profile?.plan) ? 'var(--gold)' : 'var(--cream)' }}>{planLabel}</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(245,240,232,.5)', lineHeight: 1.6, fontWeight: 300, marginBottom: 10 }}>{blurb}</div>
+                  <Link href="/profile#billing" style={{ fontSize: 11, color: 'var(--gold)', textDecoration: 'none' }}>{ctaLabel}</Link>
+                </div>
+              )
+            })()}
           </div>
         </div>
       </div>
