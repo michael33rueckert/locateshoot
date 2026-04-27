@@ -541,7 +541,15 @@ export default function ProfilePage() {
     }
 
     const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
-    const updated = { ...prefs, logo_url: pub.publicUrl }
+    // Cache-bust the URL. The storage path is fixed (<userId>/logo.<ext>),
+    // so re-uploading the same extension produces the SAME publicUrl —
+    // and every browser, email client, and CDN happily serves whatever
+    // it cached on the previous load. Appending a per-upload version
+    // tag forces every <img> downstream (this page's preview, the
+    // sidebar avatar, the Pick page header, the client confirmation
+    // email) to refetch the fresh file. Cheap insurance.
+    const versionedUrl = `${pub.publicUrl}?v=${Date.now()}`
+    const updated = { ...prefs, logo_url: versionedUrl }
     const { error: updateErr } = await supabase
       .from('profiles')
       .update({ preferences: updated })
@@ -552,6 +560,10 @@ export default function ProfilePage() {
       return
     }
     setPrefs(updated)
+    // Replace the local preview state too so the round avatar at the
+    // top of the page updates on the same tick as the toast — no
+    // longer waiting for the FileReader's data-URL onload to settle.
+    setLogoPreview(versionedUrl)
     setToast('✓ Logo updated!')
   }
 
