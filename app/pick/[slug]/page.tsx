@@ -638,8 +638,13 @@ export default function ClientPickerPage() {
         <div style={{ height: '100%', background: isGoldAccent ? 'var(--gold)' : accentColor, width: chosenIds.length > 0 ? `${Math.min(100, (chosenIds.length / maxPicks) * 100)}%` : '0%', transition: 'width .5s ease' }} />
       </div>
 
-      {/* Body */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--cream)' }} className="pick-body">
+      {/* Body — data-layout drives the editorial-specific behavior:
+          on tablet + desktop, the editorial layout collapses to a
+          full-width sidebar with the map hidden by default (toggled
+          via the same View Map button mobile uses). The long-form
+          alternating photo/text rows need full-page real estate to
+          breathe; a fixed 420px sidebar would crush them. */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--cream)' }} className="pick-body" data-layout={tpl.layout}>
 
         {/* Sidebar */}
         <div className={`pick-sidebar${mobileMapVisible ? ' pick-sidebar-hidden' : ''}`}
@@ -1068,39 +1073,141 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-badge { display: none; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-inline { display: inline !important; }
 
-        /* ── 'editorial' layout — long-form story per location.
-           Each entry is a full-width vertical block: tall hero photo,
-           '01 / 05'-style section number above the name, big serif
-           location title, paragraph-rendered description, then the
-           Select button. Reads like a magazine article scrolling
-           one piece at a time, not a tile in a grid. */
-        .pick-loc-list[data-layout="editorial"] { padding: 0 0 32px; gap: 32px; display: flex; flex-direction: column; }
+        /* ── 'editorial' layout — long-form story per location with
+           alternating photo/text rows (image-left text-right, then
+           image-right text-left, repeating). Mirrors the home page's
+           feature-stripe rhythm so visitors see the same visual
+           language they were sold on the marketing page.
+
+           Markup map: each card has 3 children — .pick-loc-photo,
+           .pick-loc-body, .pick-loc-cta. We treat the card as a
+           2-col grid: photo spans both rows on one side, body on the
+           top row of the other side, cta on the bottom row of the
+           other side. Even-numbered cards swap which column the
+           photo lives in. */
+        .pick-loc-list[data-layout="editorial"] {
+          padding: 0;
+          gap: 0;
+          display: flex; flex-direction: column;
+        }
         .pick-loc-list[data-layout="editorial"] .pick-loc-card {
-          flex-direction: column; border: none; border-bottom: 1px solid var(--cream-dark);
-          padding-bottom: 32px; background: transparent;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          grid-template-rows: 1fr auto;
+          gap: 18px 48px;
+          align-items: center;
+          padding: 56px clamp(20px, 4vw, 48px);
+          border: none; border-bottom: 1px solid var(--cream-dark);
+          background: transparent;
+          max-width: 1080px; margin: 0 auto; width: 100%;
         }
         .pick-loc-list[data-layout="editorial"] .pick-loc-card:last-child { border-bottom: none; }
-        .pick-loc-list[data-layout="editorial"] .pick-loc-photo { aspect-ratio: 4 / 5; border-radius: 0; }
-        .pick-loc-list[data-layout="editorial"] .pick-loc-body  { padding: 18px 1.5rem 0; max-width: 640px; margin: 0 auto; }
+        /* Default row: photo left, body+cta right */
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-photo {
+          grid-row: 1 / span 2; grid-column: 1;
+          aspect-ratio: 4 / 5; border-radius: 6px;
+          align-self: stretch;
+        }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-body {
+          grid-row: 1; grid-column: 2;
+          padding: 0; max-width: none; margin: 0;
+        }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-cta {
+          grid-row: 2; grid-column: 2;
+          margin: 0; padding: 11px 24px; font-size: 14px;
+          justify-self: start; align-self: start; width: auto;
+        }
+        /* Even cards: flip photo to the right, text to the left. */
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card:nth-child(even) .pick-loc-photo { grid-column: 2; }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card:nth-child(even) .pick-loc-body  { grid-column: 1; }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card:nth-child(even) .pick-loc-cta   { grid-column: 1; }
+        /* Typography */
         .pick-loc-list[data-layout="editorial"] .pick-loc-section-num {
           display: block !important;
           font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
-          color: var(--ink-soft); margin-bottom: 10px;
+          color: var(--ink-soft); margin-bottom: 12px;
         }
         .pick-loc-list[data-layout="editorial"] .pick-loc-name  {
-          font-family: var(--font-playfair),serif; font-size: 28px; font-weight: 700;
-          line-height: 1.18; margin-bottom: 6px; color: var(--ink);
+          font-family: var(--font-playfair),serif;
+          font-size: clamp(24px, 3vw, 34px); font-weight: 700;
+          line-height: 1.15; margin-bottom: 8px; color: var(--ink);
         }
         .pick-loc-list[data-layout="editorial"] .pick-loc-city  {
-          font-size: 13px; color: var(--ink-soft); margin-bottom: 16px; font-weight: 300;
+          font-size: 13px; color: var(--ink-soft); margin-bottom: 18px; font-weight: 300;
         }
-        .pick-loc-list[data-layout="editorial"] .pick-loc-description { display: block !important; margin-bottom: 8px; }
-        .pick-loc-list[data-layout="editorial"] .pick-loc-cta   {
-          margin: 14px 1.5rem 0; padding: 10px 22px; font-size: 14px;
-          align-self: center; max-width: 640px; width: auto;
+        .pick-loc-list[data-layout="editorial"] .pick-loc-description {
+          display: block !important;
+          margin-bottom: 0;
         }
-        /* Recommended badge stays as the photo overlay (large hero
-           photo, plenty of space for it). Inline ★ REC stays hidden. */
+        /* Recommended badge stays as the photo overlay (huge photo,
+           plenty of space). Inline ★ REC stays hidden. */
+
+        /* Mobile: stack to single column with photo on top. The
+           odd/even alternating doesn't apply on phones since each
+           row is full-width. */
+        @media (max-width: 768px) {
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card,
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card:nth-child(even) {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 16px;
+            padding: 32px 1.25rem;
+          }
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-photo,
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card:nth-child(even) .pick-loc-photo {
+            grid-column: 1; grid-row: 1; aspect-ratio: 4 / 3;
+          }
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-body,
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card:nth-child(even) .pick-loc-body {
+            grid-column: 1; grid-row: 2;
+          }
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card .pick-loc-cta,
+          .pick-loc-list[data-layout="editorial"] .pick-loc-card:nth-child(even) .pick-loc-cta {
+            grid-column: 1; grid-row: 3;
+          }
+        }
+
+        /* When editorial is the active layout, override the desktop +
+           tablet body layout: sidebar takes the whole pick-body, map
+           is hidden by default, and the View Map toggle button shows
+           up so the client can pop the map open if they want it.
+           Same modifier classes (pick-sidebar-hidden + pick-map-
+           visible) the mobile path uses, so the existing toggle
+           wiring still works. */
+        .pick-body[data-layout="editorial"] { display: flex !important; flex-direction: column !important; }
+        .pick-body[data-layout="editorial"] .pick-sidebar {
+          flex: 1 !important; min-height: 0 !important; border-right: none !important;
+        }
+        .pick-body[data-layout="editorial"] .pick-sidebar.pick-sidebar-hidden { display: none !important; }
+        .pick-body[data-layout="editorial"] .pick-map-col { display: none !important; }
+        .pick-body[data-layout="editorial"] .pick-map-col.pick-map-visible {
+          display: block !important; flex: 1 1 auto !important; min-height: 0 !important;
+        }
+        .pick-body[data-layout="editorial"] ~ .pick-mobile-toggle,
+        .pick-body[data-layout="editorial"] + .pick-mobile-toggle {
+          /* The toggle button lives outside .pick-body — bring it back
+             from display:none on tablet/desktop so editorial guides
+             can pop the map open. */
+          display: flex !important;
+          position: fixed !important;
+          bottom: calc(env(safe-area-inset-bottom, 0) + 82px) !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          z-index: 400 !important;
+          align-items: center !important;
+          gap: 8px !important;
+          padding: 11px 22px !important;
+          border-radius: 999px !important;
+          border: none !important;
+          font-family: var(--font-dm-sans), sans-serif !important;
+          font-size: 13px !important;
+          font-weight: 600 !important;
+          cursor: pointer !important;
+          box-shadow: 0 6px 24px rgba(0,0,0,.35) !important;
+          white-space: nowrap !important;
+          background: var(--ink) !important;
+          color: var(--cream) !important;
+        }
 
         /* Mobile inherits the 4:3 aspect-ratio above — no override
            needed. The width naturally fills the viewport so the photo
