@@ -715,11 +715,18 @@ export default function ProfilePage() {
                 manager (list + add/rename/default/delete) wraps the
                 actual styling editor. Each template saves itself, so
                 the panel sits below the branding save button as its
-                own card. */}
-            <div style={{ marginTop: '2.5rem' }}>
-              {sectionTitle('Layout Templates', 'Design how your Location Guides look — layout, font, colors, header. Saved templates are picked per guide.')}
-              <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} currentPlan={isPro ? 'pro' : isStarter ? 'starter' : 'free'} />
-            </div>
+                own card.
+
+                Hidden for non-Pro viewers: the upgrade prompt at the
+                top of the Branding tab already covers customizable
+                templates as one of the Pro features, so duplicating
+                it down here is just noise. */}
+            {isPro && (
+              <div style={{ marginTop: '2.5rem' }}>
+                {sectionTitle('Layout Templates', 'Design how your Location Guides look — layout, font, colors, header. Saved templates are picked per guide.')}
+                <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} currentPlan="pro" />
+              </div>
+            )}
           </div>
         )}
 
