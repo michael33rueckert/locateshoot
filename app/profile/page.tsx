@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import SavedTemplatesPanel from '@/components/SavedTemplatesPanel'
+import UpgradePrompt from '@/components/UpgradePrompt'
 
 
 interface HomeLocation {
@@ -668,12 +669,19 @@ export default function ProfilePage() {
         {active === 'branding' && (
           <div>
             {sectionTitle('Branding', 'Your studio logo and the layout templates that style the Location Guides you send to clients.')}
+            {!isPro && (
+              <div style={{ marginBottom: '1.5rem' }}>
+                <UpgradePrompt
+                  feature="white-label Location Guides + custom templates"
+                  description="Replace LocateShoot branding with your own logo, build custom Location Guide templates, and serve guides from your own domain. Available on Pro."
+                />
+              </div>
+            )}
             <div style={{ background: isPro ? 'white' : 'var(--cream)', border: `1px solid ${isPro ? 'var(--cream-dark)' : 'var(--sand)'}`, borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                     🎨 White-label Location Guides
-                    {!isPro && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)', fontWeight: 500 }}>Pro only</span>}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>Your logo replaces the LocateShoot branding on client share pages.</div>
                 </div>
@@ -719,10 +727,11 @@ export default function ProfilePage() {
           <div>
             {sectionTitle('Custom Domain', 'Serve your Location Guides from your own domain (e.g. locations.yoursite.com).')}
             {!isPro && (
-              <div style={{ padding: '12px 14px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>⭐ Pro plan feature</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)', flex: 1, minWidth: 200 }}>Upgrade to use your own domain for Location Guides.</div>
-                <Link href="/profile#billing" onClick={() => setActive('billing')} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>Upgrade</Link>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <UpgradePrompt
+                  feature="custom domain for your Location Guides"
+                  description="Serve your Location Guides from your own subdomain (e.g. locations.yoursite.com) instead of locateshoot.com. Available on Pro."
+                />
               </div>
             )}
 
