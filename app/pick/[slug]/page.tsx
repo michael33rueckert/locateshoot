@@ -7,7 +7,7 @@ import ImageLightbox from '@/components/ImageLightbox'
 import { useServerPlacePhotos } from '@/hooks/useServerPlacePhotos'
 import { thumbUrl, mediumUrl } from '@/lib/image'
 import type { ClientLocation } from '@/components/ClientMap'
-import { resolveTemplate, googleFontHref, type PickTemplate, type LayoutKind } from '@/lib/pick-template'
+import { resolveTemplate, googleFontHref, LOGO_SIZE_PX, type PickTemplate, type LayoutKind } from '@/lib/pick-template'
 
 const ClientMap = dynamic(() => import('@/components/ClientMap'), { ssr: false })
 
@@ -591,11 +591,18 @@ export default function ClientPickerPage() {
           shareData?.session_name ? { key: 'session', icon: '🗒', label: shareData.session_name, href: null } : null,
         ].filter(Boolean) as { key: string; icon: string; label: string; href: string | null }[]
 
+        // Logo size from the template (small / medium / large). Falls
+        // back to medium if the template predates the logoSize field
+        // (e.g. a row created before the migration that added the
+        // header.logoSize column wrapper).
+        const logoSizeKey = (tpl.header.logoSize ?? 'medium') as keyof typeof LOGO_SIZE_PX
+        const logoBox     = LOGO_SIZE_PX[logoSizeKey] ?? LOGO_SIZE_PX.medium
+
         return (
           <div style={{ background: headerBg, padding: '1.25rem 1.5rem', flexShrink: 0, borderBottom: headerBorder, transition: 'background .2s' }}>
             {whiteLabel ? (
               <div style={{ marginBottom: '1rem' }}>
-                <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: 56, maxWidth: 260, width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: logoBox.maxHeight, maxWidth: logoBox.maxWidth, width: 'auto', height: 'auto', objectFit: 'contain' }} />
                 {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: studioNameCol, marginTop: 6 }}>{studioName}</div>}
               </div>
             ) : (

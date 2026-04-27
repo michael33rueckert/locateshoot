@@ -7,6 +7,17 @@
 // half-configured template still renders correctly.
 
 export type LayoutKind = 'card' | 'list' | 'grid' | 'magazine' | 'minimal'
+export type LogoSize  = 'small' | 'medium' | 'large'
+
+// Logo size → max dimensions on the Pick page header. Tuned so a
+// square monogram looks natural at each size (small slots into a tab-
+// bar-ish header, medium is the default brand-prominent size, large
+// dominates the header for studios with strong identity).
+export const LOGO_SIZE_PX: Record<LogoSize, { maxHeight: number; maxWidth: number }> = {
+  small:  { maxHeight: 36, maxWidth: 180 },
+  medium: { maxHeight: 56, maxWidth: 260 },
+  large:  { maxHeight: 88, maxWidth: 360 },
+}
 
 export interface PickTemplate {
   layout?:     LayoutKind
@@ -19,6 +30,7 @@ export interface PickTemplate {
   }
   header?: {
     logoPlacement?: 'left' | 'center' | 'hidden'
+    logoSize?:     LogoSize       // size bucket for the photographer's logo
     showStudioName?: boolean
     intro?: string                // override the welcome/intro line
   }
@@ -64,6 +76,7 @@ export const DEFAULT_TEMPLATE: Required<{
   },
   header: {
     logoPlacement: 'left',
+    logoSize: 'medium',
     showStudioName: true,
     intro: '',
   },

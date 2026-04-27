@@ -321,6 +321,34 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
             <option value="hidden">Hide logo</option>
           </select>
         </div>
+        {/* Logo size — pill row of small/medium/large. Hidden when
+            the logo itself is hidden, since size is moot then. */}
+        {(tpl.header?.logoPlacement ?? DEFAULT_TEMPLATE.header.logoPlacement) !== 'hidden' && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Logo size</div>
+            <div style={{ display: 'inline-flex', gap: 6 }}>
+              {(['small', 'medium', 'large'] as const).map(size => {
+                const active = (tpl.header?.logoSize ?? DEFAULT_TEMPLATE.header.logoSize) === size
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setHeader('logoSize', size)}
+                    style={{
+                      padding: '7px 14px', borderRadius: 4,
+                      border: `1.5px solid ${active ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                      background: active ? 'rgba(196,146,42,.08)' : 'white',
+                      color: 'var(--ink)', cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 12,
+                      fontWeight: active ? 600 : 400,
+                      textTransform: 'capitalize',
+                    }}
+                  >{size}</button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         <div>
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Intro line (optional)</div>
           <input

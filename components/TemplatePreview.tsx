@@ -45,8 +45,14 @@ export default function TemplatePreview({ template, variant = 'panel', studioNam
   }, [fontHref, tpl.font])
 
   const isThumb = variant === 'thumb'
-  const headerHeight = isThumb ? 28 : 56
-  const headerLogoSize = isThumb ? 14 : 26
+  // Logo size scales with the template's header.logoSize choice so
+  // the live preview tracks the photographer's small/medium/large
+  // selection. Tuned by hand: small ~70%, medium = baseline, large
+  // ~140% so the difference reads at a glance.
+  const logoSizeKey = (tpl.header.logoSize ?? 'medium') as 'small' | 'medium' | 'large'
+  const logoScale   = logoSizeKey === 'small' ? 0.7 : logoSizeKey === 'large' ? 1.4 : 1
+  const headerLogoSize = Math.round((isThumb ? 14 : 26) * logoScale)
+  const headerHeight   = Math.max(isThumb ? 28 : 56, headerLogoSize + (isThumb ? 8 : 16))
   const titleSize = isThumb ? 9 : 18
   const introSize = isThumb ? 7 : 12
   const padding   = isThumb ? 6 : 16
