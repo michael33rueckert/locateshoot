@@ -144,7 +144,23 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const hash = window.location.hash.replace('#', '')
-    if (hash && NAV_ITEMS.find(n => n.id === hash)) setActive(hash)
+    if (!hash) return
+    // Direct tab match: /profile#branding → open the Branding tab
+    if (NAV_ITEMS.find(n => n.id === hash)) {
+      setActive(hash)
+      return
+    }
+    // Section-anchor match: /profile#layout-templates → open the
+    // Branding tab AND scroll to the Layout Templates section so deep
+    // links from the Create Location Guide modal's 'Edit templates'
+    // button land directly on the template manager.
+    if (hash === 'layout-templates') {
+      setActive('branding')
+      // Wait for the tab content to actually render before scrolling.
+      setTimeout(() => {
+        document.getElementById('layout-templates')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 150)
+    }
   }, [])
 
   useEffect(() => {
@@ -754,7 +770,14 @@ export default function ProfilePage() {
                 own card. The panel handles its own non-Pro state with
                 a quiet informational placeholder (no duplicate upgrade
                 card — that's already at the top of the Branding tab). */}
-            <div style={{ marginTop: '2.5rem' }}>
+            {/* id='layout-templates' is the deep-link target used by
+                the 'Edit templates' link in the Create Location Guide
+                modal. The hash-routing useEffect below opens the
+                Branding tab AND scrolls here so the photographer
+                lands on the template manager, not the Studio Logo
+                card at the top of the tab. scroll-margin-top keeps
+                the title clear of the sticky AppNav. */}
+            <div id="layout-templates" style={{ marginTop: '2.5rem', scrollMarginTop: 80 }}>
               {sectionTitle('Layout Templates', 'Design how your Location Guides look — layout, font, colors, header. Saved templates are picked per guide.')}
               <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} currentPlan={isPro ? 'pro' : isStarter ? 'starter' : 'free'} />
             </div>

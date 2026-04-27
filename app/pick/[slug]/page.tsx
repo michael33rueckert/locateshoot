@@ -444,8 +444,15 @@ export default function ClientPickerPage() {
 
   // Kept for callers expecting a single primary selection (progress bar, etc.).
   const chosenLoc = chosenLocs[0] ?? null
-  const isGoldAccent = !branding?.brand_accent
-  const accentColor  = branding?.brand_accent ?? 'var(--gold)'
+  // Accent color is always driven by the template's tpl.colors.accent
+  // (which gets applied to var(--gold) at the root, see below). The
+  // old `branding.brand_accent` field — set in the legacy Profile >
+  // Branding > Accent color picker we since removed — is now ignored
+  // even if a stale value persists in preferences. Using `var(--gold)`
+  // unconditionally lets every accent surface inherit the template
+  // color via CSS variable cascade.
+  const accentColor  = 'var(--gold)'
+  const isGoldAccent = true
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {

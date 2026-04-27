@@ -631,7 +631,7 @@ export default function CreateLocationGuideModal({
                   ))}
                 </select>
                 <Link
-                  href="/profile#branding"
+                  href="/profile#layout-templates"
                   style={{ display: 'inline-flex', alignItems: 'center', padding: '9px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}
                 >
                   Edit templates →
