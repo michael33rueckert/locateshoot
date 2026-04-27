@@ -17,6 +17,23 @@ import { thumbUrl } from '@/lib/image'
 interface Profile           { id: string; full_name: string | null; email: string | null; plan: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
 interface PortfolioLocation { id: string; source_location_id: string | null; name: string; city: string | null; state: string | null; is_secret: boolean; created_at: string; photo_count: number; preview_url: string | null }
 interface ClientPick        { id: string; client_email: string; location_name: string | null; created_at: string }
+// Cross-guide pick row used by the 'Client Selections' section. Same
+// underlying client_picks rows as ClientPick (which is per-guide), but
+// pulls first/last name + the guide's session name so the dashboard
+// list reads as 'Jane Doe → Loose Park (Sept 14 Wedding)'.
+interface RecentPick {
+  id:                string
+  share_link_id:     string
+  client_first_name: string | null
+  client_last_name:  string | null
+  client_email:      string | null
+  location_name:     string | null
+  location_names:    string[] | null
+  created_at:        string
+  session_name:      string | null
+  slug:              string | null
+  is_full_portfolio: boolean
+}
 interface PermanentLink     { id: string; session_name: string; slug: string; created_at: string; portfolio_location_ids: string[] | null; location_ids: string[] | null; is_full_portfolio: boolean; expires_at: string | null; expire_on_submit: boolean; cover_photo_url: string | null; picks: ClientPick[]; expanded: boolean; views_total: number; unique_viewers: number; total_seconds: number }
 
 function greetingTime() {
@@ -30,6 +47,7 @@ export default function DashboardPage() {
   const [profile,             setProfile]             = useState<Profile | null>(null)
   const [portfolioLocs,       setPortfolioLocs]        = useState<PortfolioLocation[]>([])
   const [permanentLinks,      setPermanentLinks]       = useState<PermanentLink[]>([])
+  const [recentPicks,         setRecentPicks]          = useState<RecentPick[]>([])
   const [loading,             setLoading]              = useState(true)
   const [toast,               setToast]                = useState<string | null>(null)
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
@@ -187,6 +205,41 @@ export default function DashboardPage() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(6)
+
+      // Recent client picks across ALL guides (not just the 6 most-
+      // recent guides we render). Powers the 'Client Selections'
+      // section below the guides list. RLS on client_picks scopes the
+      // result to share_links owned by the current user, so we only
+      // see our own picks even though we don't filter by user_id here.
+      const { data: rawPicks } = await supabase
+        .from('client_picks')
+        .select('id,share_link_id,client_first_name,client_last_name,client_email,location_name,location_names,created_at')
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (rawPicks && rawPicks.length > 0) {
+        const linkIds = Array.from(new Set(rawPicks.map((p: any) => p.share_link_id).filter(Boolean)))
+        const { data: linkRows } = await supabase
+          .from('share_links')
+          .select('id,session_name,slug,is_full_portfolio')
+          .in('id', linkIds)
+        const linkMap = new Map<string, { session_name: string | null; slug: string | null; is_full_portfolio: boolean }>()
+        ;(linkRows ?? []).forEach((r: any) => linkMap.set(r.id, { session_name: r.session_name ?? null, slug: r.slug ?? null, is_full_portfolio: !!r.is_full_portfolio }))
+        setRecentPicks(rawPicks.map((p: any) => ({
+          id:                p.id,
+          share_link_id:     p.share_link_id,
+          client_first_name: p.client_first_name ?? null,
+          client_last_name:  p.client_last_name  ?? null,
+          client_email:      p.client_email      ?? null,
+          location_name:     p.location_name     ?? null,
+          location_names:    Array.isArray(p.location_names) ? p.location_names : null,
+          created_at:        p.created_at,
+          session_name:      linkMap.get(p.share_link_id)?.session_name      ?? null,
+          slug:              linkMap.get(p.share_link_id)?.slug              ?? null,
+          is_full_portfolio: linkMap.get(p.share_link_id)?.is_full_portfolio ?? false,
+        })))
+      } else {
+        setRecentPicks([])
+      }
 
       if (permData && permData.length > 0) {
         const linksWithPicks = await Promise.all(permData.map(async (link: any) => {
@@ -508,6 +561,70 @@ export default function DashboardPage() {
                   </div>
                 )
               })()}
+            </div>
+
+            {/* CLIENT SELECTIONS — flat list of every recent pick.
+                Anchored at #client-picks so the 'View' button on the
+                push notification (and the email's dashboard link)
+                lands the photographer directly here. */}
+            <div id="client-picks" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80 }}>
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  ✓ Client Selections
+                  {recentPicks.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.2)' }}>{recentPicks.length}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Every pick a client has submitted — most recent first.</div>
+              </div>
+              {recentPicks.length === 0 ? (
+                <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: 32, marginBottom: 10, opacity: 0.4 }}>📭</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No client picks yet</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
+                    When a client opens one of your Location Guides and submits a pick, it&apos;ll show up here. You&apos;ll also get an email and (if enabled) a push notification.
+                  </div>
+                </div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {recentPicks.slice(0, 12).map(p => {
+                    const fullName = [p.client_first_name, p.client_last_name].filter(Boolean).join(' ').trim()
+                    const display  = fullName || p.client_email || 'Anonymous client'
+                    const locText  = (p.location_names && p.location_names.length > 0)
+                      ? p.location_names.join(' · ')
+                      : (p.location_name ?? '—')
+                    const guideLabel = p.is_full_portfolio ? 'Portfolio guide' : (p.session_name ?? 'Custom guide')
+                    const created    = new Date(p.created_at)
+                    const dateText   = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+                    const timeText   = created.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                    return (
+                      <li key={p.id} style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
+                            {display}
+                            {fullName && p.client_email && (
+                              <span style={{ fontWeight: 400, color: 'var(--ink-soft)', fontSize: 12, marginLeft: 6 }}>· {p.client_email}</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
+                            <span style={{ color: 'var(--ink-soft)' }}>📍</span> {locText}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
+                            from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                          {dateText}<br />
+                          <span style={{ fontSize: 11 }}>{timeText}</span>
+                        </div>
+                      </li>
+                    )
+                  })}
+                  {recentPicks.length > 12 && (
+                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                      Showing 12 of {recentPicks.length} most recent picks
+                    </li>
+                  )}
+                </ul>
+              )}
             </div>
 
             {/* MY PORTFOLIO — primary section */}

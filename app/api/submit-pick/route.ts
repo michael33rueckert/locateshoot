@@ -348,12 +348,23 @@ export async function POST(request: Request) {
         `
       }).join('')
 
-      const headerName = whiteLabel && studioName
-        ? `<div style="font-family: Georgia, serif; font-size:18px; font-weight:700; color:#1a1612;">${escapeHtml(studioName)}</div>`
-        : `<div style="display:flex;align-items:center;gap:8px;">
-             <span style="width:10px;height:10px;border-radius:50%;background:${brandAccent};display:inline-block;"></span>
-             <strong style="font-size:14px;color:#1a1612;">${escapeHtml(studioName || 'Your photographer')}</strong>
-           </div>`
+      // Email header — branding tier:
+      //   Pro: photographer's logo (or studio name when no logo is
+      //        uploaded yet). White-label kept identical to before.
+      //   Starter: studio-name + gold dot, like the photographer
+      //        notification email. Always followed by a 'Powered by
+      //        LocateShoot' wordmark in the footer.
+      // (Free is already gated out of this email above via isPaid.)
+      const logoUrl = (prefs.logo_url as string | undefined) || ''
+      const isLogoSafe = /^https?:\/\//i.test(logoUrl)
+      const headerName = isPro && isLogoSafe
+        ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(studioName || 'Studio logo')}" style="display:block;max-width:200px;max-height:64px;width:auto;height:auto;border:0;" />`
+        : isPro && studioName
+          ? `<div style="font-family: Georgia, serif; font-size:18px; font-weight:700; color:#1a1612;">${escapeHtml(studioName)}</div>`
+          : `<div style="display:flex;align-items:center;gap:8px;">
+               <span style="width:10px;height:10px;border-radius:50%;background:${brandAccent};display:inline-block;"></span>
+               <strong style="font-size:14px;color:#1a1612;">${escapeHtml(studioName || 'Your photographer')}</strong>
+             </div>`
 
       const tagline = (prefs.share_tagline as string | undefined)?.trim()
       const greeting = firstName
@@ -363,9 +374,24 @@ export async function POST(request: Request) {
         ? `Thanks for picking your shoot location! Here are the details${studioName ? ` from ${escapeHtml(studioName)}` : ''}:`
         : `Thanks for picking your shoot locations! Here's the recap${studioName ? ` from ${escapeHtml(studioName)}` : ''}:`
 
+      // Footer:
+      //   Pro + white-label: studio reply-line only, no LocateShoot mark.
+      //   Pro without white-label / Starter: 'Powered by LocateShoot'
+      //     wordmark with a clickable logo + name. Email clients block
+      //     <link> tags so we use a small inline gold-dot mark plus the
+      //     LocateShoot wordmark wrapped in an anchor to the homepage.
+      const lsHome = process.env.NEXT_PUBLIC_APP_ORIGIN ?? 'https://locateshoot.com'
+      const poweredByMark = `
+        <a href="${lsHome}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#8a7e70;font-size:12px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:#c4922a;display:inline-block;"></span>
+          <span style="font-family: Georgia, serif; font-weight:700; color:#1a1612;">LocateShoot</span>
+        </a>`
       const footer = whiteLabel
         ? `<p style="font-size:12px; color:#8a7e70; margin-top:24px; border-top:1px solid #eee; padding-top:16px;">Reply to this email to reach ${escapeHtml(studioName || 'your photographer')} directly.</p>`
-        : `<p style="font-size:12px; color:#8a7e70; margin-top:24px; border-top:1px solid #eee; padding-top:16px;">Reply to this email to reach ${escapeHtml(studioName || 'your photographer')} directly.<br><span style="color:#a89c8d;">Sent via LocateShoot — your photographer's location-sharing toolkit.</span></p>`
+        : `<div style="margin-top:24px; border-top:1px solid #eee; padding-top:16px;">
+             <p style="font-size:12px; color:#8a7e70; margin:0 0 10px;">Reply to this email to reach ${escapeHtml(studioName || 'your photographer')} directly.</p>
+             <div style="font-size:11px; color:#a89c8d;">Powered by ${poweredByMark}</div>
+           </div>`
 
       const html = `
         <div style="font-family: Georgia, serif; color: #1a1612; max-width: 600px; margin: 0 auto; padding: 32px 24px; background:#f9f6f1;">
@@ -422,7 +448,11 @@ export async function POST(request: Request) {
     await sendPushToUser(admin, link.user_id, {
       title,
       body,
-      url: '/dashboard',
+      // Deep-link to the Client Selections section on the dashboard
+      // (#client-picks anchor). The dashboard scrolls to that block
+      // on load when the hash is present, so 'View' lands the
+      // photographer right at the new pick.
+      url: '/dashboard#client-picks',
       tag: `pick-${inserted.id}`,
     })
   } catch (e: any) {
