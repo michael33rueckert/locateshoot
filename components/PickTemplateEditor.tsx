@@ -11,6 +11,7 @@ import {
   googleFontHref,
 } from '@/lib/pick-template'
 import TemplatePreview from '@/components/TemplatePreview'
+import { validateImageUpload } from '@/lib/upload-validate'
 
 // Pro-only Location Guide template editor. Saves debounced as the
 // photographer edits — no manual Save button.
@@ -113,12 +114,15 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
 
   // Background image upload — same Supabase Storage bucket the
   // photographer's logo + photos use. Stored under <userId>/template/.
+  // SVG is blocked by validateImageUpload — SVG can embed <script>
+  // and would execute when the file is served via getPublicUrl().
   const fileRef = useRef<HTMLInputElement>(null)
   async function handleBgUpload(file: File) {
     setError(null)
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
-    const path = `${userId}/template/bg-${Date.now()}.${ext}`
-    const { error: ue } = await supabase.storage.from('location-photos').upload(path, file, { contentType: file.type || 'image/jpeg' })
+    const v = validateImageUpload(file)
+    if (!v.ok) { setError(v.message); return }
+    const path = `${userId}/template/bg-${Date.now()}.${v.ext}`
+    const { error: ue } = await supabase.storage.from('location-photos').upload(path, file, { contentType: v.contentType })
     if (ue) { setError(ue.message); return }
     const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
     setBackground('image', pub.publicUrl)

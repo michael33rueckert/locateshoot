@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, escapeHtml } from '@/lib/email'
+import { check, clientIp } from '@/lib/rate-limit'
 
 // Report-a-correction for Explore location details. Captures optional
 // reporter info from their session (if signed in) and emails the corrections
 // inbox. Works for signed-out visitors too — reply-to falls back to empty.
 
 export async function POST(request: Request) {
+  // Each report sends an email. Cap at 5/hour/IP to limit inbox spam.
+  const ip = clientIp(request.headers)
+  const rl = check(`report-correction:${ip}`, { windowMs: 60 * 60 * 1000, max: 5 })
+  if (!rl.ok) return NextResponse.json({ error: 'rate_limited', message: 'Too many submissions. Please try again later.' }, { status: 429 })
+
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid body' }, { status: 400 })
   const { locationName, locationId, message } = body as { locationName?: string; locationId?: string; message?: string }

@@ -7,6 +7,7 @@ import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import SavedTemplatesPanel from '@/components/SavedTemplatesPanel'
 import UpgradePrompt from '@/components/UpgradePrompt'
+import { validateImageUpload } from '@/lib/upload-validate'
 
 
 interface HomeLocation {
@@ -491,11 +492,13 @@ export default function ProfilePage() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !userId) return
+    const v = validateImageUpload(file)
+    if (!v.ok) { setToast(`⚠ ${v.message}`); return }
     const reader = new FileReader()
     reader.onload = ev => setLogoPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
-    const ext = file.name.split('.').pop(), path = `${userId}/logo.${ext}`
-    const { error } = await supabase.storage.from('location-photos').upload(path, file, { upsert: true })
+    const path = `${userId}/logo.${v.ext}`
+    const { error } = await supabase.storage.from('location-photos').upload(path, file, { upsert: true, contentType: v.contentType })
     if (!error) {
       const { data } = supabase.storage.from('location-photos').getPublicUrl(path)
       const updated = { ...prefs, logo_url: data.publicUrl }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
+import { check, clientIp } from '@/lib/rate-limit'
 
 // POST /api/share-views — start a view session. Called once per page load
 // on /pick/[slug]. Returns { viewId } which the client uses for heartbeat
@@ -20,6 +21,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'shareLinkId required' }, { status: 400 })
   }
 
+  // Cap per-IP-per-link views at 30/hour. A real client opens the
+  // pick page a few times at most; anything more is either curl
+  // looping or a bug. Throttling prevents trivial inflation of the
+  // analytics counts on any photographer's guide.
+  const ip = clientIp(request.headers)
+  const rl = check(`share-views:${ip}:${body.shareLinkId}`, { windowMs: 60 * 60 * 1000, max: 30 })
+  if (!rl.ok) return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
+
   const db = admin()
   // Verify the share link exists. Cheap guard against a malicious client
   // flooding the table with bogus shareLinkIds.
@@ -29,7 +38,6 @@ export async function POST(request: Request) {
   // "Unique viewer" hash — IP + user-agent + day. Lets the dashboard
   // count distinct visitors without storing the IP itself. Same client
   // tomorrow becomes a new unique visit which is a reasonable approximation.
-  const ip = (request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()) ?? request.headers.get('x-real-ip') ?? ''
   const ua = request.headers.get('user-agent') ?? ''
   const day = new Date().toISOString().slice(0, 10)
   const viewerHash = createHash('sha256').update(`${ip}|${ua}|${day}`).digest('hex')

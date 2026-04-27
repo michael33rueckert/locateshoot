@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, escapeHtml } from '@/lib/email'
 import { sendPushToUser } from '@/lib/server-push'
+import { check, clientIp } from '@/lib/rate-limit'
 
 // Client-facing submit endpoint for /pick/[slug]. RLS blocks anonymous writes
 // to client_picks, so this route uses the service role to insert + email
@@ -12,6 +13,13 @@ function isEmail(s: string): boolean {
 }
 
 export async function POST(request: Request) {
+  // Rate-limit by IP — every successful pick triggers a Resend email
+  // (and a push notification). 10/hour/IP is plenty for honest use
+  // and stops a bad actor from blowing through the Resend quota.
+  const ip = clientIp(request.headers)
+  const rl = check(`submit-pick:${ip}`, { windowMs: 60 * 60 * 1000, max: 10 })
+  if (!rl.ok) return NextResponse.json({ error: 'rate_limited', message: 'Too many submissions. Please try again later.' }, { status: 429 })
+
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid body' }, { status: 400 })
 

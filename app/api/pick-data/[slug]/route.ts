@@ -223,8 +223,11 @@ export async function GET(request: Request, context: any) {
         permit_fee:       isProPhotographer ? (src?.permit_fee       ?? null)   : null,
         permit_website:   isProPhotographer ? (src?.permit_website   ?? null)   : null,
         permit_certainty: isProPhotographer ? (src?.permit_certainty ?? 'unknown') : null,
-        pinterest_url:    p.pinterest_url       ?? null,
-        blog_url:         p.blog_url            ?? null,
+        // Pinterest + blog links are a Starter+ feature (same gate as
+        // permit info). Free guides return null so the client UI hides
+        // the row instead of leaking a paid feature for free.
+        pinterest_url:    isProPhotographer ? (p.pinterest_url ?? null) : null,
+        blog_url:         isProPhotographer ? (p.blog_url      ?? null) : null,
         rating:             src?.rating           ?? null,
         quality_score:      src?.quality_score    ?? null,
         save_count:         src?.save_count       ?? 0,

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import { validateImageUpload } from '@/lib/upload-validate'
 
 // Shared "add to portfolio" modal. Mirrors the Edit modal's full field set —
 // name, description, city/state, access, tags, best time, parking, permit,
@@ -52,10 +53,16 @@ export default function AddPortfolioLocationModal({
   function handleFiles(files: FileList | null) {
     if (!files) return
     const next: PendingPhoto[] = []
+    const rejected: string[] = []
     for (const f of Array.from(files).slice(0, 10 - photos.length)) {
+      // Validate at intake so the user gets immediate feedback (no
+      // SVG, no oversize, no exotic types). Backstopped at upload.
+      const v = validateImageUpload(f)
+      if (!v.ok) { rejected.push(`${f.name}: ${v.message}`); continue }
       next.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file: f, previewUrl: URL.createObjectURL(f) })
     }
     setPhotos(p => [...p, ...next])
+    if (rejected.length) setErr(rejected.join(' · '))
     if (fileRef.current) fileRef.current.value = ''
   }
   function removePhoto(id: string) {
@@ -124,9 +131,13 @@ export default function AddPortfolioLocationModal({
       const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).single()
       for (const ph of photos) {
         try {
-          const ext = ph.file.name.split('.').pop()
-          const path = `${userId}/portfolio/${inserted.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
-          const { error: ue } = await supabase.storage.from('location-photos').upload(path, ph.file, { contentType: ph.file.type })
+          // Re-validate at upload time as a backstop in case the
+          // intake validation was bypassed (it shouldn't be, but
+          // defense in depth).
+          const v = validateImageUpload(ph.file)
+          if (!v.ok) { console.error('upload rejected', v.message); continue }
+          const path = `${userId}/portfolio/${inserted.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${v.ext}`
+          const { error: ue } = await supabase.storage.from('location-photos').upload(path, ph.file, { contentType: v.contentType })
           if (ue) { console.error('upload failed', ue); continue }
           const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
           await supabase.from('location_photos').insert({

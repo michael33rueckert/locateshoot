@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, escapeHtml } from '@/lib/email'
+import { check, clientIp } from '@/lib/rate-limit'
 
 // General-purpose feedback/suggestion capture. Available to all visitors,
 // signed-in or not. Sends to the feedback inbox with reporter info when
 // known so Michael can reply directly.
 
 export async function POST(request: Request) {
+  // Each submission emails the inbox. Cap at 5/hour/IP to prevent
+  // mailbox spam from a single attacker.
+  const ip = clientIp(request.headers)
+  const rl = check(`feedback:${ip}`, { windowMs: 60 * 60 * 1000, max: 5 })
+  if (!rl.ok) return NextResponse.json({ error: 'rate_limited', message: 'Too many submissions. Please try again later.' }, { status: 429 })
+
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid body' }, { status: 400 })
   const { message, pageUrl } = body as { message?: string; pageUrl?: string }

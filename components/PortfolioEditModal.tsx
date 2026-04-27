@@ -6,6 +6,7 @@ import ImageLightbox from '@/components/ImageLightbox'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
+import { validateImageUpload } from '@/lib/upload-validate'
 
 // Shared edit modal for a portfolio location. Mounted from the Dashboard and
 // the dedicated /portfolio page — both read/write the same portfolio_locations
@@ -197,20 +198,14 @@ export default function PortfolioEditModal({
     for (const f of files) {
       try {
         // File-extension extraction. Files dropped from some apps come
-        // with no extension on .name (e.g. screenshots on iOS) — fall
-        // back to the MIME type so the storage object still has a
-        // recognizable suffix instead of an undefined one.
-        const dotIdx  = f.name.lastIndexOf('.')
-        const nameExt = dotIdx >= 0 ? f.name.slice(dotIdx + 1) : ''
-        const mimeExt = (f.type || '').split('/')[1]
-        const ext = (nameExt || mimeExt || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
-        const path = `${userId}/portfolio/${portfolioId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`
-        // contentType — fall back to image/jpeg when the browser didn't
-        // populate file.type (e.g. some Android keyboards/intents). The
-        // storage bucket whitelists image/* MIME types; an empty content
-        // type is rejected before the file ever lands.
-        const contentType = f.type && f.type.startsWith('image/') ? f.type : 'image/jpeg'
-        const { error: ue } = await supabase.storage.from('location-photos').upload(path, f, { contentType })
+        // Centralized image validation: blocks SVG (script-bearing
+        // XSS risk when served via getPublicUrl), enforces 10MB cap,
+        // and normalizes the extension/MIME so iOS screenshots with
+        // no .name extension still get a sensible suffix.
+        const v = validateImageUpload(f)
+        if (!v.ok) { if (!firstError) firstError = v.message; continue }
+        const path = `${userId}/portfolio/${portfolioId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${v.ext}`
+        const { error: ue } = await supabase.storage.from('location-photos').upload(path, f, { contentType: v.contentType })
         if (ue) {
           console.error('storage upload failed', ue, { path, name: f.name, size: f.size, type: f.type })
           if (!firstError) firstError = `Upload failed: ${ue.message ?? 'storage rejected the file'}`
