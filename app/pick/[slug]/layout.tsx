@@ -17,14 +17,24 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const admin = createClient(url, key)
   const { data } = await admin
     .from('share_links')
-    .select('session_name,message,photographer_name,cover_photo_url')
+    .select('session_name,message,photographer_name,cover_photo_url,user_id')
     .eq('slug', slug)
     .maybeSingle()
 
   if (!data) return { title: 'Location picker' }
 
+  // Prefer the photographer's CURRENT name over the snapshot stored on
+  // share_links — keeps OG/Twitter previews fresh when the photographer
+  // updates their profile. Falls back to the snapshot if the live read
+  // fails for any reason.
+  let liveName: string | null = null
+  if (data.user_id) {
+    const { data: prof } = await admin.from('profiles').select('full_name').eq('id', data.user_id).maybeSingle()
+    liveName = prof?.full_name ?? null
+  }
+
   const title       = data.session_name || 'Location picker'
-  const photog      = data.photographer_name || 'Your photographer'
+  const photog      = liveName || data.photographer_name || 'Your photographer'
   const description = data.message?.trim()
     || `${photog} picked a few spots for your session. Tap to choose your favorite.`
 

@@ -71,9 +71,16 @@ export async function GET(request: Request, context: any) {
   let branding: any = null
   let photographerPlan: string | null = null
   if (share.user_id) {
-    const { data: prof } = await admin.from('profiles').select('plan,preferences').eq('id', share.user_id).single()
+    const { data: prof } = await admin.from('profiles').select('plan,preferences,full_name').eq('id', share.user_id).single()
     branding         = prof?.preferences ?? null
     photographerPlan = prof?.plan ?? null
+    // Override the snapshotted share_links.photographer_name with the
+    // photographer's CURRENT name — otherwise updating the name in
+    // Profile doesn't propagate to existing guides (the pick page
+    // would keep showing the old name forever). The snapshot is kept
+    // for stability if the profile is later deleted, but the live
+    // value wins whenever it's available.
+    if (prof?.full_name) (share as any).photographer_name = prof.full_name
   }
 
   // Pick page template resolution (Pro-only feature):

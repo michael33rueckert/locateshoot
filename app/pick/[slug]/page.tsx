@@ -646,14 +646,18 @@ export default function ClientPickerPage() {
                 </div>
               </div>
             ) : (() => {
-              // Sort highlighted (photographer-recommended) locations to
-              // the top of the list while preserving the photographer's
-              // saved order within each group. The list shows them with
-              // a "⭐ Recommended" badge in PickListItem.
-              const sorted = [...locations].sort((a, b) => Number(!!b.highlighted) - Number(!!a.highlighted))
+              // Render in the photographer's manual order — `locations`
+              // is server-side ordered by share_links.portfolio_location_ids,
+              // which the reorder UI rewrites on drag. The 'highlighted'
+              // (★ Recommended) badge is purely visual now: photographers
+              // who want a recommended spot at the top reorder it there.
+              // Previously we forced highlighted items to the top of the
+              // list, which silently overrode manual reordering AND
+              // caused the map markers (numbered by `locations` order) to
+              // disagree with the sidebar (numbered by sorted order).
               return (
                 <div className="pick-loc-list" data-layout={tpl.layout}>
-                  {sorted.map((loc, i) => {
+                  {locations.map((loc, i) => {
                     const isChosen   = chosenSet.has(String(loc.id))
                     const isActive   = String(activeId) === String(loc.id)
                     const isDisabled = !isChosen && disabledSet.has(String(loc.id))
