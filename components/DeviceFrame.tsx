@@ -107,9 +107,12 @@ export function PhoneFrame({ src, alt, caption }: FrameProps) {
           '0 30px 60px -12px rgba(26,22,18,0.35), ' +
           '0 18px 32px -18px rgba(26,22,18,0.30)',
       }}>
-        {/* Screen */}
+        {/* Screen — cream background so the letterbox space below
+            shorter-than-iPhone-tall screenshots (~9:16 to 9:18)
+            blends with the Pick page's typical cream backdrop
+            instead of showing a white seam. */}
         <div style={{
-          background: '#ffffff',
+          background: '#f9f6f1',
           borderRadius: 28,
           aspectRatio: '9 / 19.5',
           overflow: 'hidden',
