@@ -29,6 +29,8 @@ export default function AddPortfolioLocationModal({
   const [blogUrl,        setBlogUrl]        = useState('')
   const [permitRequired, setPermitRequired] = useState(false)
   const [permitNotes,    setPermitNotes]    = useState('')
+  const [permitFee,      setPermitFee]      = useState('')
+  const [permitWebsite,  setPermitWebsite]  = useState('')
   const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
   const [pin,     setPin]     = useState<AddressResult | null>(null)
   const [photos,  setPhotos]  = useState<PendingPhoto[]>([])
@@ -102,9 +104,21 @@ export default function AddPortfolioLocationModal({
     }
     let { data: inserted, error } = await supabase.from('portfolio_locations').insert({
       ...baseInsert,
-      pinterest_url: pinterestUrl.trim() || null,
-      blog_url:      blogUrl.trim() || null,
+      pinterest_url:  pinterestUrl.trim() || null,
+      blog_url:       blogUrl.trim() || null,
+      permit_fee:     permitFee.trim() || null,
+      permit_website: permitWebsite.trim() || null,
     }).select('id').single()
+    if (error && /permit_fee|permit_website/.test(error.message ?? '')) {
+      // Permit-fee/website cols missing — retry with just the link cols.
+      const retry = await supabase.from('portfolio_locations').insert({
+        ...baseInsert,
+        pinterest_url: pinterestUrl.trim() || null,
+        blog_url:      blogUrl.trim() || null,
+      }).select('id').single()
+      inserted = retry.data
+      error    = retry.error
+    }
     if (error && /pinterest_url|blog_url/.test(error.message ?? '')) {
       // Migration 20260425_portfolio_links.sql adds these columns;
       // when it hasn't run yet we silently retry without them so
@@ -271,7 +285,24 @@ export default function AddPortfolioLocationModal({
               </div>
             </div>
             {permitRequired && (
-              <textarea value={permitNotes} onChange={e => setPermitNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', marginTop: 4 }} placeholder="Details — fee, where to get it, contact, etc." />
+              <>
+                <textarea value={permitNotes} onChange={e => setPermitNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', marginTop: 4 }} placeholder="Details — what kind of permit, how to apply, etc." />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8, marginTop: 8 }}>
+                  <input
+                    value={permitFee}
+                    onChange={e => setPermitFee(e.target.value)}
+                    style={inputStyle}
+                    placeholder="Fee (e.g. $25)"
+                  />
+                  <input
+                    value={permitWebsite}
+                    onChange={e => setPermitWebsite(e.target.value)}
+                    style={inputStyle}
+                    placeholder="Permit URL (https://...) — where clients can buy it"
+                    type="url"
+                  />
+                </div>
+              </>
             )}
           </div>
 

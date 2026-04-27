@@ -43,6 +43,8 @@ export default function PortfolioEditModal({
   const [tagInput,setTagInput]= useState('')
   const [permitRequired, setPermitRequired] = useState(false)
   const [permitNotes,    setPermitNotes]    = useState('')
+  const [permitFee,      setPermitFee]      = useState('')
+  const [permitWebsite,  setPermitWebsite]  = useState('')
   const [bestTime,       setBestTime]       = useState('')
   const [parkingInfo,    setParkingInfo]    = useState('')
   const [pinterestUrl,   setPinterestUrl]   = useState('')
@@ -63,7 +65,7 @@ export default function PortfolioEditModal({
     let cancelled = false
     async function load() {
       const [rowRes, photosRes] = await Promise.all([
-        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,pinterest_url,blog_url,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
+        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,permit_fee,permit_website,best_time,parking_info,pinterest_url,blog_url,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
         supabase.from('location_photos').select('id,url,storage_path,caption,sort_order').eq('portfolio_location_id', portfolioId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       ])
       if (cancelled) return
@@ -77,6 +79,8 @@ export default function PortfolioEditModal({
         setTags(Array.isArray(rowRes.data.tags) ? rowRes.data.tags : [])
         setPermitRequired(!!rowRes.data.permit_required)
         setPermitNotes(rowRes.data.permit_notes ?? '')
+        setPermitFee((rowRes.data as any).permit_fee ?? '')
+        setPermitWebsite((rowRes.data as any).permit_website ?? '')
         setBestTime(rowRes.data.best_time ?? '')
         setParkingInfo(rowRes.data.parking_info ?? '')
         setPinterestUrl(rowRes.data.pinterest_url ?? '')
@@ -123,15 +127,29 @@ export default function PortfolioEditModal({
       latitude:           lat,
       longitude:          lng,
     }
+    // Optimistic full update — includes columns from both later
+    // migrations (20260425_portfolio_links: pinterest_url + blog_url,
+    // 20260427_portfolio_permit_fields: permit_fee + permit_website).
+    // Falls back stepwise when columns are missing so the rest of the
+    // edit still saves on a Supabase instance that hasn't run them.
     let { error } = await supabase.from('portfolio_locations').update({
       ...baseUpdate,
-      pinterest_url: pinterestUrl.trim() || null,
-      blog_url:      blogUrl.trim() || null,
+      pinterest_url:  pinterestUrl.trim() || null,
+      blog_url:       blogUrl.trim() || null,
+      permit_fee:     permitFee.trim() || null,
+      permit_website: permitWebsite.trim() || null,
     }).eq('id', portfolioId)
+    if (error && /permit_fee|permit_website/.test(error.message ?? '')) {
+      // Permit fields missing — retry with just the link cols.
+      const retry = await supabase.from('portfolio_locations').update({
+        ...baseUpdate,
+        pinterest_url: pinterestUrl.trim() || null,
+        blog_url:      blogUrl.trim() || null,
+      }).eq('id', portfolioId)
+      error = retry.error
+    }
     if (error && /pinterest_url|blog_url/.test(error.message ?? '')) {
-      // Migration 20260425_portfolio_links.sql adds these columns;
-      // when it hasn't run yet we silently retry without them so
-      // the photographer can still save the row.
+      // Link cols also missing — retry with the original base set.
       const retry = await supabase.from('portfolio_locations').update(baseUpdate).eq('id', portfolioId)
       error = retry.error
     }
@@ -360,7 +378,24 @@ export default function PortfolioEditModal({
                   </div>
                 </div>
                 {permitRequired && (
-                  <textarea value={permitNotes} onChange={e => setPermitNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', marginTop: 4 }} placeholder="Details — fee, where to get it, contact, etc." />
+                  <>
+                    <textarea value={permitNotes} onChange={e => setPermitNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', marginTop: 4 }} placeholder="Details — what kind of permit, how to apply, etc." />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 8, marginTop: 8 }}>
+                      <input
+                        value={permitFee}
+                        onChange={e => setPermitFee(e.target.value)}
+                        style={inputStyle}
+                        placeholder="Fee (e.g. $25)"
+                      />
+                      <input
+                        value={permitWebsite}
+                        onChange={e => setPermitWebsite(e.target.value)}
+                        style={inputStyle}
+                        placeholder="Permit URL (https://...) — where clients can buy it"
+                        type="url"
+                      />
+                    </div>
+                  </>
                 )}
               </div>
 

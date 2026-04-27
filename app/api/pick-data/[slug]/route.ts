@@ -149,7 +149,7 @@ export async function GET(request: Request, context: any) {
     {
       const { data, error } = await admin
         .from('portfolio_locations')
-        .select(`${baseCols},pinterest_url,blog_url`)
+        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website`)
         .in('id', portfolioIds)
       if (error) {
         console.warn('portfolio query w/ link cols failed (likely pre-migration):', error.message)
@@ -240,8 +240,12 @@ export async function GET(request: Request, context: any) {
         // null across the board so the client UI hides the permit row.
         permit_required:  isProPhotographer ? preferOwn('permit_required')      : null,
         permit_notes:     isProPhotographer ? preferOwn('permit_notes')         : null,
-        permit_fee:       isProPhotographer ? (src?.permit_fee       ?? null)   : null,
-        permit_website:   isProPhotographer ? (src?.permit_website   ?? null)   : null,
+        // permit_fee + permit_website are now photographer-editable on
+        // the portfolio copy (migration 20260427_portfolio_permit_fields).
+        // preferOwn returns the photographer's value when set, falls back
+        // to the curated source location's value otherwise.
+        permit_fee:       isProPhotographer ? preferOwn('permit_fee')           : null,
+        permit_website:   isProPhotographer ? preferOwn('permit_website')       : null,
         permit_certainty: isProPhotographer ? (src?.permit_certainty ?? 'unknown') : null,
         // Pinterest + blog links are a Starter+ feature (same gate as
         // permit info). Free guides return null so the client UI hides

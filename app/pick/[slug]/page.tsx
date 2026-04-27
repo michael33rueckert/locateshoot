@@ -812,9 +812,16 @@ export default function ClientPickerPage() {
                     || detailLoc.permitNotes != null
                     || detailLoc.permitFee != null
                     || (detailLoc.permitCertainty && detailLoc.permitCertainty !== 'unknown')
+                  // Format the fee with a $ prefix when it looks like a
+                  // bare number, leave it alone if the photographer
+                  // already typed '$25', 'free', 'donation', etc.
+                  const rawFee = detailLoc.permitFee?.toString().trim()
+                  const feeText = rawFee
+                    ? (/^\d+(\.\d+)?$/.test(rawFee) ? `$${rawFee} fee` : rawFee)
+                    : null
                   const permitText =
                     detailLoc.permitRequired === true
-                      ? `Permit required${detailLoc.permitNotes ? ' — ' + detailLoc.permitNotes : ''}${detailLoc.permitFee ? ' · ' + detailLoc.permitFee : ''}`
+                      ? `Permit required${detailLoc.permitNotes ? ' — ' + detailLoc.permitNotes : ''}${feeText ? ' · ' + feeText : ''}`
                       : detailLoc.permitRequired === false
                         ? 'No permit required'
                         : 'Ask your photographer'
@@ -865,7 +872,7 @@ export default function ClientPickerPage() {
                     rel="noopener noreferrer"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}
                   >
-                    📋 Permit info
+                    📋 Buy permit →
                   </a>
                 )}
               </div>
