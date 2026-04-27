@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AuthModal from '@/components/AuthModal'
 import TemplatePreview from '@/components/TemplatePreview'
+import { LaptopFrame, PhoneFrame } from '@/components/DeviceFrame'
 import { PRESETS } from '@/lib/pick-template'
 import type { User } from '@supabase/supabase-js'
 
@@ -259,6 +260,58 @@ export default function HomePage() {
           <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 10 }}>
             Works anywhere you can paste a URL.
           </div>
+        </div>
+      </section>
+
+      {/* ── DEVICE HERO — real product screenshots in a laptop + phone
+             frame so visitors see the actual UI, not just live
+             component mockups. Photographer side (laptop) shows the
+             Dashboard with portfolio + guides + client picks; client
+             side (phone) shows the Pick page they receive. PhoneFrame
+             uses a placeholder until the client-side screenshot is
+             saved at /marketing/screenshots/pick.png. */}
+      <section className="section" style={{ background: 'var(--ink)', padding: '4rem 1.5rem', color: 'var(--cream)' }}>
+        <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 12 }}>
+              See it in action
+            </div>
+            <h2 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(26px,4vw,38px)', fontWeight: 800, lineHeight: 1.15, color: 'var(--cream)', margin: '0 0 12px' }}>
+              The whole flow, <em style={{ color: 'var(--gold)' }}>both sides</em>
+            </h2>
+            <p style={{ fontSize: 15, color: 'rgba(245,240,232,.65)', fontWeight: 300, lineHeight: 1.6, maxWidth: 540, margin: '0 auto' }}>
+              Manage your portfolio + Location Guides on the left. Drop one link to your client and they get the polished pick experience on the right.
+            </p>
+          </div>
+
+          {/* Laptop wide on the left, phone narrow on the right.
+              Auto-fit grid stacks them on mobile. */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 2.2fr) minmax(0, 1fr)',
+            gap: 32,
+            alignItems: 'center',
+          }} className="device-hero-grid">
+            <div>
+              <LaptopFrame
+                src="/marketing/screenshots/dashboard.png"
+                alt="LocateShoot photographer dashboard with portfolio, Location Guides, and client picks"
+                caption="Photographer dashboard"
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <PhoneFrame
+                src="/marketing/screenshots/pick.png"
+                alt="A client viewing a Location Guide on their phone"
+                caption="What your client sees"
+              />
+            </div>
+          </div>
+          <style>{`
+            @media (max-width: 768px) {
+              .device-hero-grid { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
         </div>
       </section>
 
