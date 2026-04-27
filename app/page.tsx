@@ -5,24 +5,11 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import AuthModal from '@/components/AuthModal'
+import TemplatePreview from '@/components/TemplatePreview'
+import { PRESETS } from '@/lib/pick-template'
 import type { User } from '@supabase/supabase-js'
 
 const HomeMap = dynamic(() => import('@/components/HomeMap'), { ssr: false })
-
-interface TrendingLocation {
-  id: string
-  name: string
-  city: string
-  state: string
-  rating: number | null
-  save_count: number
-  tags: string[]
-  access_type: string
-  quality_score: number
-  photo_url?: string | null
-}
-
-const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
 const HOW_STEPS = [
   { num:'01', icon:'📍', title:'Curate your portfolio',        desc:'Save your go-to shoot spots. Upload your own photos.' },
@@ -36,6 +23,25 @@ const SHARE_STEPS = [
   { icon: '🎯', headline: 'Client picks in 30 seconds', body: 'Your curated locations, one tap, done.' },
   { icon: '✉️', headline: 'You get the confirmation',   body: 'Email the moment they pick. No email chains.' },
 ]
+
+// One feature highlight on the home page. Renders a small product
+// mockup at the top (a real component, not a static screenshot) and
+// a headline + body below. Stacked layout works the same in the
+// auto-fit grid whether there are 2 or 3 cards visible per row.
+function FeatureCard({ eyebrow, title, body, mockup }: { eyebrow: string; title: string; body: string; mockup: React.ReactNode }) {
+  return (
+    <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: '0 2px 10px rgba(26,22,18,.04)' }}>
+      <div style={{ background: 'var(--cream)', borderRadius: 8, padding: 12, minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '100%' }}>{mockup}</div>
+      </div>
+      <div style={{ padding: '0 4px 4px' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 6 }}>{eyebrow}</div>
+        <h3 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 700, color: 'var(--ink)', margin: '0 0 6px', lineHeight: 1.3 }}>{title}</h3>
+        <p style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, margin: 0 }}>{body}</p>
+      </div>
+    </div>
+  )
+}
 
 // ── Pricing (3 tiers) ─────────────────────────────────────────────────────────
 // Three side-by-side cards: Free / Starter / Pro. One monthly/yearly
@@ -132,8 +138,6 @@ export default function HomePage() {
   const [showModal,     setShowModal]     = useState(false)
   const [modalMode,     setModalMode]     = useState<'login' | 'signup'>('login')
   const [toast,         setToast]         = useState<string | null>(null)
-  const [trendingLocs,  setTrendingLocs]  = useState<TrendingLocation[]>([])
-  const [statsLoading,  setStatsLoading]  = useState(true)
 
   // Auth. Signed-in users visiting home get sent to their dashboard — home is
   // a marketing surface and has no value for them.
@@ -150,34 +154,6 @@ export default function HomePage() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Trending locations (count queries removed — hero uses static value-prop stats)
-  useEffect(() => {
-    async function load() {
-      try {
-        const trendRes = await supabase.from('locations')
-          .select('id,name,city,state,rating,save_count,tags,access_type,quality_score')
-          .eq('status', 'published')
-          .eq('source', 'curated')
-          .not('latitude', 'is', null)
-          .order('quality_score', { ascending: false })
-          .limit(6)
-        if (trendRes.data && trendRes.data.length > 0) {
-          const ids = trendRes.data.map((r: any) => r.id)
-          const { data: photos } = await supabase.from('location_photos')
-            .select('location_id,url,created_at')
-            .in('location_id', ids)
-            .eq('is_private', false)
-            .order('created_at', { ascending: true })
-          const photoMap: Record<string, string> = {}
-          ;(photos ?? []).forEach((p: any) => { if (p.location_id && !photoMap[p.location_id]) photoMap[p.location_id] = p.url })
-          setTrendingLocs(trendRes.data.map((r: any) => ({ ...r, photo_url: photoMap[r.id] ?? null })))
-        }
-      } catch (e) { console.error(e) }
-      finally { setStatsLoading(false) }
-    }
-    load()
-  }, [])
-
   useEffect(() => {
     if (!toast) return
     const id = setTimeout(() => setToast(null), 2800)
@@ -191,11 +167,6 @@ export default function HomePage() {
 
   function openModal(mode: 'login' | 'signup') { setModalMode(mode); setShowModal(true) }
   function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }) }
-
-  function handleViewLocations() {
-    if (user) window.location.href = '/explore'
-    else openModal('signup')
-  }
 
   return (
     <>
@@ -291,83 +262,90 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── TRENDING LOCATIONS — secondary to the share workflow above ── */}
-      <section className="section featured-section">
-        <div className="featured-header">
-          <div>
-            <div className="section-eyebrow">Also included</div>
-            <h2 className="section-title" style={{ fontSize: 'clamp(22px,3.5vw,30px)' }}>A community map of <em>shoot locations</em></h2>
-            <p className="section-sub">Hand-curated spots with photos, ratings, and permit info — a head start for your portfolio.</p>
-          </div>
-          <button className="btn btn-dark" onClick={handleViewLocations}>
-            {user ? 'View All Locations →' : 'Sign Up to See All →'}
-          </button>
-        </div>
-
-        <div className="location-grid">
-          {statsLoading
-            ? Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="location-card" style={{ opacity: 0.35 }}>
-                  <div className={`card-img ${BG_CYCLE[i]}`} />
-                  <div className="card-body">
-                    <div style={{ height: 14, background: 'var(--cream-dark)', borderRadius: 4, marginBottom: 8, width: '80%' }} />
-                    <div style={{ height: 11, background: 'var(--cream-dark)', borderRadius: 4, width: '55%' }} />
-                  </div>
-                </div>
-              ))
-            : trendingLocs.map((loc, i) => (
-                <div
-                  key={loc.id}
-                  className="location-card"
-                  style={{ cursor: user ? 'pointer' : 'default', position: 'relative', overflow: 'hidden' }}
-                  onClick={user ? handleViewLocations : undefined}
-                >
-                  <div className={`card-img ${BG_CYCLE[i % BG_CYCLE.length]}`} style={{ position: 'relative', overflow: 'hidden' }}>
-                    {loc.photo_url && <img src={loc.photo_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-                    <span className={`card-badge ${loc.access_type === 'public' ? 'badge-public' : 'badge-private'}`} style={{ position: 'relative', zIndex: 1 }}>
-                      {loc.access_type === 'public' ? '● Public' : '🔒 Private'}
-                    </span>
-                  </div>
-                  <div className="card-body">
-                    <div className="card-title">{loc.name}</div>
-                    <div className="card-location">📍 {loc.city}{loc.state ? `, ${loc.state}` : ''}</div>
-                    <div className="card-tags">
-                      {(loc.tags ?? []).slice(0, 3).map((t: string) => <span key={t} className="tag">{t}</span>)}
-                    </div>
-                    <div className="card-footer">
-                      {user ? (
-                        <>
-                          <div className="card-rating">★ {loc.rating ? parseFloat(loc.rating.toString()).toFixed(1) : 'New'}</div>
-                        </>
-                      ) : (
-                        <button
-                          onClick={e => { e.stopPropagation(); openModal('signup') }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gold)', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, padding: 0 }}
-                        >
-                          Sign in to see ratings →
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {/* Gradient gate for non-signed-in users */}
-                  {!user && (
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%', background: 'linear-gradient(to top, rgba(249,246,241,1) 50%, rgba(249,246,241,0))', pointerEvents: 'none' }} />
-                  )}
-                </div>
-              ))
-          }
-        </div>
-
-        {!user && !statsLoading && (
-          <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-            <p style={{ fontSize: 15, color: 'var(--ink-soft)', marginBottom: '1rem', fontWeight: 300 }}>
-              Create a free account to see full location details, ratings, permit info, and more.
+      {/* ── FEATURE HIGHLIGHTS — what the product actually looks like.
+             Replaces the old 'community map' block (we no longer accept
+             user-contributed locations to the public directory, so the
+             framing didn't fit). Each card is a small live mockup
+             rendered with real product components — TemplatePreview is
+             the same renderer we use inside the editor and on the
+             actual Pick page, so what visitors see here is what their
+             clients will see. */}
+      <section className="section" style={{ background: 'var(--cream)', padding: '4rem 1.5rem' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+            <div className="section-eyebrow" style={{ justifyContent: 'center' }}>What you&apos;re shipping</div>
+            <h2 className="section-title" style={{ fontSize: 'clamp(24px,4vw,34px)' }}>
+              Polished, on-brand, <em>ridiculously easy</em>
+            </h2>
+            <p className="section-sub" style={{ maxWidth: 540, margin: '0 auto' }}>
+              Real product views — exactly what your clients see and what shows up in your dashboard the moment they pick.
             </p>
-            <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>
-              Join Free — It&apos;s Instant
-            </button>
           </div>
-        )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+
+            {/* Card 1 — Pick page */}
+            <FeatureCard
+              eyebrow="Client view"
+              title="Send one link. They tap a location. Done."
+              body="Your client opens a Location Guide, picks a spot, and you get the email. No back-and-forth thread, no Pinterest screenshots."
+              mockup={
+                <TemplatePreview template={PRESETS[0].config} variant="thumb" studioName="Your Studio" intro="Pick the location for our session" />
+              }
+            />
+
+            {/* Card 2 — Templates */}
+            <FeatureCard
+              eyebrow="Pro feature"
+              title="Templates that match your brand."
+              body="Five starter templates plus a full editor — fonts, colors, layout, header. Save as many as you want and pick one per guide."
+              mockup={
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <TemplatePreview template={PRESETS[1].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+                  <TemplatePreview template={PRESETS[2].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+                  <TemplatePreview template={PRESETS[3].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+                  <TemplatePreview template={PRESETS[4].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+                </div>
+              }
+            />
+
+            {/* Card 3 — Dashboard picks list */}
+            <FeatureCard
+              eyebrow="Your dashboard"
+              title="Every pick, in one chronological log."
+              body="Client name, the location they chose, when they picked it. Push notifications and email keep you in the loop."
+              mockup={
+                <div style={{ background: 'white', border: '1px solid #e8e2d6', borderRadius: 6, overflow: 'hidden', fontSize: 11 }}>
+                  <div style={{ padding: '8px 10px', borderBottom: '1px solid #e8e2d6', fontWeight: 700, color: '#1a1612', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    ✓ Client Selections
+                    <span style={{ padding: '1px 6px', borderRadius: 20, fontSize: 9, fontWeight: 700, background: 'rgba(74,103,65,.1)', color: '#4a6741', border: '1px solid rgba(74,103,65,.2)' }}>3</span>
+                  </div>
+                  {[
+                    { name: 'Sarah Chen',     loc: 'Loose Park',    when: 'Apr 26 · 2:14 PM' },
+                    { name: 'James Patel',    loc: 'West Bottoms',  when: 'Apr 25 · 11:08 AM' },
+                    { name: 'Emily Rodriguez', loc: 'Liberty Memorial', when: 'Apr 23 · 6:42 PM' },
+                  ].map((row, i) => (
+                    <div key={i} style={{ padding: '7px 10px', borderBottom: i < 2 ? '1px solid #f0ece4' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#1a1612', fontSize: 11 }}>{row.name}</div>
+                        <div style={{ color: '#6b5f52', fontSize: 10 }}>📍 {row.loc}</div>
+                      </div>
+                      <div style={{ color: '#a89c8d', fontSize: 9, whiteSpace: 'nowrap' }}>{row.when}</div>
+                    </div>
+                  ))}
+                </div>
+              }
+            />
+
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '2.25rem' }}>
+            {user
+              ? <Link href="/dashboard" className="btn btn-gold btn-lg">Go to your dashboard →</Link>
+              : <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>Try it free — no card needed →</button>
+            }
+          </div>
+        </div>
       </section>
 
       {/* ── HOW IT WORKS ── */}
