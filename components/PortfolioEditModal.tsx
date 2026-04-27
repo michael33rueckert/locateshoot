@@ -81,6 +81,26 @@ export default function PortfolioEditModal({
         setPermitNotes(rowRes.data.permit_notes ?? '')
         setPermitFee((rowRes.data as any).permit_fee ?? '')
         setPermitWebsite((rowRes.data as any).permit_website ?? '')
+
+        // Auto-fill the permit URL from the curated source location
+        // when the photographer hasn't set their own. Saves them
+        // pasting in a URL that's already known on the public side.
+        // Only fires when:
+        //   - the portfolio row was created from a curated source
+        //     (source_location_id is set), AND
+        //   - the photographer's own permit_website is blank
+        // The fetched value is loaded into the input as a draft —
+        // the photographer can edit, clear, or save as-is.
+        const sourceId = (rowRes.data as any).source_location_id as string | null
+        const ownPermitWebsite = (rowRes.data as any).permit_website as string | null
+        if (sourceId && !ownPermitWebsite) {
+          const { data: src } = await supabase
+            .from('locations')
+            .select('permit_website')
+            .eq('id', sourceId)
+            .maybeSingle()
+          if (!cancelled && src?.permit_website) setPermitWebsite(src.permit_website)
+        }
         setBestTime(rowRes.data.best_time ?? '')
         setParkingInfo(rowRes.data.parking_info ?? '')
         setPinterestUrl(rowRes.data.pinterest_url ?? '')
