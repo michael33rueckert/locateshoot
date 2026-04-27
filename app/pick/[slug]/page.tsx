@@ -680,6 +680,7 @@ export default function ClientPickerPage() {
                         key={String(loc.id)}
                         loc={loc}
                         index={i}
+                        total={locations.length}
                         layout={tpl.layout}
                         isChosen={isChosen}
                         isActive={isActive}
@@ -1067,6 +1068,40 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-badge { display: none; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-inline { display: inline !important; }
 
+        /* ── 'editorial' layout — long-form story per location.
+           Each entry is a full-width vertical block: tall hero photo,
+           '01 / 05'-style section number above the name, big serif
+           location title, paragraph-rendered description, then the
+           Select button. Reads like a magazine article scrolling
+           one piece at a time, not a tile in a grid. */
+        .pick-loc-list[data-layout="editorial"] { padding: 0 0 32px; gap: 32px; display: flex; flex-direction: column; }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card {
+          flex-direction: column; border: none; border-bottom: 1px solid var(--cream-dark);
+          padding-bottom: 32px; background: transparent;
+        }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-card:last-child { border-bottom: none; }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-photo { aspect-ratio: 4 / 5; border-radius: 0; }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-body  { padding: 18px 1.5rem 0; max-width: 640px; margin: 0 auto; }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-section-num {
+          display: block !important;
+          font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+          color: var(--ink-soft); margin-bottom: 10px;
+        }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-name  {
+          font-family: var(--font-playfair),serif; font-size: 28px; font-weight: 700;
+          line-height: 1.18; margin-bottom: 6px; color: var(--ink);
+        }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-city  {
+          font-size: 13px; color: var(--ink-soft); margin-bottom: 16px; font-weight: 300;
+        }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-description { display: block !important; margin-bottom: 8px; }
+        .pick-loc-list[data-layout="editorial"] .pick-loc-cta   {
+          margin: 14px 1.5rem 0; padding: 10px 22px; font-size: 14px;
+          align-self: center; max-width: 640px; width: auto;
+        }
+        /* Recommended badge stays as the photo overlay (large hero
+           photo, plenty of space for it). Inline ★ REC stays hidden. */
+
         /* Mobile inherits the 4:3 aspect-ratio above — no override
            needed. The width naturally fills the viewport so the photo
            is taller on phones (where the viewport is narrow) and a bit
@@ -1119,6 +1154,7 @@ export default function ClientPickerPage() {
 function PickListItem({
   loc,
   index,
+  total,
   layout,
   isChosen,
   isActive,
@@ -1128,6 +1164,9 @@ function PickListItem({
 }: {
   loc:            FullLocation
   index:          number
+  // Total location count in the guide. Used by the editorial layout
+  // to render '01 / 05'-style section numbers above each entry.
+  total:          number
   layout:         LayoutKind
   isChosen:       boolean
   isActive:       boolean
@@ -1254,6 +1293,12 @@ function PickListItem({
         )}
       </div>
       <div className="pick-loc-body">
+        {/* Section number — '01 / 05' style. Hidden in every layout
+            except editorial via the [data-layout="editorial"] CSS
+            rules below. Padded with leading zeros up to 2 digits. */}
+        <div className="pick-loc-section-num" style={{ display: 'none' }}>
+          {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+        </div>
         <div className="pick-loc-name">
           {loc.highlighted && (
             <span className="pick-loc-rec-inline" title="Recommended by your photographer" style={{ display: 'none', marginRight: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--gold)', verticalAlign: '2px' }}>★ REC</span>
@@ -1261,6 +1306,18 @@ function PickListItem({
           {loc.name}
         </div>
         <div className="pick-loc-city">📍 {loc.city}</div>
+        {/* Long-form description for editorial layout. Shown only when
+            data-layout='editorial'; CSS rules below set display:block.
+            Splits on blank lines so a description with paragraph breaks
+            renders as multiple <p> elements rather than one wall of
+            text. Empty when the photographer hasn't written anything. */}
+        {loc.desc && loc.desc.trim() && (
+          <div className="pick-loc-description" style={{ display: 'none' }}>
+            {loc.desc.split(/\n\s*\n/).map((para, i) => (
+              <p key={i} style={{ margin: '0 0 0.85em', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-soft)', fontWeight: 300 }}>{para}</p>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: loc.access === 'public' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: loc.access === 'public' ? 'var(--sage)' : 'var(--rust)', border: `1px solid ${loc.access === 'public' ? 'rgba(74,103,65,.2)' : 'rgba(181,75,42,.2)'}` }}>
             {loc.access === 'public' ? '● Public' : '🔒 Private'}

@@ -219,6 +219,39 @@ function LocationsLayout({ layout, variant, accent, accentText, text }: { layout
     )
   }
 
+  if (layout === 'editorial') {
+    // Long-form story per location — magazine-article feel. Each
+    // block: section number ('01 / 03'), big serif name, paragraph
+    // lines representing description copy, then a select button.
+    // Photos are taller (4/5 aspect) so they read as cinematic
+    // hero shots rather than thumbnails.
+    return (
+      <div style={{ padding: `0 ${padding}px ${padding}px`, display: 'flex', flexDirection: 'column', gap: gap * 1.4 }}>
+        {[0, 1].map(i => (
+          <div key={i} style={{ background: 'white', borderRadius: radius, overflow: 'hidden', border: `1px solid ${hexWithAlpha(text, .06)}` }}>
+            <div style={{ aspectRatio: '4 / 5', background: placeholderBg(i) }} />
+            <div style={{ padding: `${gap}px ${gap * 1.2}px ${gap}px`, display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 2 : 6 }}>
+              {/* Index "01 / 02" */}
+              <div style={{ fontSize: variant === 'thumb' ? 5 : 10, fontWeight: 600, letterSpacing: '.12em', color: hexWithAlpha(text, .5), textTransform: 'uppercase' }}>
+                {String(i + 1).padStart(2, '0')} / 02
+              </div>
+              <SampleNameLine variant={variant} text={text} width="65%" big />
+              {/* Description paragraph lines */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 1.5 : 3 }}>
+                <div style={{ height: variant === 'thumb' ? 2 : 4, width: '100%', background: text, opacity: .35, borderRadius: 1 }} />
+                <div style={{ height: variant === 'thumb' ? 2 : 4, width: '95%', background: text, opacity: .35, borderRadius: 1 }} />
+                <div style={{ height: variant === 'thumb' ? 2 : 4, width: '70%', background: text, opacity: .35, borderRadius: 1 }} />
+              </div>
+              <div style={{ marginTop: variant === 'thumb' ? 3 : 6, alignSelf: 'flex-start' }}>
+                <SampleButton variant={variant} accent={accent} accentText={accentText} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   // 'card' layout — current default. Tall photo per card, name below.
   return (
     <div style={{ padding: `0 ${padding}px ${padding}px`, display: 'flex', flexDirection: 'column', gap }}>

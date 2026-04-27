@@ -6,7 +6,7 @@
 // the Pick page falls back to DEFAULTS for anything missing, so a
 // half-configured template still renders correctly.
 
-export type LayoutKind = 'card' | 'list' | 'grid' | 'magazine' | 'minimal'
+export type LayoutKind = 'card' | 'list' | 'grid' | 'magazine' | 'minimal' | 'editorial'
 export type LogoSize  = 'small' | 'medium' | 'large'
 
 // Logo size → max dimensions on the Pick page header. Tuned so a

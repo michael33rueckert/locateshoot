@@ -173,6 +173,7 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
   }
 
   const layouts: { value: LayoutKind; label: string; desc: string }[] = [
+    { value: 'editorial', label: 'Editorial',     desc: 'Long-form story per location — big photo, headline, paragraph copy.' },
     { value: 'card',     label: 'Card',          desc: 'Tall photo per location with name + meta below.' },
     { value: 'grid',     label: 'Grid',          desc: 'Two-column tiled gallery — fits more on screen.' },
     { value: 'magazine', label: 'Magazine',      desc: 'Hero photo on top, smaller cards beneath.' },
