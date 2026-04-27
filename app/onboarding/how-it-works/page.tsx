@@ -97,7 +97,12 @@ const SLIDES: Slide[] = [
 ]
 
 // ── Picker (lifted from the old standalone /onboarding page) ─────────
-const RADIUS_MI = 50
+// 25mi covers a typical metro (e.g. KC reaches Overland Park, Liberty,
+// Lee's Summit, Independence) without spilling into the next metro
+// over (St. Joseph at ~46mi, Topeka at ~55mi). 50mi was too generous
+// and started suggesting locations the photographer would never drive
+// to for a shoot.
+const RADIUS_MI = 25
 function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
   const R = 3958.8, dLa = (la2-la1)*Math.PI/180, dLo = (lo2-lo1)*Math.PI/180
   const a = Math.sin(dLa/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2
