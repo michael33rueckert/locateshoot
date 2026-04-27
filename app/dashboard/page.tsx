@@ -545,7 +545,7 @@ export default function DashboardPage() {
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                   <UpgradePrompt
                     feature="unlimited portfolio locations"
-                    description={`The Free plan includes up to ${freePortfolioLocationCap()} portfolio locations. Upgrade to Starter for unlimited locations and unlimited share guides.`}
+                    description={`The Free plan includes up to ${freePortfolioLocationCap()} portfolio locations. Upgrade to Starter or Pro for unlimited portfolio locations and unlimited Location Guides.`}
                   />
                   <button onClick={() => setShowCapUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
                 </div>
