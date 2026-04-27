@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 260" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hawthorn &amp; Field Photography">
+  <defs>
+    <style>
+      .wordmark    { font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-style: italic; fill: #f9f6f1; }
+      .amp         { fill: #c4922a; font-style: italic; }
+      .tagline     { font-family: 'Inter', 'Helvetica Neue', sans-serif; font-weight: 500; letter-spacing: 0.32em; text-transform: uppercase; fill: rgba(249,246,241,0.7); }
+      .stroke-gold { stroke: #c4922a; stroke-width: 1.4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .fill-gold   { fill: #c4922a; }
+    </style>
+  </defs>
+  <g transform="translate(270, 60)">
+    <path class="stroke-gold" d="M -12 -16 L -12 -22 Q -12 -24 -10 -24 L 10 -24 Q 12 -24 12 -22 L 12 -16" />
+    <rect class="stroke-gold" x="-34" y="-16" width="68" height="34" rx="3" />
+    <circle class="stroke-gold" cx="0" cy="1" r="12" />
+    <circle class="stroke-gold" cx="0" cy="1" r="5.5" />
+    <circle class="fill-gold" cx="24" cy="-10" r="1.8" />
+    <line class="stroke-gold" x1="-200" y1="0" x2="-50" y2="0" />
+    <line class="stroke-gold" x1="50"   y1="0" x2="200" y2="0" />
+  </g>
+  <text x="270" y="160" font-size="54" text-anchor="middle">
+    <tspan class="wordmark">Hawthorn </tspan><tspan class="wordmark amp">&amp;</tspan><tspan class="wordmark"> Field</tspan>
+  </text>
+  <text class="tagline" x="270" y="198" font-size="13" text-anchor="middle">Photography</text>
+  <g transform="translate(270, 222)">
+    <line class="stroke-gold" x1="-50" y1="0" x2="50" y2="0" />
+  </g>
+</svg>
