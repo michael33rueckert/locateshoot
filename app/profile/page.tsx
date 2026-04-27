@@ -479,10 +479,25 @@ export default function ProfilePage() {
   }
 
   async function saveBranding() {
-    if (!userId) return; setSaving(true)
-    const updated = { ...prefs, brand_accent: brandAccent, show_studio_name: showStudioName, share_tagline: shareTagline }
+    if (!userId) return
+    setSaving(true)
+    // Re-read the latest preferences from the DB right before merging
+    // in our own fields. Without this, an in-flight handleLogoUpload
+    // (which writes preferences.logo_url separately) would have its
+    // change clobbered by whatever stale `prefs` was when the user
+    // clicked Save Branding.
+    const { data: latest } = await supabase
+      .from('profiles')
+      .select('preferences')
+      .eq('id', userId)
+      .single()
+    const base = (latest?.preferences as any) ?? prefs
+    const updated = { ...base, brand_accent: brandAccent, show_studio_name: showStudioName, share_tagline: shareTagline }
     const { error } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
-    setPrefs(updated); setSaving(false); setToast(error ? '⚠ Could not save' : '✓ Branding saved!')
+    if (error) console.error('saveBranding failed', error)
+    setPrefs(updated)
+    setSaving(false)
+    setToast(error ? `⚠ Could not save: ${error.message}` : '✓ Branding saved!')
   }
 
   function updatePref<K extends keyof Preferences>(key: K, val: Preferences[K]) {
@@ -494,17 +509,34 @@ export default function ProfilePage() {
     if (!file || !userId) return
     const v = validateImageUpload(file)
     if (!v.ok) { setToast(`⚠ ${v.message}`); return }
+
     const reader = new FileReader()
     reader.onload = ev => setLogoPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
+
     const path = `${userId}/logo.${v.ext}`
-    const { error } = await supabase.storage.from('location-photos').upload(path, file, { upsert: true, contentType: v.contentType })
-    if (!error) {
-      const { data } = supabase.storage.from('location-photos').getPublicUrl(path)
-      const updated = { ...prefs, logo_url: data.publicUrl }
-      await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
-      setPrefs(updated)
+    const { error: uploadErr } = await supabase.storage
+      .from('location-photos')
+      .upload(path, file, { upsert: true, contentType: v.contentType })
+    if (uploadErr) {
+      console.error('logo upload failed', uploadErr)
+      setToast(`⚠ Couldn’t upload logo: ${uploadErr.message}`)
+      return
     }
+
+    const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
+    const updated = { ...prefs, logo_url: pub.publicUrl }
+    const { error: updateErr } = await supabase
+      .from('profiles')
+      .update({ preferences: updated })
+      .eq('id', userId)
+    if (updateErr) {
+      console.error('logo profile update failed', updateErr)
+      setToast(`⚠ Logo uploaded but couldn’t save to profile: ${updateErr.message}`)
+      return
+    }
+    setPrefs(updated)
+    setToast('✓ Logo updated!')
   }
 
   async function updatePassword() {
