@@ -68,7 +68,7 @@ export default function AuthModal({ initialMode, onClose }: Props) {
           redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
         })
         if (error) throw error
-        setSuccess('Password reset link sent — check your email.')
+        setSuccess('Password reset link sent — check your email (and your spam folder if you don\'t see it).')
         return
       }
 
@@ -88,7 +88,7 @@ export default function AuthModal({ initialMode, onClose }: Props) {
             full_name: fullName.trim(),
           })
         }
-        setSuccess('Account created! Check your email to confirm, then sign in.')
+        setSuccess('Account created! Check your email to confirm, then sign in. If you don\'t see it within a minute, check your spam or junk folder.')
         return
       }
 
