@@ -136,14 +136,50 @@ export default function SavedTemplatesPanel({ userId, isPro }: Props) {
   }
 
   if (!isPro) {
-    // Quiet informational card. The Branding tab already shows the
-    // dual-plan UpgradePrompt at the top — duplicating an upgrade
-    // card here too is just noise. Just describe what the section
-    // unlocks so non-Pro viewers know what they're scrolling past.
+    // Preview mode: render the same preset gallery + a panel-size
+    // template preview that Pro users see, but visually grayed out
+    // and non-interactive so the photographer can see exactly what
+    // the upgrade unlocks. The Branding tab already hosts the
+    // dual-plan UpgradePrompt at the top — no need for a duplicate
+    // upgrade card here.
+    const featuredPreset = PRESETS[0] // 'classic-editorial' as the default panel preview
     return (
-      <div style={{ background: 'var(--cream)', border: '1px dashed var(--cream-dark)', borderRadius: 10, padding: '1.25rem' }}>
-        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>
-          Save multiple named templates with their own layout, font, colors, and header — then pick which one applies to each Location Guide you send. Available with the Pro upgrade above.
+      <div style={{ position: 'relative', opacity: 0.6, filter: 'grayscale(20%)', userSelect: 'none' }}>
+        <div style={{ pointerEvents: 'none' }} aria-hidden="true">
+          <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem' }}>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>🎨 Starter templates</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5, marginBottom: '1rem' }}>
+              Pick from {PRESETS.length} preset styles or build your own from scratch — every template is fully editable (layout, font, colors, header, background image).
+            </div>
+
+            {/* Preset gallery — same thumbnails as the Pro 'New
+                template' picker, just non-clickable here. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: '1rem' }}>
+              {PRESETS.map(preset => (
+                <div
+                  key={preset.id}
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: 6,
+                    padding: 8, borderRadius: 8,
+                    border: '1px solid var(--cream-dark)', background: 'white',
+                    textAlign: 'left',
+                  }}
+                >
+                  <TemplatePreview template={preset.config} variant="thumb" studioName="Studio" intro="Pick your location" />
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', padding: '0 2px' }}>{preset.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.4, padding: '0 2px' }}>{preset.description}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Panel-size live preview of the featured preset so the
+                photographer sees what the rendered Location Guide
+                actually looks like at full width, not just thumbs. */}
+            <div style={{ borderTop: '1px solid var(--cream-dark)', paddingTop: '1rem' }}>
+              <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 8 }}>Preview · {featuredPreset.name}</div>
+              <TemplatePreview template={featuredPreset.config} variant="panel" studioName="Your Studio" />
+            </div>
+          </div>
         </div>
       </div>
     )
