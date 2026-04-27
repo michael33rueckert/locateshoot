@@ -1154,14 +1154,19 @@ function PickListItem({
             onScroll={handleScroll}
           >
             {visiblePhotos.map((src, i) => {
-              // Every viewport now renders this image as a full-width hero
+              // Non-compact layouts render the photo as a full-width hero
               // — phone uses the full viewport (~1200px on a 3× retina
               // device), tablet/desktop use the 420px sidebar (~1260px on
-              // 3× retina). srcset lets the browser pick the right size so
-              // it isn't upscaled from a 480-wide thumbnail. Keep the sizes
-              // hint in sync with the sidebar width above — when these
-              // drift, browsers silently pick the small variant and the
-              // hero looks fuzzy.
+              // 3× retina). srcset lets the browser pick the right size
+              // so it isn't upscaled from a 480-wide thumbnail.
+              //
+              // Compact layouts (list 88px, minimal 44px) render the
+              // photo at thumbnail size — drop srcset and use a tight
+              // sizes hint so the browser fetches only the small thumb,
+              // not the 1200w medium. With ~10 cards each loading the
+              // medium variant in parallel, the HTTP/1.1 6-connection
+              // cap queues the rest and slow responses time out — that
+              // was the 'random missing thumbnails' symptom.
               const thumb  = thumbUrl(src)  ?? src
               const medium = mediumUrl(src) ?? src
               // No onClick on the image — taps bubble up to the card's
@@ -1172,10 +1177,11 @@ function PickListItem({
                 <img
                   key={i}
                   src={thumb}
-                  srcSet={`${thumb} 480w, ${medium} 1200w`}
-                  sizes="(max-width: 768px) 100vw, 420px"
+                  srcSet={compact ? undefined : `${thumb} 480w, ${medium} 1200w`}
+                  sizes={compact ? '96px' : '(max-width: 768px) 100vw, 420px'}
                   alt=""
                   decoding="async"
+                  loading="lazy"
                   // Render-endpoint fallback — see other thumbnails in this
                   // file. Both thumb + medium go through /render/image/, so
                   // when the picked variant fails we point at the original.
