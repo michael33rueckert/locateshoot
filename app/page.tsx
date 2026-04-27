@@ -436,6 +436,13 @@ export default function HomePage() {
               <li><button onClick={() => openModal('login')}  className="footer-link-btn">Sign in</button></li>
             </ul>
           </div>
+          <div>
+            <div className="footer-heading">Legal</div>
+            <ul className="footer-links">
+              <li><Link href="/privacy">Privacy Policy</Link></li>
+              <li><Link href="/terms">Terms of Use</Link></li>
+            </ul>
+          </div>
         </div>
         <div className="footer-bottom">
           <div className="footer-copy">© {new Date().getFullYear()} LocateShoot.com — All rights reserved.</div>

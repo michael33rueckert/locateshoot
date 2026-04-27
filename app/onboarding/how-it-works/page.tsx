@@ -26,9 +26,20 @@ interface PitchSlide   { kind: 'pitch';   icon: string; title: string; pitch: st
 interface HowtoSlide   { kind: 'howto';   eyebrow: string; icon: string; title: string; bullets: Bullet[]; cta?: { href: string; label: string } }
 interface PickerSlide  { kind: 'picker';  eyebrow: string; icon: string; title: string }
 interface OutroSlide   { kind: 'outro';   icon: string; title: string; pitch: string }
-type Slide = PitchSlide | HowtoSlide | PickerSlide | OutroSlide
+// Temporary beta-intro slide. Surfaces the test-status framing + what
+// we need from testers up front. Remove this entry from SLIDES (and
+// the BetaSlide type below) when we go fully live — the rest of the
+// walkthrough was written assuming this slide doesn't exist, so
+// dropping it just slides everything back one index.
+interface BetaSlide    { kind: 'beta'; icon: string; title: string }
+type Slide = BetaSlide | PitchSlide | HowtoSlide | PickerSlide | OutroSlide
 
 const SLIDES: Slide[] = [
+  {
+    kind:  'beta',
+    icon:  '🧪',
+    title: 'Welcome to the LocateShoot beta.',
+  },
   {
     kind:  'pitch',
     icon:  '⏱',
@@ -314,6 +325,59 @@ export default function HowItWorksPage() {
             <p style={{ fontSize: 16, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
               {slide.pitch}
             </p>
+          )}
+
+          {/* Beta intro — temporary slide. Two stacked panels: 'What
+              this means' (sets expectations, frees them from worrying
+              about price + polish) and 'What we need from you' (gives
+              testers a clear job description so reports are useful). */}
+          {slide.kind === 'beta' && (
+            <div style={{ maxWidth: 560, margin: '0 auto' }}>
+              <p style={{ fontSize: 16, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, textAlign: 'center', marginBottom: '1.5rem' }}>
+                You&apos;re one of the first photographers using LocateShoot, and your feedback is going to shape what we build next.
+              </p>
+
+              <div style={{ background: 'rgba(196,146,42,.06)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 10, padding: '1.1rem 1.25rem', marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
+                  What this means
+                </div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
+                    💚 <strong>Everything is free during the beta.</strong> No card needed, no usage caps for testing — even Pro features are open while you&apos;re here.
+                  </li>
+                  <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
+                    🛠 <strong>Things may break or look off.</strong> If you see something weird, that&apos;s exactly what we want to know about.
+                  </li>
+                  <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
+                    🚀 <strong>We ship updates constantly</strong> based on what beta testers report.
+                  </li>
+                </ul>
+              </div>
+
+              <div style={{ background: 'rgba(74,103,65,.06)', border: '1px solid rgba(74,103,65,.25)', borderRadius: 10, padding: '1.1rem 1.25rem', marginBottom: '1rem' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--sage)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
+                  What we need from you
+                </div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
+                    📸 <strong>Use it like you would for a real client</strong> — build out your portfolio, create a Location Guide, send the link somewhere you&apos;d actually share it (a friend&apos;s inbox is fine).
+                  </li>
+                  <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
+                    🐛 <strong>Report every problem</strong> — even tiny ones. The 💬 Feedback button in the bottom-right of every screen is the fastest way.
+                  </li>
+                  <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
+                    💡 <strong>Tell us what&apos;s missing.</strong> Features that would actually save you time, copy that&apos;s confusing, anything that doesn&apos;t quite fit your workflow.
+                  </li>
+                  <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
+                    👍 <strong>Tell us what works too.</strong> Knowing what to keep is just as useful as knowing what to fix.
+                  </li>
+                </ul>
+              </div>
+
+              <p style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, textAlign: 'center', fontStyle: 'italic' }}>
+                Thanks for testing. Every report makes the launch better.
+              </p>
+            </div>
           )}
 
           {slide.kind === 'howto' && (

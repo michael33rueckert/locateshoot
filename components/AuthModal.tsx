@@ -187,7 +187,7 @@ export default function AuthModal({ initialMode, onClose }: Props) {
                 {agreed ? '✓' : ''}
               </div>
               <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', lineHeight: 1.6, fontWeight: 300 }}>
-                I agree to the <span style={{ color: 'rgba(196,146,42,.8)' }}>Terms of Service</span> and acknowledge that location information is provided for informational purposes only. LocateShoot is not responsible for permit requirements, property access rights, or safety conditions at any listed location. Always verify access before shooting.
+                I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(196,146,42,.95)', textDecoration: 'underline' }}>Terms of Use</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(196,146,42,.95)', textDecoration: 'underline' }}>Privacy Policy</a>, and acknowledge that location information is provided for informational purposes only. LocateShoot is not responsible for permit requirements, property access rights, or safety conditions at any listed location. Always verify access before shooting.
               </div>
             </div>
           )}

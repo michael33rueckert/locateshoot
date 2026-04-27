@@ -16,9 +16,35 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid body' }, { status: 400 })
-  const { message, pageUrl } = body as { message?: string; pageUrl?: string }
+  const {
+    message, pageUrl,
+    // Optional structured fields from the beta-feedback form. All
+    // optional so older callers (or simple-message clients) still
+    // work without changes.
+    feedbackType,    // 'bug' | 'idea' | 'praise' | 'other'
+    stepsToRepro,
+    viewport,
+    contactConsent,
+  } = body as {
+    message?: string
+    pageUrl?: string
+    feedbackType?: string
+    stepsToRepro?: string
+    viewport?: string
+    contactConsent?: boolean
+  }
   if (!message || !message.trim()) return NextResponse.json({ error: 'message required' }, { status: 400 })
   if (message.length > 5000) return NextResponse.json({ error: 'message too long' }, { status: 400 })
+  if (stepsToRepro && stepsToRepro.length > 4000) return NextResponse.json({ error: 'steps too long' }, { status: 400 })
+
+  const knownTypes = new Set(['bug', 'idea', 'praise', 'other'])
+  const safeType = feedbackType && knownTypes.has(feedbackType) ? feedbackType : null
+  const typeLabel: Record<string, string> = {
+    bug:    '🐛 Bug report',
+    idea:   '💡 Feature idea',
+    praise: '❤️ Praise',
+    other:  '💬 Other',
+  }
 
   let reporterEmail: string | null = null
   let reporterName:  string | null = null
@@ -34,24 +60,34 @@ export async function POST(request: Request) {
   }
 
   const ua = request.headers.get('user-agent') ?? ''
+  const reproRow = stepsToRepro && stepsToRepro.trim()
+    ? `<div style="margin-top:14px;"><div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#666; margin-bottom:6px;">Steps to reproduce</div><div style="font-size:13px; line-height:1.55; color:#1a1612; background:#fdf6ec; border-left:3px solid #b54b2a; padding:10px 14px; border-radius:4px; white-space:pre-wrap;">${escapeHtml(stepsToRepro.trim())}</div></div>`
+    : ''
   const html = `
     <div style="font-family: Georgia, serif; color: #1a1612; max-width: 600px; margin: 0 auto; padding: 24px;">
-      <h2 style="font-size:18px; margin:0 0 12px;">💬 Feedback from a LocateShoot user</h2>
+      <h2 style="font-size:18px; margin:0 0 12px;">${safeType ? escapeHtml(typeLabel[safeType]) : '💬 Feedback'} from a LocateShoot beta user</h2>
       <table style="font-size:13px; color:#333; border-collapse:collapse; margin-bottom:16px;">
         <tr><td style="padding:4px 8px 4px 0; color:#888;">From</td><td style="padding:4px 0;">${reporterEmail ? escapeHtml(`${reporterName ?? ''} <${reporterEmail}>`.trim()) : '(anonymous)'}</td></tr>
+        ${reporterEmail ? `<tr><td style="padding:4px 8px 4px 0; color:#888;">Reply OK?</td><td style="padding:4px 0;">${contactConsent === false ? 'No (do not reply)' : 'Yes'}</td></tr>` : ''}
+        ${safeType ? `<tr><td style="padding:4px 8px 4px 0; color:#888;">Type</td><td style="padding:4px 0;">${escapeHtml(typeLabel[safeType])}</td></tr>` : ''}
         ${pageUrl ? `<tr><td style="padding:4px 8px 4px 0; color:#888;">Page</td><td style="padding:4px 0;"><a href="${escapeHtml(pageUrl)}">${escapeHtml(pageUrl)}</a></td></tr>` : ''}
+        ${viewport ? `<tr><td style="padding:4px 8px 4px 0; color:#888;">Viewport</td><td style="padding:4px 0;">${escapeHtml(viewport)}</td></tr>` : ''}
         <tr><td style="padding:4px 8px 4px 0; color:#888;">Submitted</td><td style="padding:4px 0;">${new Date().toISOString()}</td></tr>
         <tr><td style="padding:4px 8px 4px 0; color:#888;">UA</td><td style="padding:4px 0; font-size:11px; color:#888;">${escapeHtml(ua)}</td></tr>
       </table>
       <div style="font-size:14px; line-height:1.55; color:#1a1612; background:#f8f5f0; border-left:3px solid #c4922a; padding:12px 16px; border-radius:4px; white-space:pre-wrap;">${escapeHtml(message.trim())}</div>
+      ${reproRow}
     </div>
   `
 
+  const subjPrefix = safeType ? typeLabel[safeType].replace(/^.*? /, '') : 'Feedback'
   const result = await sendEmail({
     to:      'feedback@locateshoot.com',
-    subject: `Feedback from ${reporterEmail ?? 'anonymous user'}`,
+    subject: `[Beta] ${subjPrefix}: ${reporterEmail ?? 'anonymous'}`,
     html,
-    replyTo: reporterEmail ?? undefined,
+    // Honor the user's contact consent — only set replyTo if they
+    // ticked the "OK to reply" box (default-true when signed in).
+    replyTo: contactConsent !== false && reporterEmail ? reporterEmail : undefined,
   })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
   return NextResponse.json({ ok: true })
