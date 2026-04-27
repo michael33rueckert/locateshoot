@@ -106,7 +106,11 @@ export default function AddPortfolioLocationModal({
       blog_url:      blogUrl.trim() || null,
     }).select('id').single()
     if (error && /pinterest_url|blog_url/.test(error.message ?? '')) {
-      console.warn('portfolio_locations link cols missing — retrying without (run migration 20260425_portfolio_links.sql to enable)')
+      // Migration 20260425_portfolio_links.sql adds these columns;
+      // when it hasn't run yet we silently retry without them so
+      // the photographer can still save the row. No console message
+      // — schema details aren't useful for the end user and would
+      // leak internal column names to the browser console.
       const retry = await supabase.from('portfolio_locations').insert(baseInsert).select('id').single()
       inserted = retry.data
       error    = retry.error

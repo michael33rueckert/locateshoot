@@ -101,6 +101,31 @@ export async function POST(request: Request) {
 
   const db = admin()
 
+  // Idempotency guard. Stripe retries on non-2xx responses (and
+  // occasionally even on 2xx) so the same event id can arrive
+  // multiple times. Insert into stripe_webhook_events; primary-key
+  // conflict means we've already seen this event and should ack-
+  // and-skip. Today the handler operations are state-replacement
+  // updates so re-processing is a no-op anyway, but this is cheap
+  // insurance against future side effects (emails, counters)
+  // double-firing.
+  const dedupInsert = await db
+    .from('stripe_webhook_events')
+    .insert({ event_id: event.id, event_type: event.type })
+  if (dedupInsert.error) {
+    const msg = dedupInsert.error.message || ''
+    // Postgres unique-violation = duplicate event = already processed.
+    if (msg.includes('duplicate key') || dedupInsert.error.code === '23505') {
+      return NextResponse.json({ received: true, deduped: true })
+    }
+    // Missing table (migration not run yet) — fall through and process
+    // the event without dedup so the webhook still works. Worst case
+    // matches the pre-migration behavior.
+    if (!/does not exist|stripe_webhook_events/.test(msg)) {
+      console.warn('[stripe webhook] dedup insert error (continuing)', msg)
+    }
+  }
+
   try {
     switch (event.type) {
       case 'checkout.session.completed': {

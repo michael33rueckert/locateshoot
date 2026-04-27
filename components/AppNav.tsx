@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { ADMIN_EMAIL } from '@/lib/admin'
+import { isAdminEmail } from '@/lib/admin'
 import NotificationBell from '@/components/NotificationBell'
 
 /**
@@ -95,7 +95,7 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
     return <>Open your browser&apos;s menu and look for <strong style={{ color: 'var(--gold)' }}>Install</strong> or <strong>Add to Home Screen</strong>.</>
   }
 
-  const isAdmin = email === ADMIN_EMAIL
+  const isAdmin = isAdminEmail(email)
   const signedIn = !!email
 
   async function signOut() {
