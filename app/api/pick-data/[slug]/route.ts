@@ -207,7 +207,20 @@ export async function GET(request: Request, context: any) {
       (sourceMap[p.location_id] ??= []).push(p.url)
     })
 
-    locations = (portfolioRows ?? []).map((p: any) => {
+    // Restore the photographer's manual order. Postgres' `WHERE id IN
+    // (...)` returns rows in unspecified order (effectively primary-
+    // key order), losing whatever sequence the photographer set on
+    // share_links.portfolio_location_ids via the reorder UI. Map rows
+    // by id and iterate `portfolioIds` in order to rebuild the
+    // intended sequence. Drop ids that didn't return a row (deleted
+    // since the share link was saved).
+    const rowById = new Map<string, any>()
+    ;(portfolioRows ?? []).forEach((r: any) => rowById.set(String(r.id), r))
+    const orderedRows = portfolioIds
+      .map(id => rowById.get(String(id)))
+      .filter((r): r is any => !!r)
+
+    locations = orderedRows.map((p: any) => {
       const urls = ownMap[p.id] ?? (p.source_location_id ? sourceMap[p.source_location_id] : null) ?? []
       const src  = p.source_location_id ? sourceLookup[p.source_location_id] : null
       // Prefer the portfolio row's value when the photographer set it; fall back
@@ -252,7 +265,15 @@ export async function GET(request: Request, context: any) {
         .select('id,name,city,state,latitude,longitude,access_type,description,tags,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,rating,quality_score,save_count')
         .in('id', locIds)
       if (error) console.error('locations query error:', error)
-      locations = (data ?? []).map((l: any) => isProPhotographer ? l : ({
+      // Restore manual order — see the portfolio path above for the
+      // same pattern. .in() drops the input order, so map by id and
+      // walk locIds to rebuild the intended sequence.
+      const locById = new Map<string, any>()
+      ;(data ?? []).forEach((r: any) => locById.set(String(r.id), r))
+      const orderedLocs = locIds
+        .map(id => locById.get(String(id)))
+        .filter((r): r is any => !!r)
+      locations = orderedLocs.map((l: any) => isProPhotographer ? l : ({
         ...l,
         permit_required: null,
         permit_notes:    null,
