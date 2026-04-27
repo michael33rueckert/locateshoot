@@ -674,6 +674,7 @@ export default function ProfilePage() {
                 <UpgradePrompt
                   feature="white-label Location Guides + custom templates"
                   description="Replace LocateShoot branding with your own logo, build custom Location Guide templates, and serve guides from your own domain. Available on Pro."
+                  currentPlan={isStarter ? 'starter' : 'free'}
                 />
               </div>
             )}
@@ -717,7 +718,7 @@ export default function ProfilePage() {
                 own card. */}
             <div style={{ marginTop: '2.5rem' }}>
               {sectionTitle('Layout Templates', 'Design how your Location Guides look — layout, font, colors, header. Saved templates are picked per guide.')}
-              <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} />
+              <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} currentPlan={isPro ? 'pro' : isStarter ? 'starter' : 'free'} />
             </div>
           </div>
         )}
@@ -731,6 +732,7 @@ export default function ProfilePage() {
                 <UpgradePrompt
                   feature="custom domain for your Location Guides"
                   description="Serve your Location Guides from your own subdomain (e.g. locations.yoursite.com) instead of locateshoot.com. Available on Pro."
+                  currentPlan={isStarter ? 'starter' : 'free'}
                 />
               </div>
             )}
@@ -778,10 +780,12 @@ export default function ProfilePage() {
               </p>
 
               {!isPro && (
-                <div style={{ padding: '12px 14px', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>⭐ Pro plan feature</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', flex: 1, minWidth: 200 }}>Upgrade to send client emails from your own address.</div>
-                  <Link href="/profile#billing" onClick={() => setActive('billing')} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>Upgrade</Link>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <UpgradePrompt
+                    feature="custom sending email"
+                    description="Send client confirmation emails from your own address (e.g. you@yoursite.com) instead of notifications@locateshoot.com. Available on Pro."
+                    currentPlan={isStarter ? 'starter' : 'free'}
+                  />
                 </div>
               )}
 

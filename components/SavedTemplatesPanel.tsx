@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import PickTemplateEditor from '@/components/PickTemplateEditor'
 import TemplatePreview from '@/components/TemplatePreview'
+import UpgradePrompt from '@/components/UpgradePrompt'
 import type { SavedTemplate } from '@/lib/pick-template'
 import { PRESETS } from '@/lib/pick-template'
 
@@ -23,9 +24,12 @@ import { PRESETS } from '@/lib/pick-template'
 interface Props {
   userId: string
   isPro:  boolean
+  // Viewer's plan, used to scope the non-Pro fallback's UpgradePrompt
+  // (so a Starter user only sees the Pro card, not Starter + Pro).
+  currentPlan?: 'free' | 'starter' | 'pro'
 }
 
-export default function SavedTemplatesPanel({ userId, isPro }: Props) {
+export default function SavedTemplatesPanel({ userId, isPro, currentPlan = 'free' }: Props) {
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
   const [activeId,  setActiveId]  = useState<string | null>(null)
   const [loading,   setLoading]   = useState(true)
@@ -132,15 +136,11 @@ export default function SavedTemplatesPanel({ userId, isPro }: Props) {
 
   if (!isPro) {
     return (
-      <div style={{ background: 'var(--cream)', border: '1px solid var(--sand)', borderRadius: 10, padding: '1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>🎨 Location Guide templates</span>
-          <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)', fontWeight: 500 }}>Pro only</span>
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55 }}>
-          Save multiple named templates and pick which one applies to each Location Guide. Customize layout, font, colors, and header to match your studio's branding. Available on the Pro plan.
-        </div>
-      </div>
+      <UpgradePrompt
+        feature="customizable Location Guide templates"
+        description="Save multiple named templates with their own layout, font, colors, and header — then pick which one applies to each Location Guide you send."
+        currentPlan={currentPlan}
+      />
     )
   }
 

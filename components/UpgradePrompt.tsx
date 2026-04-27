@@ -17,12 +17,18 @@ import { supabase } from '@/lib/supabase'
 // the user lands back on /profile#billing with a confirmation toast.
 
 type Tier = 'starter' | 'pro'
+type CurrentPlan = 'free' | 'starter' | 'pro'
 
 interface Props {
   feature: string                 // human-readable name of the locked feature, e.g. "unlimited portfolio locations"
   description?: string            // optional longer copy above the plan cards
   variant?: 'card' | 'inline'
   className?: string
+  // The viewer's current plan. 'free' shows both Starter + Pro side-
+  // by-side. 'starter' shows only Pro (Starter is already what they
+  // have). 'pro' shouldn't render this component at all — caller bug.
+  // Defaults to 'free' for backwards compat with older callers.
+  currentPlan?: CurrentPlan
 }
 
 const STARTER_FEATURES = [
@@ -43,7 +49,8 @@ const PRO_FEATURES = [
   'Layout, font & color editor',
 ]
 
-export default function UpgradePrompt({ feature, description, variant = 'card', className }: Props) {
+export default function UpgradePrompt({ feature, description, variant = 'card', className, currentPlan = 'free' }: Props) {
+  const showStarter = currentPlan === 'free'
   const router = useRouter()
   const [busyTier, setBusyTier] = useState<Tier | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -123,9 +130,14 @@ export default function UpgradePrompt({ feature, description, variant = 'card', 
       {/* Plan cards — Starter + Pro side-by-side on desktop, stacked on
           mobile. Each card lists its key features and has its own
           checkout button so the photographer doesn't have to scroll
-          back to a marketing page to compare. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          back to a marketing page to compare. Starter card is hidden
+          when the viewer is already on Starter (Pro-only upgrade).
+          When only Pro renders, the grid auto-fits it to a single
+          centered column with a sensible max width so it doesn't
+          stretch absurdly wide. */}
+      <div style={{ display: 'grid', gridTemplateColumns: showStarter ? 'repeat(auto-fit, minmax(220px, 1fr))' : 'minmax(0, 360px)', gap: 12 }}>
         {/* Starter */}
+        {showStarter && (
         <div style={{ padding: '1rem', border: '1.5px solid var(--gold)', borderRadius: 8, background: 'rgba(196,146,42,.03)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)' }}>Starter</div>
@@ -149,6 +161,7 @@ export default function UpgradePrompt({ feature, description, variant = 'card', 
             {busyTier === 'starter' ? 'Loading…' : 'Start with Starter'}
           </button>
         </div>
+        )}
 
         {/* Pro */}
         <div style={{ padding: '1rem', border: '1.5px solid var(--cream-dark)', borderRadius: 8, background: 'white', display: 'flex', flexDirection: 'column' }}>
