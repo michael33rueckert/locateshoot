@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import PickTemplateEditor from '@/components/PickTemplateEditor'
 import TemplatePreview from '@/components/TemplatePreview'
-import UpgradePrompt from '@/components/UpgradePrompt'
 import type { SavedTemplate } from '@/lib/pick-template'
 import { PRESETS } from '@/lib/pick-template'
 
@@ -24,12 +23,14 @@ import { PRESETS } from '@/lib/pick-template'
 interface Props {
   userId: string
   isPro:  boolean
-  // Viewer's plan, used to scope the non-Pro fallback's UpgradePrompt
-  // (so a Starter user only sees the Pro card, not Starter + Pro).
+  // Viewer's plan. Currently unused inside the panel (the non-Pro
+  // fallback is a quiet placeholder rather than an UpgradePrompt) but
+  // kept on the API so callers don't have to remove it if we ever
+  // restore plan-aware copy here.
   currentPlan?: 'free' | 'starter' | 'pro'
 }
 
-export default function SavedTemplatesPanel({ userId, isPro, currentPlan = 'free' }: Props) {
+export default function SavedTemplatesPanel({ userId, isPro }: Props) {
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
   const [activeId,  setActiveId]  = useState<string | null>(null)
   const [loading,   setLoading]   = useState(true)
@@ -135,12 +136,16 @@ export default function SavedTemplatesPanel({ userId, isPro, currentPlan = 'free
   }
 
   if (!isPro) {
+    // Quiet informational card. The Branding tab already shows the
+    // dual-plan UpgradePrompt at the top — duplicating an upgrade
+    // card here too is just noise. Just describe what the section
+    // unlocks so non-Pro viewers know what they're scrolling past.
     return (
-      <UpgradePrompt
-        feature="customizable Location Guide templates"
-        description="Save multiple named templates with their own layout, font, colors, and header — then pick which one applies to each Location Guide you send."
-        currentPlan={currentPlan}
-      />
+      <div style={{ background: 'var(--cream)', border: '1px dashed var(--cream-dark)', borderRadius: 10, padding: '1.25rem' }}>
+        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>
+          Save multiple named templates with their own layout, font, colors, and header — then pick which one applies to each Location Guide you send. Available with the Pro upgrade above.
+        </div>
+      </div>
     )
   }
 
