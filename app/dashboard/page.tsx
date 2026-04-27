@@ -563,70 +563,6 @@ export default function DashboardPage() {
               })()}
             </div>
 
-            {/* CLIENT SELECTIONS — flat list of every recent pick.
-                Anchored at #client-picks so the 'View' button on the
-                push notification (and the email's dashboard link)
-                lands the photographer directly here. */}
-            <div id="client-picks" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80 }}>
-              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
-                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  ✓ Client Selections
-                  {recentPicks.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.2)' }}>{recentPicks.length}</span>}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Every pick a client has submitted — most recent first.</div>
-              </div>
-              {recentPicks.length === 0 ? (
-                <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: 32, marginBottom: 10, opacity: 0.4 }}>📭</div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No client picks yet</div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
-                    When a client opens one of your Location Guides and submits a pick, it&apos;ll show up here. You&apos;ll also get an email and (if enabled) a push notification.
-                  </div>
-                </div>
-              ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {recentPicks.slice(0, 12).map(p => {
-                    const fullName = [p.client_first_name, p.client_last_name].filter(Boolean).join(' ').trim()
-                    const display  = fullName || p.client_email || 'Anonymous client'
-                    const locText  = (p.location_names && p.location_names.length > 0)
-                      ? p.location_names.join(' · ')
-                      : (p.location_name ?? '—')
-                    const guideLabel = p.is_full_portfolio ? 'Portfolio guide' : (p.session_name ?? 'Custom guide')
-                    const created    = new Date(p.created_at)
-                    const dateText   = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
-                    const timeText   = created.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-                    return (
-                      <li key={p.id} style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
-                            {display}
-                            {fullName && p.client_email && (
-                              <span style={{ fontWeight: 400, color: 'var(--ink-soft)', fontSize: 12, marginLeft: 6 }}>· {p.client_email}</span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
-                            <span style={{ color: 'var(--ink-soft)' }}>📍</span> {locText}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
-                            from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
-                          </div>
-                        </div>
-                        <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                          {dateText}<br />
-                          <span style={{ fontSize: 11 }}>{timeText}</span>
-                        </div>
-                      </li>
-                    )
-                  })}
-                  {recentPicks.length > 12 && (
-                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                      Showing 12 of {recentPicks.length} most recent picks
-                    </li>
-                  )}
-                </ul>
-              )}
-            </div>
-
             {/* MY PORTFOLIO — primary section */}
             <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
@@ -726,6 +662,72 @@ export default function DashboardPage() {
                     </Link>
                   </div>
                 </div>
+              )}
+            </div>
+
+            {/* CLIENT SELECTIONS — flat list of every recent pick.
+                Anchored at #client-picks so the 'View' button on the
+                push notification (and the email's dashboard link)
+                lands the photographer directly here. Sits below the
+                Portfolio card so it's the last thing in the left
+                column — the natural place for a chronological log. */}
+            <div id="client-picks" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80 }}>
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  ✓ Client Selections
+                  {recentPicks.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(74,103,65,.1)', color: 'var(--sage)', border: '1px solid rgba(74,103,65,.2)' }}>{recentPicks.length}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Every pick a client has submitted — most recent first.</div>
+              </div>
+              {recentPicks.length === 0 ? (
+                <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: 32, marginBottom: 10, opacity: 0.4 }}>📭</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No client picks yet</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
+                    When a client opens one of your Location Guides and submits a pick, it&apos;ll show up here. You&apos;ll also get an email and (if enabled) a push notification.
+                  </div>
+                </div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {recentPicks.slice(0, 12).map(p => {
+                    const fullName = [p.client_first_name, p.client_last_name].filter(Boolean).join(' ').trim()
+                    const display  = fullName || p.client_email || 'Anonymous client'
+                    const locText  = (p.location_names && p.location_names.length > 0)
+                      ? p.location_names.join(' · ')
+                      : (p.location_name ?? '—')
+                    const guideLabel = p.is_full_portfolio ? 'Portfolio guide' : (p.session_name ?? 'Custom guide')
+                    const created    = new Date(p.created_at)
+                    const dateText   = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+                    const timeText   = created.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                    return (
+                      <li key={p.id} style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
+                            {display}
+                            {fullName && p.client_email && (
+                              <span style={{ fontWeight: 400, color: 'var(--ink-soft)', fontSize: 12, marginLeft: 6 }}>· {p.client_email}</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
+                            <span style={{ color: 'var(--ink-soft)' }}>📍</span> {locText}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
+                            from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
+                          </div>
+                        </div>
+                        <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                          {dateText}<br />
+                          <span style={{ fontSize: 11 }}>{timeText}</span>
+                        </div>
+                      </li>
+                    )
+                  })}
+                  {recentPicks.length > 12 && (
+                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                      Showing 12 of {recentPicks.length} most recent picks
+                    </li>
+                  )}
+                </ul>
               )}
             </div>
 
