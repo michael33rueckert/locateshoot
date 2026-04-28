@@ -48,6 +48,11 @@ export default function DashboardPage() {
   const [portfolioLocs,       setPortfolioLocs]        = useState<PortfolioLocation[]>([])
   const [permanentLinks,      setPermanentLinks]       = useState<PermanentLink[]>([])
   const [recentPicks,         setRecentPicks]          = useState<RecentPick[]>([])
+  // Favorited locations from the Explore map — see migration
+  // 20260428_location_favorites. Lightweight bookmark list distinct
+  // from portfolio. Loaded alongside the rest of the dashboard data;
+  // displayed in a panel above Client Selections.
+  const [favoriteLocs, setFavoriteLocs] = useState<Array<{ id: string; name: string; city: string | null; state: string | null; preview_url: string | null; created_at: string }>>([])
   const [loading,             setLoading]              = useState(true)
   const [toast,               setToast]                = useState<string | null>(null)
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
@@ -239,6 +244,45 @@ export default function DashboardPage() {
         })))
       } else {
         setRecentPicks([])
+      }
+
+      // Favorites — joined with locations so the dashboard panel can show
+      // name + city + a preview photo. Falls through silently if the
+      // location_favorites migration hasn't been applied yet so the rest
+      // of the dashboard still renders.
+      const favRes = await supabase
+        .from('location_favorites')
+        .select('created_at,location_id,locations(id,name,city,state)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(24)
+      if (!favRes.error && favRes.data) {
+        const favRows = favRes.data.map((r: any) => ({
+          id:         String(r.locations?.id ?? r.location_id),
+          name:       r.locations?.name ?? '—',
+          city:       r.locations?.city ?? null,
+          state:      r.locations?.state ?? null,
+          preview_url: null as string | null,
+          created_at: r.created_at,
+        }))
+        // Best-effort thumbnail per favorite from the same location_photos
+        // table the portfolio uses. Empty results are fine — the tile
+        // falls back to a gradient block.
+        const favIds = favRows.map(r => r.id)
+        if (favIds.length > 0) {
+          const { data: favPhotos } = await supabase
+            .from('location_photos')
+            .select('location_id,url')
+            .in('location_id', favIds)
+            .eq('is_private', false)
+            .limit(favIds.length * 3)
+          const photoByLoc: Record<string, string> = {}
+          ;(favPhotos ?? []).forEach((p: any) => { if (!photoByLoc[p.location_id]) photoByLoc[p.location_id] = p.url })
+          favRows.forEach(r => { r.preview_url = photoByLoc[r.id] ?? null })
+        }
+        setFavoriteLocs(favRows)
+      } else {
+        setFavoriteLocs([])
       }
 
       if (permData && permData.length > 0) {
@@ -725,6 +769,73 @@ export default function DashboardPage() {
                   {recentPicks.length > 12 && (
                     <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
                       Showing 12 of {recentPicks.length} most recent picks
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+
+            {/* Favorites — bookmarked locations from the Explore map.
+                Forward-looking ideas the photographer wants to remember
+                to shoot at one day, not yet in their portfolio. Same
+                row layout as Client Selections so the dashboard reads
+                as two parallel logs (clients picked X, you bookmarked
+                Y). Each row is a Link that deep-links into the Explore
+                detail panel via /explore?focus=<id>. */}
+            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem' }}>
+              <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    ★ Favorites
+                    {favoriteLocs.length > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(196,146,42,.1)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)' }}>{favoriteLocs.length}</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Locations you&apos;ve bookmarked from the Explore map to shoot at one day.</div>
+                </div>
+                <Link href="/explore" style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                  Find more on Explore →
+                </Link>
+              </div>
+              {favoriteLocs.length === 0 ? (
+                <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: 32, marginBottom: 10, opacity: 0.4 }}>⭐</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No favorites yet</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
+                    Tap ★ on any location in the Explore map to save it for later. They&apos;ll show up here as a running list of spots you want to try.
+                  </div>
+                </div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {favoriteLocs.slice(0, 12).map(f => {
+                    const cityState = [f.city, f.state].filter(Boolean).join(', ')
+                    const created   = new Date(f.created_at)
+                    const dateText  = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+                    return (
+                      <li key={f.id} style={{ borderBottom: '1px solid var(--cream-dark)' }}>
+                        <Link
+                          href={`/explore?focus=${f.id}`}
+                          style={{ padding: '12px 1.25rem', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', flexWrap: 'wrap' }}
+                        >
+                          <div style={{ width: 48, height: 48, borderRadius: 6, flexShrink: 0, overflow: 'hidden', background: f.preview_url ? `center/cover no-repeat url(${f.preview_url})` : 'linear-gradient(135deg, #d4c5b0 0%, #a89c8d 100%)' }} />
+                          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {f.name}
+                            </div>
+                            {cityState && (
+                              <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
+                                <span style={{ color: 'var(--ink-soft)' }}>📍</span> {cityState}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ flexShrink: 0, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                            Saved {dateText}
+                          </div>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                  {favoriteLocs.length > 12 && (
+                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                      Showing 12 of {favoriteLocs.length} favorites
                     </li>
                   )}
                 </ul>

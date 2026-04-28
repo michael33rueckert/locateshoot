@@ -77,8 +77,8 @@ function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; o
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete }: {
-  loc:any; portfolioId:string|null; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; onOpenLightbox:(src:string|string[], start?:number)=>void; user:any
+function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete }: {
+  loc:any; portfolioId:string|null; isFavorite:boolean; onToggleFavorite:(id:any)=>void; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; onOpenLightbox:(src:string|string[], start?:number)=>void; user:any
   isAdmin:boolean; onAdminEdit:(locId:string)=>void; onAdminDelete:(locId:string)=>Promise<void>
 }) {
   const isInPortfolio = !!portfolioId
@@ -127,10 +127,37 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
           <div style={{fontFamily:'var(--font-playfair),serif',fontSize:22,fontWeight:700,color:'var(--ink)',marginBottom:3}}>{loc.name}</div>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:'1rem',flexWrap:'wrap'}}>
             <span style={{fontSize:13,color:'var(--ink-soft)'}}>📍 {loc.city}</span>
-            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([loc.name, loc.city].filter(Boolean).join(' '))}&query_place_id=`} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:'var(--sky)',textDecoration:'none',fontWeight:500,display:'inline-flex',alignItems:'center',gap:4}}>
-              Open in Google Maps →
-            </a>
           </div>
+          {/* Get Directions — same `/maps/dir/?api=1&destination=lat,lng`
+              URL the client confirmation email uses, so the button
+              behaves identically: desktop opens Google Maps in a tab,
+              mobile prompts to open in the user's default map app
+              (Google Maps / Apple Maps / Waze depending on what's
+              installed). Falls back to a name+city query when lat/lng
+              isn't on the row for some reason. */}
+          {(() => {
+            const dest = (Number.isFinite(loc.lat) && Number.isFinite(loc.lng))
+              ? `${loc.lat},${loc.lng}`
+              : encodeURIComponent([loc.name, loc.city].filter(Boolean).join(', '))
+            const dirUrl = `https://www.google.com/maps/dir/?api=1&destination=${dest}`
+            return (
+              <a
+                href={dirUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '10px 18px', borderRadius: 6,
+                  background: 'var(--sky)', color: 'white',
+                  border: 'none', textDecoration: 'none',
+                  fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
+                  marginBottom: '1rem',
+                }}
+              >
+                🗺 Get Directions
+              </a>
+            )
+          })()}
           {(loc.tags??[]).length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:'1rem'}}>{(loc.tags??[]).map((t:string)=><span key={t} style={{padding:'4px 10px',borderRadius:20,fontSize:12,background:'var(--cream-dark)',color:'var(--ink-soft)',border:'1px solid var(--sand)'}}>{t}</span>)}</div>}
           {loc.desc&&<p style={{fontSize:14,color:'var(--ink-soft)',fontWeight:300,lineHeight:1.7,marginBottom:'1.25rem'}}>{loc.desc}</p>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:'1rem'}}>
@@ -156,6 +183,22 @@ function DetailPanel({ loc, portfolioId, onClose, onAddToPortfolio, onSignIn, on
                   </div>
                 : <button onClick={()=>onAddToPortfolio(loc.id)} style={{width:'100%',padding:'12px',borderRadius:4,cursor:'pointer',fontFamily:'inherit',fontSize:14,fontWeight:600,marginBottom:10,background:'var(--gold)',color:'var(--ink)',border:'none'}}>Add to my portfolio</button>)
             : <button onClick={onSignIn} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:600,border:'none',cursor:'pointer',marginBottom:10}}>Sign in to add to your portfolio</button>}
+          {user && (
+            <button
+              onClick={() => onToggleFavorite(loc.id)}
+              style={{
+                width: '100%', padding: '12px', borderRadius: 4,
+                background: isFavorite ? 'rgba(196,146,42,.12)' : 'white',
+                color: isFavorite ? 'var(--gold)' : 'var(--ink-soft)',
+                border: `1.5px solid ${isFavorite ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                fontFamily: 'inherit', fontSize: 14,
+                fontWeight: isFavorite ? 600 : 500,
+                cursor: 'pointer', marginBottom: 10,
+              }}
+            >
+              {isFavorite ? '★ Favorited — saved for later' : '☆ Save to favorites'}
+            </button>
+          )}
           {user&&<button onClick={shareWithClient} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer',marginBottom:'1rem'}}>🔗 Share with client</button>}
           {isAdmin&&(
             <div style={{padding:'10px 12px',background:'rgba(26,22,18,.04)',border:'1px dashed var(--cream-dark)',borderRadius:6,marginBottom:'1rem',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
@@ -204,6 +247,10 @@ export default function ExplorePage() {
   // Map: public locations.id → portfolio_locations.id, so we can deep-link
   // to the portfolio edit modal after a user adds a location.
   const [portfolioSources, setPortfolioSources] = useState<Map<string, string>>(new Map())
+  // Set of location ids the user has favorited (lightweight bookmark
+  // separate from portfolio adds — see migration 20260428_location_favorites).
+  // Loaded once when the user logs in; toggled via toggleFavorite below.
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
   const [showPinSearch,    setShowPinSearch]    = useState(false)
@@ -246,7 +293,7 @@ export default function ExplorePage() {
       setDbLoading(true)
       try {
         const { data } = await supabase.from('locations')
-          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at')
+          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,favorite_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at')
           .eq('status','published').not('latitude','is',null).not('longitude','is',null).limit(500)
         setLocations((data??[]).map((loc:any,idx:number)=>({
           id:loc.id, name:loc.name,
@@ -257,6 +304,7 @@ export default function ExplorePage() {
           ratingNum:loc.rating?parseFloat(loc.rating):0,
           bg:BG_CYCLE[idx%BG_CYCLE.length],
           tags:loc.tags??[], saves:loc.save_count??0,
+          favoriteCount:loc.favorite_count??0,
           desc:loc.description??'', qualityScore:loc.quality_score??0,
           createdAt:loc.created_at, addedBy:loc.added_by, source:loc.source,
           permit_required:loc.permit_required, permit_notes:loc.permit_notes,
@@ -337,11 +385,73 @@ export default function ExplorePage() {
       })
   }, [user])
 
+  // Load the user's favorites once on login. Falls through silently
+  // if the migration hasn't been applied (table-missing error) so
+  // the rest of the page still works.
+  useEffect(() => {
+    if (!user) { setFavoriteIds(new Set()); return }
+    supabase.from('location_favorites').select('location_id').eq('user_id', user.id)
+      .then(({ data, error }) => {
+        if (error || !data) return
+        setFavoriteIds(new Set(data.map((r: any) => String(r.location_id))))
+      })
+  }, [user])
+
+  async function toggleFavorite(locId: any) {
+    if (!user) { setAuthOpen('login'); return }
+    const key = String(locId)
+    const isFav = favoriteIds.has(key)
+    // Optimistic update — flip locally first, then commit to DB.
+    setFavoriteIds(prev => {
+      const next = new Set(prev)
+      if (isFav) next.delete(key); else next.add(key)
+      return next
+    })
+    if (isFav) {
+      const { error } = await supabase.from('location_favorites').delete().eq('user_id', user.id).eq('location_id', locId)
+      if (error) {
+        // Roll back on failure.
+        setFavoriteIds(prev => { const n = new Set(prev); n.add(key); return n })
+        setToast(`⚠ Couldn’t unfavorite: ${error.message}`)
+      } else {
+        setToast('Removed from favorites')
+      }
+    } else {
+      const { error } = await supabase.from('location_favorites').insert({ user_id: user.id, location_id: locId })
+      if (error) {
+        setFavoriteIds(prev => { const n = new Set(prev); n.delete(key); return n })
+        setToast(`⚠ Couldn’t favorite: ${error.message}`)
+      } else {
+        setToast('★ Added to favorites')
+      }
+    }
+  }
+
   useEffect(() => {
     if(!toast)return
     const id=setTimeout(()=>setToast(null),2600)
     return()=>clearTimeout(id)
   }, [toast])
+
+  // Deep-link: /explore?focus=<location_id> opens the detail panel for
+  // that location once the locations list has loaded. Used by the
+  // dashboard's Favorites tiles so a click takes the photographer
+  // straight to the spot's full detail view.
+  useEffect(() => {
+    if (typeof window === 'undefined' || locations.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const focusId = params.get('focus')
+    if (!focusId) return
+    const target = locations.find((l: any) => String(l.id) === String(focusId))
+    if (target) {
+      setDetailLoc(target)
+      setActiveId(target.id)
+    }
+    // Strip the param so reloading the page doesn't keep re-opening it.
+    const next = new URL(window.location.href)
+    next.searchParams.delete('focus')
+    window.history.replaceState({}, '', next.toString())
+  }, [locations])
 
   useEffect(() => {
     function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowFilters(false);setShowPinSearch(false)}}
@@ -538,9 +648,26 @@ export default function ExplorePage() {
       return matchesAccess&&matchesTags&&matchesSearch&&matchesRating&&matchesNear
     })
     let sorted = [...result].sort((a:any,b:any)=>{
-      // Strict-near (searchPin / Near me): closest first, overrides sort mode
-      // since the user explicitly asked for proximity.
-      if (strictNearRef) {
+      // Strict-near (searchPin / Near me) in default state: rank by
+      // popularity within the radius. The radius filter already kept
+      // every result within ~50mi, so distance becomes a weak signal —
+      // a 4-mile-away spot nobody favorites is worse than an 18-mile
+      // away spot photographers actively bookmark. Score = quality +
+      // weighted favorite_count (1 favorite ≈ 3 quality points). If
+      // the user picked a non-default sort, fall through to it.
+      if (strictNearRef && isDefaultState) {
+        const sa = (a.qualityScore ?? 0) + (a.favoriteCount ?? 0) * 3 + (a.saves ?? 0)
+        const sb = (b.qualityScore ?? 0) + (b.favoriteCount ?? 0) * 3 + (b.saves ?? 0)
+        if (sa !== sb) return sb - sa
+        // Tie-break with distance so equally-popular spots still surface
+        // closer ones first.
+        const da = distMiles(strictNearRef.lat, strictNearRef.lng, a.lat, a.lng)
+        const db = distMiles(strictNearRef.lat, strictNearRef.lng, b.lat, b.lng)
+        if (da !== db) return da - db
+      } else if (strictNearRef) {
+        // Non-default sort + near filter: keep closest-first as the
+        // legacy fallback so a user who picks "name" inside near search
+        // doesn't get unexpected popularity-weighting on top.
         const da = distMiles(strictNearRef.lat, strictNearRef.lng, a.lat, a.lng)
         const db = distMiles(strictNearRef.lat, strictNearRef.lng, b.lat, b.lng)
         if (da !== db) return da - db
@@ -752,7 +879,7 @@ export default function ExplorePage() {
       </button>
 
       {detailLoc&&(
-        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} onOpenLightbox={openLightbox} user={user} isAdmin={isAdmin} onAdminEdit={adminEditLocation} onAdminDelete={adminDeleteLocation}/>
+        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} isFavorite={favoriteIds.has(String(detailLoc.id))} onToggleFavorite={toggleFavorite} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} onOpenLightbox={openLightbox} user={user} isAdmin={isAdmin} onAdminEdit={adminEditLocation} onAdminDelete={adminDeleteLocation}/>
       )}
       {adminEditLoc&&(
         <LocationEditModal loc={adminEditLoc} onClose={()=>setAdminEditLoc(null)} onSave={adminSaveLocation}/>
