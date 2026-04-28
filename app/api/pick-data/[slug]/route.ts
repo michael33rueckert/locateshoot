@@ -152,16 +152,26 @@ export async function GET(request: Request, context: any) {
     {
       const { data, error } = await admin
         .from('portfolio_locations')
-        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website`)
+        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links`)
         .in('id', portfolioIds)
       if (error) {
-        console.warn('portfolio query w/ link cols failed (likely pre-migration):', error.message)
-        const fb = await admin
+        // Stepwise fallback: drop session_links first (newest column),
+        // then drop the older link/permit cols if those are also missing.
+        const noSession = await admin
           .from('portfolio_locations')
-          .select(baseCols)
+          .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website`)
           .in('id', portfolioIds)
-        if (fb.error) console.error('portfolio query error:', fb.error)
-        portfolioRows = fb.data ?? []
+        if (noSession.error) {
+          console.warn('portfolio query w/ link cols failed (likely pre-migration):', noSession.error.message)
+          const fb = await admin
+            .from('portfolio_locations')
+            .select(baseCols)
+            .in('id', portfolioIds)
+          if (fb.error) console.error('portfolio query error:', fb.error)
+          portfolioRows = fb.data ?? []
+        } else {
+          portfolioRows = noSession.data ?? []
+        }
       } else {
         portfolioRows = data ?? []
       }
@@ -255,6 +265,10 @@ export async function GET(request: Request, context: any) {
         // the row instead of leaking a paid feature for free.
         pinterest_url:    isProPhotographer ? (p.pinterest_url ?? null) : null,
         blog_url:         isProPhotographer ? (p.blog_url      ?? null) : null,
+        // Multiple labeled session links (e.g. "Family session" → URL).
+        // Same Starter+ gate as the other supplemental links — Free
+        // guides drop them on the floor so we don't leak a paid feature.
+        session_links:    isProPhotographer ? (Array.isArray(p.session_links) ? p.session_links : []) : [],
         rating:             src?.rating           ?? null,
         quality_score:      src?.quality_score    ?? null,
         save_count:         src?.save_count       ?? 0,

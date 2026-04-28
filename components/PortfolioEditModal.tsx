@@ -50,6 +50,24 @@ export default function PortfolioEditModal({
   const [parkingInfo,    setParkingInfo]    = useState('')
   const [pinterestUrl,   setPinterestUrl]   = useState('')
   const [blogUrl,        setBlogUrl]        = useState('')
+  // Multiple labeled session links (e.g. "Family session" → gallery
+  // URL). Stored on portfolio_locations.session_links as JSONB. Each
+  // entry has a stable local id so React keys survive reordering.
+  const [sessionLinks,   setSessionLinks]   = useState<Array<{ id: string; label: string; url: string }>>([])
+  function addSessionLink() {
+    setSessionLinks(prev => [...prev, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, label: '', url: '' }])
+  }
+  function updateSessionLink(id: string, key: 'label' | 'url', value: string) {
+    setSessionLinks(prev => prev.map(l => l.id === id ? { ...l, [key]: value } : l))
+  }
+  function removeSessionLink(id: string) {
+    setSessionLinks(prev => prev.filter(l => l.id !== id))
+  }
+  function sessionLinksPayload(): { label: string; url: string }[] {
+    return sessionLinks
+      .map(l => ({ label: l.label.trim(), url: l.url.trim() }))
+      .filter(l => l.label && l.url)
+  }
   const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
   const [lat,     setLat]     = useState<number | null>(null)
   const [lng,     setLng]     = useState<number | null>(null)
@@ -66,7 +84,7 @@ export default function PortfolioEditModal({
     let cancelled = false
     async function load() {
       const [rowRes, photosRes] = await Promise.all([
-        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,permit_fee,permit_website,best_time,parking_info,pinterest_url,blog_url,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
+        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,permit_fee,permit_website,best_time,parking_info,pinterest_url,blog_url,session_links,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
         supabase.from('location_photos').select('id,url,storage_path,caption,sort_order').eq('portfolio_location_id', portfolioId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       ])
       if (cancelled) return
@@ -106,6 +124,17 @@ export default function PortfolioEditModal({
         setParkingInfo(rowRes.data.parking_info ?? '')
         setPinterestUrl(rowRes.data.pinterest_url ?? '')
         setBlogUrl(rowRes.data.blog_url ?? '')
+        // Hydrate session_links — DB stores [{label,url}], we add a
+        // local id for stable React keys. Empty / missing column =
+        // empty list (migration may not be applied yet).
+        const rawLinks = (rowRes.data as any).session_links
+        if (Array.isArray(rawLinks)) {
+          setSessionLinks(rawLinks.map((l: any, i: number) => ({
+            id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+            label: typeof l?.label === 'string' ? l.label : '',
+            url:   typeof l?.url   === 'string' ? l.url   : '',
+          })))
+        }
         setHideGooglePhotos(!!rowRes.data.hide_google_photos)
         setLat(rowRes.data.latitude ?? null)
         setLng(rowRes.data.longitude ?? null)
@@ -153,13 +182,27 @@ export default function PortfolioEditModal({
     // 20260427_portfolio_permit_fields: permit_fee + permit_website).
     // Falls back stepwise when columns are missing so the rest of the
     // edit still saves on a Supabase instance that hasn't run them.
+    const sessionLinksJson = sessionLinksPayload()
     let { error } = await supabase.from('portfolio_locations').update({
       ...baseUpdate,
       pinterest_url:  pinterestUrl.trim() || null,
       blog_url:       blogUrl.trim() || null,
       permit_fee:     permitFee.trim() || null,
       permit_website: permitWebsite.trim() || null,
+      session_links:  sessionLinksJson,
     }).eq('id', portfolioId)
+    if (error && /session_links/.test(error.message ?? '')) {
+      // session_links column missing (migration 20260428_session_links
+      // hasn't run) — drop it and retry with the rest intact.
+      const retry = await supabase.from('portfolio_locations').update({
+        ...baseUpdate,
+        pinterest_url:  pinterestUrl.trim() || null,
+        blog_url:       blogUrl.trim() || null,
+        permit_fee:     permitFee.trim() || null,
+        permit_website: permitWebsite.trim() || null,
+      }).eq('id', portfolioId)
+      error = retry.error
+    }
     if (error && /permit_fee|permit_website/.test(error.message ?? '')) {
       // Permit fields missing — retry with just the link cols.
       const retry = await supabase.from('portfolio_locations').update({
@@ -394,6 +437,48 @@ export default function PortfolioEditModal({
                   <label style={labelStyle}>✍ Blog post</label>
                   <input value={blogUrl} onChange={e => setBlogUrl(e.target.value)} style={inputStyle} placeholder="https://yoursite.com/blog/…" />
                 </div>
+              </div>
+
+              {/* Session links — labeled URLs to feature on the Pick
+                  page (e.g. "Family session" → gallery URL). Repeating
+                  rows; empty rows are dropped on save. */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>🔗 Session links (optional)</label>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: -2, marginBottom: 8, fontWeight: 300 }}>
+                  Add a labeled link for each session type you want to feature here. They show up as buttons on the client&apos;s Pick page.
+                </div>
+                {sessionLinks.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                    {sessionLinks.map(link => (
+                      <div key={link.id} style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                        <input
+                          value={link.label}
+                          onChange={e => updateSessionLink(link.id, 'label', e.target.value)}
+                          placeholder="Family session"
+                          style={{ ...inputStyle, flex: '0 0 36%' }}
+                          maxLength={40}
+                        />
+                        <input
+                          value={link.url}
+                          onChange={e => updateSessionLink(link.id, 'url', e.target.value)}
+                          placeholder="https://yoursite.com/families/…"
+                          style={{ ...inputStyle, flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSessionLink(link.id)}
+                          aria-label="Remove this session link"
+                          style={{ padding: '0 12px', borderRadius: 4, border: '1px solid rgba(181,75,42,.25)', background: 'rgba(181,75,42,.06)', color: 'var(--rust)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+                        >✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={addSessionLink}
+                  style={{ padding: '6px 12px', borderRadius: 4, border: '1px dashed var(--sand)', background: 'transparent', color: 'var(--ink-soft)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+                >+ Add session link</button>
               </div>
 
               <div style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)', marginBottom: '1.25rem' }}>

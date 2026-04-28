@@ -77,6 +77,10 @@ type FullLocation = ClientLocation & {
   permitCertainty: string
   pinterestUrl: string | null
   blogUrl: string | null
+  // Photographer-curated labeled links (e.g. "Family session" → URL).
+  // Stored as session_links JSONB on portfolio_locations; rendered as
+  // a row of buttons under the location info on the Pick page.
+  sessionLinks: { label: string; url: string }[]
   saves: number
   photoUrl: string | null
   photoUrls: string[]
@@ -303,6 +307,9 @@ export default function ClientPickerPage() {
             permitCertainty: loc.permit_certainty ?? 'unknown',
             pinterestUrl:    loc.pinterest_url ?? null,
             blogUrl:         loc.blog_url ?? null,
+            // session_links arrives as an array of {label,url} from the
+            // pick-data API (Starter+ only — Free guides return []).
+            sessionLinks:    Array.isArray(loc.session_links) ? loc.session_links : [],
             saves:  loc.save_count ?? 0,
             photoUrl: loc.photo_url ?? null,
             photoUrls: loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : []),
@@ -322,6 +329,7 @@ export default function ClientPickerPage() {
             permitRequired: null, permitNotes: null, permitFee: null,
             permitWebsite: null, permitCertainty: 'unknown',
             pinterestUrl: null, blogUrl: null,
+            sessionLinks: [],
             saves: 0,
             hideGooglePhotos: true,
             highlighted: false,
@@ -913,6 +921,25 @@ export default function ClientPickerPage() {
                     ✍ Blog post
                   </a>
                 )}
+                {/* Photographer-curated session links — labeled buttons
+                    leading to the most relevant gallery / blog post per
+                    session type. Filtered to entries that have both a
+                    label and a valid http(s) URL so a typo in the
+                    editor doesn't render a broken button on the Pick
+                    page. */}
+                {detailLoc.sessionLinks
+                  .filter(l => l && l.label && l.url && /^https?:\/\//i.test(l.url))
+                  .map((link, i) => (
+                    <a
+                      key={`${i}-${link.url}`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}
+                    >
+                      🔗 {link.label}
+                    </a>
+                  ))}
                 {detailLoc.permitWebsite && (
                   <a
                     href={detailLoc.permitWebsite}
