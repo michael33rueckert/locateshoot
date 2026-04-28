@@ -76,8 +76,21 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
           try { (navigator as any).vibrate(30) } catch {}
         }
 
-        const handleMove = (ev: PointerEvent) => {
-          ev.preventDefault()
+        // Cap pointermove work at one frame. Without this, every move
+        // event (60–120/sec on a high-refresh trackpad) ran a DOM
+        // hit-test + a setOverId state change + a full re-render of
+        // the consumer's grid — Safari in particular doesn't batch
+        // pointer events, and a 60-photo portfolio felt visibly laggy
+        // during drag. rAF coalesces to at most one hit-test per
+        // frame and reuses the latest event coords.
+        let rafId: number | null = null
+        let pendingEv: PointerEvent | null = null
+
+        const runHitTest = () => {
+          rafId = null
+          const ev = pendingEv
+          pendingEv = null
+          if (!ev) return
           // elementsFromPoint returns every element at the point in
           // z-order. The dragged card sits on top (finger is on it), so
           // skip past it and look for the first sibling card beneath.
@@ -97,7 +110,16 @@ export function useReorderDrag(reorder: (fromId: string, toId: string) => void) 
           }
         }
 
+        const handleMove = (ev: PointerEvent) => {
+          ev.preventDefault()
+          pendingEv = ev
+          if (rafId !== null) return
+          rafId = requestAnimationFrame(runHitTest)
+        }
+
         const finish = (commit: boolean) => {
+          if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+          pendingEv = null
           const from = draggingRef.current
           const to   = overRef.current
           if (commit && from && to && from !== to) reorder(from, to)

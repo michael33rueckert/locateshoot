@@ -350,10 +350,24 @@ export default function ExplorePage() {
   }, [])
 
   function requestLocation() {
-    if(!navigator.geolocation)return; setLocLoading(true)
+    // Prefer the photographer's saved home from their profile over the
+    // device's GPS reading. A photographer traveling to Omaha for a
+    // weekend doesn't want their "Near me" to suddenly recommend Omaha
+    // venues — they shoot near their actual home and that's what they
+    // want here. GPS stays as the fallback for photographers who haven't
+    // set a home (new accounts, edge cases).
+    if (homeLocation) {
+      setUserLocation({ lat: homeLocation.lat, lng: homeLocation.lng })
+      setLocGranted(true)
+      setToast('📍 Showing locations near your home')
+      return
+    }
+    if (!navigator.geolocation) return
+    setLocLoading(true)
     navigator.geolocation.getCurrentPosition(
-      pos=>{setUserLocation({lat:pos.coords.latitude,lng:pos.coords.longitude});setLocGranted(true);setLocLoading(false);setToast('📍 Showing locations near you!')},
-      ()=>{setLocLoading(false)},{timeout:10000}
+      pos => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocGranted(true); setLocLoading(false); setToast('📍 Showing locations near you!') },
+      () => { setLocLoading(false) },
+      { timeout: 10000 },
     )
   }
 
