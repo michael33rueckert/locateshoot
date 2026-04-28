@@ -10,7 +10,7 @@ import UpgradePrompt from '@/components/UpgradePrompt'
 import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio } from '@/lib/portfolio-share'
-import { hasStarter } from '@/lib/plan'
+import { hasStarter, hasPro } from '@/lib/plan'
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
@@ -360,6 +360,7 @@ export default function LocationGuidesPage() {
           preselectIds={preselectIds}
           userId={profile?.id ?? ''}
           photographerName={profile?.full_name ?? ''}
+          isPro={hasPro(profile?.plan)}
           onAddLocation={() => setShowAdd(true)}
           onClose={() => { setShowCreate(false); setPreselectIds([]) }}
           onCreated={() => { setShowCreate(false); setPreselectIds([]); load(); setToast('📚 Guide created!') }}
@@ -372,6 +373,7 @@ export default function LocationGuidesPage() {
           preselectAll={false}
           userId={profile?.id ?? ''}
           photographerName={profile?.full_name ?? ''}
+          isPro={hasPro(profile?.plan)}
           editLink={editing}
           onAddLocation={() => setShowAdd(true)}
           onClose={() => setEditing(null)}

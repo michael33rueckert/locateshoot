@@ -61,6 +61,7 @@ export default function CreateLocationGuideModal({
   preselectIds,
   userId,
   photographerName,
+  isPro = false,
   editLink,
   onClose,
   onCreated,
@@ -71,6 +72,9 @@ export default function CreateLocationGuideModal({
   preselectIds?:     string[]
   userId:            string
   photographerName:  string
+  /** Pro tier? Controls whether the template picker is editable or
+   *  rendered as a disabled "Pro feature" preview for upsell. */
+  isPro?:            boolean
   editLink?:         GuideLinkLite | null
   onClose:           () => void
   onCreated:         (link: any) => void
@@ -608,13 +612,13 @@ export default function CreateLocationGuideModal({
             </div>
           </div>}
 
-          {/* Template picker — Pro feature. Hidden when the photographer
-              hasn't saved any templates yet (or hasn't run the
-              pick_templates migration). Default option falls back to
-              the photographer's marked-default template at render
-              time, so leaving this on "Default" works whether or not
-              they have a default set. */}
-          {availableTemplates.length > 0 && (
+          {/* Template picker. For Pro: real dropdown of saved
+              templates (their default is auto-provisioned, so the
+              list is never empty). For Free/Starter: a disabled
+              preview of the dropdown with a "Pro feature" hint and
+              upgrade link, so they see what's locked rather than the
+              control vanishing entirely. */}
+          {isPro && availableTemplates.length > 0 ? (
             <div style={{ marginBottom: '1.25rem' }}>
               <label style={labelStyle}>Location Guide template</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', flexWrap: 'wrap' }}>
@@ -641,7 +645,22 @@ export default function CreateLocationGuideModal({
                 Controls the layout, font, and colors clients see when they open this guide. Different guides can use different templates.
               </div>
             </div>
-          )}
+          ) : !isPro ? (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={labelStyle}>Location Guide template</label>
+              <select
+                disabled
+                value=""
+                style={{ ...inputStyle, width: '100%', cursor: 'not-allowed', opacity: 0.55, background: 'var(--cream)' }}
+              >
+                <option value="">— LocateShoot default —</option>
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--gold)', marginTop: 4, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                🔒 Custom Location Guide templates are a Pro feature.
+                <Link href="/profile#account" style={{ color: 'var(--gold)', textDecoration: 'underline', fontWeight: 600 }}>Upgrade →</Link>
+              </div>
+            </div>
+          ) : null}
 
           {/* Cover photo picker — used as the card thumbnail + link preview */}
           <div style={{ marginBottom: '1.5rem' }}>
