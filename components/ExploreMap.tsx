@@ -230,8 +230,17 @@ export default function ExploreMap({
   }, [locations, activeId, onMarkerClick])
 
   // ── Fly to active location when sidebar card is clicked ───────────────────
+  // Only fly on activeId transitions, not on `locations` changes. The
+  // parent regenerates `locations` (the filtered array) on every
+  // filter / sort tweak, so without the ref guard the map would yank
+  // back to the active marker every time the sidebar list changes —
+  // including when the user clears the click-anchor banner.
+  const lastActiveIdRef = useRef<number | null>(null)
   useEffect(() => {
-    if (!mapRef.current || !activeId) return
+    if (!mapRef.current) return
+    if (activeId === lastActiveIdRef.current) return
+    lastActiveIdRef.current = activeId ?? null
+    if (!activeId) return
     if (!mapHasSize(mapRef.current)) return
     const loc = locations.find(l => l.id === activeId)
     if (!loc || !isFiniteLatLng(loc.lat, loc.lng)) return

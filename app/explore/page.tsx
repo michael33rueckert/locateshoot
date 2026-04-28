@@ -810,6 +810,25 @@ export default function ExplorePage() {
     return sorted
   },[locations,manualPortfolioLocs,portfolioSources,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,strictNearRef,homeLocation,homeOnly,isDefaultState])
 
+  // Map markers — same filters as the sidebar list EXCEPT the
+  // near-radius filter. The sidebar narrows to nearby when the user
+  // clicks a location or hits Near me, but the map should still show
+  // every dot so zooming out reveals broader context. Other explicit
+  // filters (search, tags, access, rating) still apply because those
+  // are user choices to narrow the visible set.
+  const mapMarkers = useMemo(() => {
+    const merged = manualPortfolioLocs.length > 0 ? [...locations, ...manualPortfolioLocs] : locations
+    return merged.filter((loc:any) => {
+      const isMine = portfolioSources.has(loc.id) || loc.isManualPortfolio === true
+      const matchesAccess = accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Portfolio'?isMine:true
+      const matchesTags = selectedTags.length===0 || selectedTags.some(t => (loc.tags??[]).some((lt:string) => lt.toLowerCase().includes(t.toLowerCase())))
+      const q = searchQuery.toLowerCase().trim()
+      const matchesSearch = q==='' || loc.name.toLowerCase().includes(q) || loc.city.toLowerCase().includes(q) || (loc.tags??[]).some((t:string) => t.toLowerCase().includes(q))
+      const matchesRating = minRating===0 || (loc.ratingNum??0) >= minRating
+      return matchesAccess && matchesTags && matchesSearch && matchesRating
+    })
+  }, [locations, manualPortfolioLocs, portfolioSources, accessFilter, selectedTags, searchQuery, minRating])
+
   const activeFilterCount=(accessFilter!=='All'?1:0)+selectedTags.length+(minRating>0?1:0)+(sortBy!=='quality'?1:0)
 
   return (
@@ -981,7 +1000,7 @@ export default function ExplorePage() {
               ← List
             </button>
           )}
-          <ExploreMap locations={filtered as ExploreLocation[]} activeId={activeId} userLocation={userLocation} homeLocation={homeLocation} onMarkerClick={handleMarkerClick}/>
+          <ExploreMap locations={mapMarkers as ExploreLocation[]} activeId={activeId} userLocation={userLocation} homeLocation={homeLocation} onMarkerClick={handleMarkerClick}/>
           <div style={{position:'absolute',bottom:24,left:16,zIndex:500,background:'white',borderRadius:8,padding:'.75rem 1rem',border:'1px solid var(--cream-dark)',boxShadow:'0 4px 16px rgba(26,22,18,.1)'}}>
             {[{color:'#4a6741',label:'Public'},{color:'#b54b2a',label:'Private'},{color:'#c4922a',label:'Selected'},{color:'#3d6e8c',label:'You'}].map(item=>(
               <div key={item.label} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:'var(--ink)',marginBottom:3}}>
