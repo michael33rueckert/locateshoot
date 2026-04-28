@@ -480,7 +480,7 @@ export default function HomePage() {
         <div className="footer-grid">
           <div>
             <div className="footer-brand"><span className="logo-dot" />LocateShoot</div>
-            <p className="footer-tagline">A community map of the best photoshoot locations. Built by photographers, for photographers.</p>
+            <p className="footer-tagline">Branded Location Guides photographers send to clients. Built by photographers, for photographers.</p>
           </div>
           <div>
             <div className="footer-heading">Product</div>
