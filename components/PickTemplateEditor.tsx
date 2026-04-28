@@ -28,10 +28,16 @@ interface Props {
   templateId?: string | null     // when set, write to pick_templates by id
   initial:    PickTemplate | null | undefined
   isPro:      boolean
-  onChange?:  (next: PickTemplate) => void
+  // Studio logo URL — lives on profiles.preferences.logo_url, not on
+  // the template itself (one logo, used by every template). Surfaced
+  // here so the upload UI sits next to the logo placement / size
+  // controls instead of in a separate card on the Branding tab.
+  logoUrl?:    string | null
+  onChange?:    (next: PickTemplate) => void
+  onLogoChange?: (url: string | null) => void
 }
 
-export default function PickTemplateEditor({ userId, templateId, initial, isPro, onChange }: Props) {
+export default function PickTemplateEditor({ userId, templateId, initial, isPro, logoUrl, onChange, onLogoChange }: Props) {
   const [tpl, setTpl]       = useState<PickTemplate>(initial ?? {})
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
@@ -126,6 +132,50 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
     if (ue) { setError(ue.message); return }
     const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
     setBackground('image', pub.publicUrl)
+  }
+
+  // Studio logo upload. Mirrors what the old Branding-tab Studio Logo
+  // card used to do: validate, upload to storage at the fixed path
+  // <userId>/logo.<ext> (so re-uploads overwrite), re-read latest
+  // preferences (don't clobber a concurrent toggle save), persist
+  // logo_url, and notify the parent so the sidebar avatar updates.
+  // Cache-busts the URL — fixed storage path means the same publicUrl
+  // every upload, and downstream <img> caches happily serve the old
+  // bytes without a version query.
+  const [localLogoUrl, setLocalLogoUrl] = useState<string | null>(logoUrl ?? null)
+  const [logoBusy, setLogoBusy]         = useState<'upload' | 'remove' | null>(null)
+  const logoFileRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { setLocalLogoUrl(logoUrl ?? null) }, [logoUrl])
+  async function handleLogoUpload(file: File) {
+    setError(null)
+    const v = validateImageUpload(file)
+    if (!v.ok) { setError(v.message); return }
+    setLogoBusy('upload')
+    const path = `${userId}/logo.${v.ext}`
+    const { error: ue } = await supabase.storage.from('location-photos').upload(path, file, { upsert: true, contentType: v.contentType })
+    if (ue) { setLogoBusy(null); setError(`Couldn’t upload logo: ${ue.message}`); return }
+    const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
+    const versionedUrl = `${pub.publicUrl}?v=${Date.now()}`
+    const { data: latest } = await supabase.from('profiles').select('preferences').eq('id', userId).single()
+    const base = (latest?.preferences as any) ?? {}
+    const updated = { ...base, logo_url: versionedUrl }
+    const { error: updateErr } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
+    setLogoBusy(null)
+    if (updateErr) { setError(`Logo uploaded but couldn’t save to profile: ${updateErr.message}`); return }
+    setLocalLogoUrl(versionedUrl)
+    onLogoChange?.(versionedUrl)
+  }
+  async function handleLogoRemove() {
+    setError(null)
+    setLogoBusy('remove')
+    const { data: latest } = await supabase.from('profiles').select('preferences').eq('id', userId).single()
+    const base = (latest?.preferences as any) ?? {}
+    const updated = { ...base, logo_url: null }
+    const { error: updateErr } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
+    setLogoBusy(null)
+    if (updateErr) { setError(`Couldn’t remove logo: ${updateErr.message}`); return }
+    setLocalLogoUrl(null)
+    onLogoChange?.(null)
   }
 
   // Inject a Google Fonts <link> for the chosen font so the preview
@@ -327,11 +377,37 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
         </div>
       </div>
 
-      {/* Header — logo placement + intro override. The "show studio
-          name" toggle lives in the Branding section above (one global
-          setting that applies to all guides), not duplicated here. */}
+      {/* Header — studio logo + placement + intro override. The "show
+          studio name" toggle lives in the Branding section above (one
+          global setting that applies to all guides), not duplicated
+          here. The logo itself is also one global setting (lives on
+          profiles.preferences.logo_url, not on the template), but its
+          upload UI lives here next to placement / size since that's
+          where photographers think about it. */}
       <div style={{ marginBottom: '1.25rem' }}>
         <label style={labelStyle}>Header</label>
+        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', border: '2px dashed var(--sand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', background: 'var(--cream)' }}>
+            {localLogoUrl
+              ? <img src={localLogoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <div style={{ textAlign: 'center' }}><div style={{ fontSize: 18 }}>📷</div><div style={{ fontSize: 9, color: 'var(--ink-soft)' }}>No logo</div></div>}
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Studio logo</div>
+            <input ref={logoFileRef} type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); if (logoFileRef.current) logoFileRef.current.value = '' }} style={{ display: 'none' }} />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => logoFileRef.current?.click()} disabled={logoBusy !== null} style={{ padding: '7px 14px', borderRadius: 4, border: '1.5px solid var(--sand)', background: 'white', fontSize: 12, fontWeight: 500, color: 'var(--ink-soft)', cursor: logoBusy ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: logoBusy ? 0.6 : 1 }}>
+                {logoBusy === 'upload' ? 'Uploading…' : localLogoUrl ? 'Replace logo' : 'Upload logo'}
+              </button>
+              {localLogoUrl && (
+                <button type="button" onClick={handleLogoRemove} disabled={logoBusy !== null} style={{ padding: '7px 12px', borderRadius: 4, border: 'none', background: 'transparent', fontSize: 12, color: 'var(--rust)', cursor: logoBusy ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: logoBusy ? 0.6 : 1 }}>
+                  {logoBusy === 'remove' ? 'Removing…' : 'Remove'}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 4, lineHeight: 1.5 }}>PNG or JPG · Square, at least 200×200px</div>
+          </div>
+        </div>
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Logo placement</div>
           <select

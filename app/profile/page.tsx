@@ -7,7 +7,6 @@ import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import SavedTemplatesPanel from '@/components/SavedTemplatesPanel'
 import UpgradePrompt from '@/components/UpgradePrompt'
-import { validateImageUpload } from '@/lib/upload-validate'
 
 
 interface HomeLocation {
@@ -81,10 +80,6 @@ export default function ProfilePage() {
   const [website,    setWebsite]    = useState('')
 
   const [logoPreview,    setLogoPreview]    = useState<string | null>(null)
-  const [brandAccent,    setBrandAccent]    = useState('#c4922a')
-  const [showStudioName, setShowStudioName] = useState(true)
-  const [shareTagline,   setShareTagline]   = useState("Let's find your perfect spot together.")
-  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
   // Pro-only Pick page template (font/colors/header/background). Loaded
@@ -186,9 +181,6 @@ export default function ProfilePage() {
       const p = profile.preferences as Preferences | null
       if (p) {
         setPrefs({ ...DEFAULT_PREFS, ...p })
-        if (p.brand_accent)    setBrandAccent(p.brand_accent)
-        if (p.show_studio_name !== undefined) setShowStudioName(p.show_studio_name)
-        if (p.share_tagline)   setShareTagline(p.share_tagline)
         if (p.logo_url)        setLogoPreview(p.logo_url)
         if (p.studio_name)     setStudioName(p.studio_name)
         if (p.instagram)       setInstagram(p.instagram)
@@ -494,77 +486,8 @@ export default function ProfilePage() {
     setSaving(false); setToast(error ? '⚠ Could not save' : '✓ Preferences saved!')
   }
 
-  async function saveBranding() {
-    if (!userId) return
-    setSaving(true)
-    // Re-read the latest preferences from the DB right before merging
-    // in our own fields. Without this, an in-flight handleLogoUpload
-    // (which writes preferences.logo_url separately) would have its
-    // change clobbered by whatever stale `prefs` was when the user
-    // clicked Save Branding.
-    const { data: latest } = await supabase
-      .from('profiles')
-      .select('preferences')
-      .eq('id', userId)
-      .single()
-    const base = (latest?.preferences as any) ?? prefs
-    const updated = { ...base, brand_accent: brandAccent, show_studio_name: showStudioName, share_tagline: shareTagline }
-    const { error } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
-    if (error) console.error('saveBranding failed', error)
-    setPrefs(updated)
-    setSaving(false)
-    setToast(error ? `⚠ Could not save: ${error.message}` : '✓ Branding saved!')
-  }
-
   function updatePref<K extends keyof Preferences>(key: K, val: Preferences[K]) {
     setPrefs(prev => ({ ...prev, [key]: val }))
-  }
-
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !userId) return
-    const v = validateImageUpload(file)
-    if (!v.ok) { setToast(`⚠ ${v.message}`); return }
-
-    const reader = new FileReader()
-    reader.onload = ev => setLogoPreview(ev.target?.result as string)
-    reader.readAsDataURL(file)
-
-    const path = `${userId}/logo.${v.ext}`
-    const { error: uploadErr } = await supabase.storage
-      .from('location-photos')
-      .upload(path, file, { upsert: true, contentType: v.contentType })
-    if (uploadErr) {
-      console.error('logo upload failed', uploadErr)
-      setToast(`⚠ Couldn’t upload logo: ${uploadErr.message}`)
-      return
-    }
-
-    const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
-    // Cache-bust the URL. The storage path is fixed (<userId>/logo.<ext>),
-    // so re-uploading the same extension produces the SAME publicUrl —
-    // and every browser, email client, and CDN happily serves whatever
-    // it cached on the previous load. Appending a per-upload version
-    // tag forces every <img> downstream (this page's preview, the
-    // sidebar avatar, the Pick page header, the client confirmation
-    // email) to refetch the fresh file. Cheap insurance.
-    const versionedUrl = `${pub.publicUrl}?v=${Date.now()}`
-    const updated = { ...prefs, logo_url: versionedUrl }
-    const { error: updateErr } = await supabase
-      .from('profiles')
-      .update({ preferences: updated })
-      .eq('id', userId)
-    if (updateErr) {
-      console.error('logo profile update failed', updateErr)
-      setToast(`⚠ Logo uploaded but couldn’t save to profile: ${updateErr.message}`)
-      return
-    }
-    setPrefs(updated)
-    // Replace the local preview state too so the round avatar at the
-    // top of the page updates on the same tick as the toast — no
-    // longer waiting for the FileReader's data-URL onload to settle.
-    setLogoPreview(versionedUrl)
-    setToast('✓ Logo updated!')
   }
 
   async function updatePassword() {
@@ -756,42 +679,34 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', marginBottom: '1.25rem' }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: '1rem' }}>Studio logo</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                <div style={{ width: 80, height: 80, borderRadius: '50%', border: '2px dashed var(--sand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', background: 'var(--cream)' }}>
-                  {logoPreview ? <img src={logoPreview} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ textAlign: 'center' }}><div style={{ fontSize: 22, marginBottom: 2 }}>📷</div><div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>No logo</div></div>}
-                </div>
-                <div>
-                  <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
-                  <button onClick={() => logoInputRef.current?.click()} style={{ display: 'block', padding: '9px 18px', borderRadius: 4, border: '1.5px solid var(--sand)', background: 'white', fontSize: 13, fontWeight: 500, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 8 }}>Upload logo</button>
-                  {logoPreview && <button onClick={() => setLogoPreview(null)} style={{ display: 'block', padding: '6px 12px', borderRadius: 4, border: 'none', background: 'transparent', fontSize: 12, color: 'var(--rust)', cursor: 'pointer', fontFamily: 'inherit' }}>Remove logo</button>}
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 4, lineHeight: 1.5 }}>PNG or JPG · Square, at least 200×200px</div>
-                </div>
-              </div>
-            </div>
-
-            <button onClick={saveBranding} disabled={saving} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 24px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
-              {saving ? 'Saving…' : 'Save branding'}
-            </button>
-
             {/* Location Guide templates — Pro tier. Multi-template
                 manager (list + add/rename/default/delete) wraps the
-                actual styling editor. Each template saves itself, so
-                the panel sits below the branding save button as its
-                own card. The panel handles its own non-Pro state with
-                a quiet informational placeholder (no duplicate upgrade
-                card — that's already at the top of the Branding tab). */}
+                actual styling editor. The Studio Logo upload UI lives
+                inside the editor (next to the logo placement controls)
+                rather than as a separate card here, since logo +
+                placement + size are conceptually one decision. The
+                panel forwards the logo URL + change callback through
+                to the editor; we update logoPreview here so the
+                sidebar avatar refreshes on the same tick as the
+                upload. */}
             {/* id='layout-templates' is the deep-link target used by
                 the 'Edit templates' link in the Create Location Guide
                 modal. The hash-routing useEffect below opens the
                 Branding tab AND scrolls here so the photographer
-                lands on the template manager, not the Studio Logo
-                card at the top of the tab. scroll-margin-top keeps
+                lands on the template manager. scroll-margin-top keeps
                 the title clear of the sticky AppNav. */}
-            <div id="layout-templates" style={{ marginTop: '2.5rem', scrollMarginTop: 80 }}>
-              {sectionTitle('Layout Templates', 'Design how your Location Guides look — layout, font, colors, header. Saved templates are picked per guide.')}
-              <SavedTemplatesPanel userId={userId ?? ''} isPro={isPro} currentPlan={isPro ? 'pro' : isStarter ? 'starter' : 'free'} />
+            <div id="layout-templates" style={{ marginTop: '2rem', scrollMarginTop: 80 }}>
+              {sectionTitle('Layout Templates', 'Design how your Location Guides look — logo, layout, font, colors, header. Saved templates are picked per guide.')}
+              <SavedTemplatesPanel
+                userId={userId ?? ''}
+                isPro={isPro}
+                currentPlan={isPro ? 'pro' : isStarter ? 'starter' : 'free'}
+                logoUrl={logoPreview}
+                onLogoChange={url => {
+                  setLogoPreview(url)
+                  setPrefs(p => ({ ...p, logo_url: url ?? '' }))
+                }}
+              />
             </div>
           </div>
         )}

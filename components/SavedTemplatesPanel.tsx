@@ -28,9 +28,16 @@ interface Props {
   // kept on the API so callers don't have to remove it if we ever
   // restore plan-aware copy here.
   currentPlan?: 'free' | 'starter' | 'pro'
+  // Studio logo URL + change callback. Forwarded to the active
+  // PickTemplateEditor so the logo upload UI can sit next to the
+  // logo placement controls. The logo lives globally on the
+  // photographer's profile (not per-template), so the callback lets
+  // the parent page mirror updates into its own sidebar avatar.
+  logoUrl?:    string | null
+  onLogoChange?: (url: string | null) => void
 }
 
-export default function SavedTemplatesPanel({ userId, isPro }: Props) {
+export default function SavedTemplatesPanel({ userId, isPro, logoUrl, onLogoChange }: Props) {
   const [templates, setTemplates] = useState<SavedTemplate[]>([])
   const [activeId,  setActiveId]  = useState<string | null>(null)
   const [loading,   setLoading]   = useState(true)
@@ -346,7 +353,9 @@ export default function SavedTemplatesPanel({ userId, isPro }: Props) {
             templateId={active.id}
             initial={active.config}
             isPro={isPro}
+            logoUrl={logoUrl}
             onChange={next => handleConfigChange(active.id, next)}
+            onLogoChange={onLogoChange}
           />
         </div>
       )}
