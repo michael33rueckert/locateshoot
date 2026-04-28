@@ -112,6 +112,11 @@ export default function ClientPickerPage() {
   const [clientEmail,      setClientEmail]      = useState('')
   const [emailError,       setEmailError]       = useState('')
   const [submitting,       setSubmitting]       = useState(false)
+  // Transient banner for non-blocking notices: max-pick reached when
+  // they tap a 5th location, submit failed and they should retry, etc.
+  // Self-clears via timeout; rendered as a small floating pill near
+  // the bottom of the screen above the confirm bar.
+  const [pickToast,        setPickToast]        = useState<string | null>(null)
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   // Desktop (≥769px) always shows the map. Below that the sidebar takes the
   // screen and the map is hidden until `mobileMapVisible` flips. ClientMap
@@ -140,6 +145,12 @@ export default function ClientPickerPage() {
   // Reset the drag offset when the detail panel switches to a new
   // location, so a half-dragged dismissal doesn't leak into the next open.
   useEffect(() => { setDetailDragY(0); detailDragStart.current = null }, [detailLoc?.id])
+  // Auto-clear the transient pick toast after a few seconds.
+  useEffect(() => {
+    if (!pickToast) return
+    const id = setTimeout(() => setPickToast(null), 3200)
+    return () => clearTimeout(id)
+  }, [pickToast])
   function onDetailHandlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     e.currentTarget.setPointerCapture(e.pointerId)
     detailDragStart.current = e.clientY
@@ -375,7 +386,10 @@ export default function ClientPickerPage() {
     if (disabledSet.has(key)) return
     if (chosenIds.length >= maxPicks) {
       // Replace the earliest pick if they're at the limit for a single-pick link.
-      if (maxPicks === 1) setChosenIds([key])
+      if (maxPicks === 1) { setChosenIds([key]); return }
+      // Multi-pick at limit: silently dropping the tap was confusing —
+      // the user thought the UI was broken. Surface it as a toast.
+      setPickToast(`You can choose up to ${maxPicks} locations. Unselect one to swap.`)
       return
     }
     setChosenIds(prev => [...prev, key])
@@ -384,6 +398,7 @@ export default function ClientPickerPage() {
   async function savePick(first: string | null, last: string | null, email: string | null) {
     if (!shareData || chosenLocs.length === 0) return
     setSubmitting(true)
+    let ok = false
     try {
       const res = await fetch('/api/submit-pick', {
         method: 'POST',
@@ -399,9 +414,21 @@ export default function ClientPickerPage() {
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         console.error('submit-pick failed', j)
+      } else {
+        ok = true
       }
     } catch (e) { console.error(e) }
-    setSubmitting(false); setShowEmailPrompt(false); setConfirmed(true)
+    setSubmitting(false)
+    if (ok) {
+      // Only show the success screen when the server actually accepted the
+      // submission. Previously we set confirmed=true unconditionally, which
+      // meant a 500 / 429 / network failure looked identical to success and
+      // the photographer never got notified.
+      setShowEmailPrompt(false)
+      setConfirmed(true)
+    } else {
+      setPickToast('Couldn’t send your pick. Please try again in a moment.')
+    }
   }
 
   function confirmChoice() {
@@ -414,7 +441,9 @@ export default function ClientPickerPage() {
     const last  = clientLastName.trim()
     const email = clientEmail.trim()
     if (!first || !last) { setEmailError('Please enter your first and last name.'); return }
-    if (!email || !email.includes('@')) { setEmailError('Please enter a valid email.'); return }
+    // Tighter than `email.includes('@')` — used to let "test@" or
+     // "@example.com" through to the server, which then rejected them.
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError('Please enter a valid email.'); return }
     setEmailError(''); savePick(first, last, email)
   }
 
@@ -709,6 +738,27 @@ export default function ClientPickerPage() {
       <button className="pick-mobile-toggle" onClick={() => setMobileMapVisible(p => !p)}>
         {mobileMapVisible ? '☰ View List' : '🗺 View Map'}
       </button>
+
+      {/* Transient toast — sits above the confirm bar. Used for over-
+          limit taps and submit failures so a 5th selection or a 500
+          response don't fail silently. */}
+      {pickToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed', left: '50%', bottom: 90, transform: 'translateX(-50%)',
+            zIndex: 600, maxWidth: 'min(520px, 92vw)',
+            background: 'rgba(26,22,18,.94)', color: 'var(--cream)',
+            padding: '10px 16px', borderRadius: 999,
+            border: '1px solid rgba(245,240,232,.12)',
+            boxShadow: '0 8px 24px rgba(0,0,0,.3)',
+            fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: 'center',
+          }}
+        >
+          {pickToast}
+        </div>
+      )}
 
       {/* Confirm bar */}
       <div style={{ background: 'var(--ink)', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', borderTop: '1px solid rgba(255,255,255,.08)', flexShrink: 0 }}>

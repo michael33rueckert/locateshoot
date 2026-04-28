@@ -46,7 +46,8 @@ export async function POST(request: Request) {
   }
 
   // Unique index on profiles.custom_domain catches another user having it, but check early for a nicer error.
-  const { data: clash } = await db.from('profiles').select('id').ilike('custom_domain', domain).neq('id', user.id).maybeSingle()
+  // domain is normalized lowercase by validateCustomDomain, stored values are also lowercase, so eq suffices.
+  const { data: clash } = await db.from('profiles').select('id').eq('custom_domain', domain).neq('id', user.id).maybeSingle()
   if (clash) return NextResponse.json({ error: 'domain_taken', message: 'That domain is already in use by another account.' }, { status: 409 })
 
   const add = await addProjectDomain(domain)

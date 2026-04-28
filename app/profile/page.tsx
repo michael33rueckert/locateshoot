@@ -452,9 +452,12 @@ export default function ProfilePage() {
       instagram:   instagram.trim() || undefined,
       website:     website.trim() || undefined,
     }
+    // Email is auth-managed (auth.users.email) — there's no `email`
+    // column on public.profiles, so trying to update it here used to
+    // silently fail every "Save profile" click. Just persist the
+    // editable fields; email stays in auth.
     const { error } = await supabase.from('profiles').update({
       full_name:   fullName.trim(),
-      email:       email.trim(),
       preferences: updated,
     }).eq('id', userId)
     if (!error) setPrefs(updated)

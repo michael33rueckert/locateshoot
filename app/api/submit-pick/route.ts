@@ -75,7 +75,10 @@ export async function POST(request: Request) {
   const apex = (process.env.NEXT_PUBLIC_APEX_DOMAIN ?? 'locateshoot.com').toLowerCase()
   const isPrimary = !host || host === apex || host === `www.${apex}` || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.vercel.app')
   if (!isPrimary) {
-    const { data: owner } = await admin.from('profiles').select('id').ilike('custom_domain', host).maybeSingle()
+    // host is lowercased above; stored profiles.custom_domain is
+    // normalized to lowercase by validateCustomDomain on save, so eq
+    // is sufficient — no need for case-insensitive ilike.
+    const { data: owner } = await admin.from('profiles').select('id').eq('custom_domain', host).maybeSingle()
     if (!owner || owner.id !== link.user_id) {
       return NextResponse.json({ error: 'share link not found' }, { status: 404 })
     }
