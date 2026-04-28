@@ -14,6 +14,51 @@ import TemplatePreview from '@/components/TemplatePreview'
 import { validateImageUpload } from '@/lib/upload-validate'
 import { compressImageIfNeeded } from '@/lib/image-compress'
 
+// Curated quick-pick palettes per color role. The OS color picker
+// defaults to bright primaries (red, lime green, electric blue) that
+// no photographer would put on a client-facing page; these swatches
+// give a fast path to the muted, photographer-friendly tones most
+// studios actually want. The hex input + native picker remain for
+// anything outside the palette.
+const COLOR_SWATCHES: Record<'background' | 'text' | 'accent' | 'accentText', { hex: string; name: string }[]> = {
+  background: [
+    { hex: '#f9f6f1', name: 'Cream' },
+    { hex: '#ffffff', name: 'White' },
+    { hex: '#faf3ee', name: 'Blush' },
+    { hex: '#f4ede0', name: 'Sand' },
+    { hex: '#ebe4d4', name: 'Oat' },
+    { hex: '#e8ebe4', name: 'Soft sage' },
+    { hex: '#2a2520', name: 'Charcoal' },
+    { hex: '#1a1612', name: 'Ink' },
+  ],
+  text: [
+    { hex: '#1a1612', name: 'Ink' },
+    { hex: '#2a2520', name: 'Charcoal' },
+    { hex: '#3d3026', name: 'Espresso' },
+    { hex: '#4a4036', name: 'Warm gray' },
+    { hex: '#5a4d3f', name: 'Walnut' },
+    { hex: '#f5f0e8', name: 'Cream (on dark)' },
+    { hex: '#ffffff', name: 'White (on dark)' },
+  ],
+  accent: [
+    { hex: '#c4922a', name: 'Gold' },
+    { hex: '#d4a76a', name: 'Brass' },
+    { hex: '#a16b3d', name: 'Terracotta' },
+    { hex: '#c08a8a', name: 'Dusty rose' },
+    { hex: '#8a7a6a', name: 'Taupe' },
+    { hex: '#6a8a6a', name: 'Sage' },
+    { hex: '#3d4f5c', name: 'Deep navy' },
+    { hex: '#8a3d3d', name: 'Burgundy' },
+    { hex: '#1a1612', name: 'Ink' },
+  ],
+  accentText: [
+    { hex: '#1a1612', name: 'Ink' },
+    { hex: '#2a2520', name: 'Charcoal' },
+    { hex: '#ffffff', name: 'White' },
+    { hex: '#f5f0e8', name: 'Cream' },
+  ],
+}
+
 // Pro-only Location Guide template editor. Saves debounced as the
 // photographer edits — no manual Save button.
 //
@@ -367,10 +412,15 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
         </div>
       </div>
 
-      {/* Colors */}
+      {/* Colors — curated swatch palettes per role so the photographer
+          gets photographer-friendly defaults (warm neutrals, muted
+          accents) instead of the bright primary swatches the native
+          OS color picker shows. The native picker is still available
+          via the small chip at the end of each row, plus the hex
+          field accepts any value the swatches don't cover. */}
       <div style={{ marginBottom: '1.25rem' }}>
         <label style={labelStyle}>Colors</label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
           {colorKeys.map(key => {
             const labels: Record<ColorKey, string> = {
               background: 'Background',
@@ -380,15 +430,41 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
             }
             const draft = colorDrafts[key]
             const valid = isValidHex(draft)
+            const swatches = COLOR_SWATCHES[key]
+            const currentLower = (valid ? draft : DEFAULT_TEMPLATE.colors[key]).toLowerCase()
             return (
               <div key={key}>
-                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>{labels[key]}</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 6 }}>{labels[key]}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {swatches.map(sw => {
+                    const active = sw.hex.toLowerCase() === currentLower
+                    return (
+                      <button
+                        key={sw.hex}
+                        type="button"
+                        onClick={() => setColor(key, sw.hex)}
+                        title={`${sw.name} · ${sw.hex}`}
+                        aria-label={sw.name}
+                        style={{
+                          width: 32, height: 32, borderRadius: '50%',
+                          background: sw.hex,
+                          border: active ? '2px solid var(--gold)' : '1px solid rgba(0,0,0,.15)',
+                          boxShadow: active ? '0 0 0 2px white inset' : 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          flexShrink: 0,
+                        }}
+                      />
+                    )
+                  })}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input
                     type="color"
                     value={valid ? draft : DEFAULT_TEMPLATE.colors[key]}
                     onChange={e => setColor(key, e.target.value)}
-                    aria-label={`${labels[key]} color picker`}
+                    aria-label={`${labels[key]} custom color`}
+                    title="Pick any color"
                     style={{ width: 40, height: 36, border: '1px solid var(--cream-dark)', borderRadius: 4, cursor: 'pointer', padding: 2, background: 'white' }}
                   />
                   <input

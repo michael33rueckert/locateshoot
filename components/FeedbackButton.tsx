@@ -196,7 +196,7 @@ export default function FeedbackButton() {
                     rows={4}
                     autoFocus
                     placeholder={
-                      type === 'bug'    ? 'e.g. The "Send my picks" button stayed disabled even after I selected a location.'
+                      type === 'bug'    ? 'e.g. The Send my choice button stayed disabled even after I selected a location.'
                       : type === 'idea' ? 'e.g. Bulk-edit photos across multiple portfolio locations at once.'
                       : type === 'praise' ? 'e.g. The Pick page templates look amazing on mobile.'
                       : ''

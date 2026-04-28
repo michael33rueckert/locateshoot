@@ -495,13 +495,13 @@ export default function ClientPickerPage() {
   const fontHref = googleFontHref(tpl.font)
 
   // Optional background image from the photographer's template — sits
-  // behind the entire page. The header / sidebar / map all have their
-  // own opaque backgrounds, so it only peeks through where they don't
-  // (mostly between/around cards on desktop). Match the in-editor
-  // preview: cover + center.
-  const tplBgImage = tpl.background.type === 'image' && tpl.background.imageUrl
-    ? `url(${tpl.background.imageUrl})`
-    : 'none'
+  // behind the entire page. When set, the body becomes transparent and
+  // the sidebar drops to a translucent + blurred frosted-glass surface
+  // so the image is visibly behind the content (otherwise the opaque
+  // sidebar/body completely covered it and it never showed up). When
+  // no bg image is set, the existing solid cream/white surfaces stay.
+  const hasBgImage = tpl.background.type === 'image' && !!tpl.background.imageUrl
+  const tplBgImage = hasBgImage ? `url(${tpl.background.imageUrl})` : 'none'
 
   return (
     <div
@@ -549,11 +549,17 @@ export default function ClientPickerPage() {
           via the same View Map button mobile uses). The long-form
           alternating photo/text rows need full-page real estate to
           breathe; a fixed 420px sidebar would crush them. */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--cream)' }} className="pick-body" data-layout={tpl.layout}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: hasBgImage ? 'transparent' : 'var(--cream)' }} className="pick-body" data-layout={tpl.layout}>
 
         {/* Sidebar */}
         <div className={`pick-sidebar${mobileMapVisible ? ' pick-sidebar-hidden' : ''}`}
-          style={{ background: 'white', borderRight: '1px solid var(--cream-dark)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          style={{
+            background: hasBgImage ? 'rgba(255,255,255,0.86)' : 'white',
+            backdropFilter:        hasBgImage ? 'blur(10px)' : undefined,
+            WebkitBackdropFilter:  hasBgImage ? 'blur(10px)' : undefined,
+            borderRight: '1px solid var(--cream-dark)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
 
           <div style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>Browse locations</div>
