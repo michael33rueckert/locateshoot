@@ -41,7 +41,7 @@ insert into public.locations (
  'NPS photo permit required for commercial photography on Arch grounds.',
  'published', 'curated_v1', 4.8, 91),
 ('Forest Park', 'St. Louis', 'MO', 38.6357, -90.2845,
- '1,300-acre Victorian-era park hosting the World\'s Fair Pavilion, lagoons, mature oaks, and the Saint Louis Art Museum.',
+ '1,300-acre Victorian-era park hosting the World''s Fair Pavilion, lagoons, mature oaks, and the Saint Louis Art Museum.',
  'public', array['Park','Architecture','Outdoor'], true, 'likely',
  'Forest Park Forever / city permit required for organized shoots.',
  'published', 'curated_v1', 4.7, 88),
@@ -53,7 +53,7 @@ insert into public.locations (
 
 -- ── Pittsburgh, PA ────────────────────────────────────────────────────────
 ('Mount Washington Overlook', 'Pittsburgh', 'PA', 40.4326, -80.0089,
- 'Cliffside view from Grandview Avenue — three rivers meeting Pittsburgh\'s downtown skyline, especially dramatic at blue hour.',
+ 'Cliffside view from Grandview Avenue — three rivers meeting Pittsburgh''s downtown skyline, especially dramatic at blue hour.',
  'public', array['Skyline','Overlook','Iconic'], false, 'likely',
  'Public sidewalk; large crews may need a city permit.',
  'published', 'curated_v1', 4.8, 91),
@@ -92,7 +92,7 @@ insert into public.locations (
  'CMA staff handles photo permissions for the atrium and galleries.',
  'published', 'curated_v1', 4.7, 87),
 ('Edgewater Park', 'Cleveland', 'OH', 41.4895, -81.7376,
- 'Lake Erie beach park with Cleveland\'s skyline framed across the water — perfect for sunset sessions.',
+ 'Lake Erie beach park with Cleveland''s skyline framed across the water — perfect for sunset sessions.',
  'public', array['Beach','Skyline','Sunset'], false, 'likely',
  'Cleveland Metroparks photo permit applies.',
  'published', 'curated_v1', 4.5, 84),
@@ -121,7 +121,7 @@ insert into public.locations (
 
 -- ── Milwaukee, WI ─────────────────────────────────────────────────────────
 ('Milwaukee Art Museum — Quadracci Pavilion', 'Milwaukee', 'WI', 43.0408, -87.8970,
- 'Calatrava\'s 2001 sail-like white wing — the moving Burke Brise Soleil opens daily, Lake Michigan behind.',
+ 'Calatrava''s 2001 sail-like white wing — the moving Burke Brise Soleil opens daily, Lake Michigan behind.',
  'public', array['Architecture','Modernist','Iconic'], true, 'likely',
  'MAM events team handles paid photography on the grounds.',
  'published', 'curated_v1', 4.8, 90),
@@ -257,11 +257,11 @@ insert into public.locations (
 
 -- ── Buffalo, NY ───────────────────────────────────────────────────────────
 ('Niagara Falls — American Side', 'Buffalo', 'NY', 43.0828, -79.0710,
- 'World\'s most famous waterfall, 30 minutes from downtown Buffalo — Goat Island, Bridal Veil, the rainbow at the right hour.',
+ 'World''s most famous waterfall, 30 minutes from downtown Buffalo — Goat Island, Bridal Veil, the rainbow at the right hour.',
  'public', array['Waterfall','Iconic','Outdoor'], true, 'likely',
  'Niagara Falls State Park requires a permit for commercial photography.',
  'published', 'curated_v1', 4.9, 92),
-('Frank Lloyd Wright\'s Darwin Martin House', 'Buffalo', 'NY', 42.9415, -78.8662,
+('Frank Lloyd Wright''s Darwin Martin House', 'Buffalo', 'NY', 42.9415, -78.8662,
  '1905 Prairie-style estate — horizontal lines, art-glass windows, restored interiors and gardens.',
  'public', array['Architecture','Historic','Iconic'], true, 'likely',
  'Martin House Conservancy handles paid photography requests.',
@@ -313,7 +313,7 @@ insert into public.locations (
  'Capitol Police approval required for commercial photography on grounds.',
  'published', 'curated_v1', 4.5, 84),
 ('Bushnell Park', 'Hartford', 'CT', 41.7641, -72.6803,
- 'America\'s oldest public park (1854) — Memorial Arch, the 1914 Stein & Goldstein carousel, the capitol behind.',
+ 'America''s oldest public park (1854) — Memorial Arch, the 1914 Stein & Goldstein carousel, the capitol behind.',
  'public', array['Park','Historic','Iconic'], true, 'likely',
  'Hartford Parks permit applies.',
  'published', 'curated_v1', 4.5, 83),
@@ -366,7 +366,7 @@ insert into public.locations (
 ('Mission San Xavier del Bac', 'Tucson', 'AZ', 32.1067, -110.9682,
  '"White Dove of the Desert" — 1797 Spanish colonial mission, brilliant white facade against the desert sky.',
  'public', array['Historic','Architecture','Religious'], true, 'likely',
- 'Tohono O\'odham Nation requires permission for commercial photography.',
+ 'Tohono O''odham Nation requires permission for commercial photography.',
  'published', 'curated_v1', 4.8, 90),
 ('Sabino Canyon', 'Tucson', 'AZ', 32.3094, -110.8189,
  'Desert oasis canyon in the Santa Catalina foothills — saguaros, seasonal waterfalls, dramatic rock walls. Easy tram access.',
