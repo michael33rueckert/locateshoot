@@ -964,8 +964,14 @@ export default function ExplorePage() {
               re-centered around that spot. Reset clears the anchor and
               reverts to the underlying home / Near-me / no-anchor view. */}
           {clickedNearLoc && (
-            <div style={{ background: 'rgba(196,146,42,.08)', borderBottom: '1px solid rgba(196,146,42,.2)', padding: '8px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
-              <div style={{ fontSize: 12, color: 'var(--ink)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ background: 'rgba(196,146,42,.08)', borderBottom: '1px solid rgba(196,146,42,.2)', padding: '8px 1.25rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}>
+              {/* Allow text to wrap so long location names ("Frank Lloyd
+                  Wright''s Darwin Martin House") aren't truncated on
+                  the narrower tablet sidebar where the previous
+                  ellipsis was eating the whole name. flexWrap on the
+                  parent also lets Reset drop to a second line if the
+                  banner is really cramped. */}
+              <div style={{ fontSize: 12, color: 'var(--ink)', minWidth: 0, flex: '1 1 160px', lineHeight: 1.4, wordBreak: 'break-word' }}>
                 <span style={{ color: 'var(--gold)' }}>📍</span> Showing locations near <strong style={{ fontWeight: 600 }}>{clickedNearLoc.name}</strong>
               </div>
               <button

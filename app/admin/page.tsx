@@ -87,6 +87,7 @@ export default function AdminPage() {
 
   const [metrics,     setMetrics]     = useState<AdminMetrics | null>(null)
   const [users,       setUsers]       = useState<AdminUser[]>([])
+  const [userSearch,  setUserSearch]  = useState('')
   const [pendingLocs, setPendingLocs] = useState<PendingLocation[]>([])
   const [locationCount, setLocationCount] = useState<number>(0)
 
@@ -323,13 +324,38 @@ export default function AdminPage() {
         </div>
 
         {/* USERS */}
+        {(() => {
+          const q = userSearch.trim().toLowerCase()
+          const filteredUsers = q === '' ? users : users.filter(u =>
+            (u.email ?? '').toLowerCase().includes(q) ||
+            (u.full_name ?? '').toLowerCase().includes(q),
+          )
+          return (
         <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>👥 Users</div>
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{users.length} shown</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 280px', maxWidth: 480 }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  placeholder="Search name or email"
+                  style={{ width: '100%', padding: '7px 30px 7px 12px', border: '1px solid var(--cream-dark)', borderRadius: 6, fontFamily: 'inherit', fontSize: 13, outline: 'none', color: 'var(--ink)', background: 'white' }}
+                />
+                {userSearch
+                  ? <button onClick={() => setUserSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1, padding: 0 }}>✕</button>
+                  : <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--ink-soft)', pointerEvents: 'none' }}>🔍</span>}
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+                {q === '' ? `${users.length} shown` : `${filteredUsers.length} of ${users.length}`}
+              </span>
+            </div>
           </div>
-          {users.length === 0 ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No users yet</div>
+          {filteredUsers.length === 0 ? (
+            <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+              {q === '' ? 'No users yet' : `No users match "${userSearch}"`}
+            </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -344,49 +370,61 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(u => (
+                  {filteredUsers.map(u => (
                     <tr key={u.id} style={{ borderBottom: '1px solid var(--cream-dark)' }}>
                       <td style={{ padding: '9px 12px', color: 'var(--ink)', whiteSpace: 'nowrap' }}>{u.email}</td>
                       <td style={{ padding: '9px 12px', color: 'var(--ink-soft)' }}>{u.full_name ?? '—'}</td>
                       <td style={{ padding: '9px 12px' }}>
-                        {/* Plan picker — current pill + two 'switch to'
-                            buttons for the other two tiers. Confirm
-                            before downgrading (free) or moving sideways
-                            (free→starter is fine, but starter→free or
-                            pro→starter could surprise the user with a
-                            sudden feature loss). */}
+                        {/* Plan picker — segmented control of all three
+                            tiers. The active tier is filled (gold for
+                            Pro, soft gold for Starter, dark ink for
+                            Free) so it's obvious at a glance which one
+                            is set. Inactive tiers are white-bg / muted.
+                            Clicking an inactive one switches; confirms
+                            on downgrades (target rank < current rank). */}
                         {(() => {
                           const current = (u.plan ?? 'free') as 'free' | 'starter' | 'pro'
-                          const pillBg = current === 'pro' ? 'rgba(196,146,42,.1)' : current === 'starter' ? 'rgba(196,146,42,.06)' : 'var(--cream-dark)'
-                          const pillFg = current === 'pro' ? 'var(--gold)' : current === 'starter' ? 'var(--gold)' : 'var(--ink-soft)'
-                          const pillIcon = current === 'pro' ? '⭐ ' : current === 'starter' ? '✦ ' : ''
+                          const tiers: ('free' | 'starter' | 'pro')[] = ['free', 'starter', 'pro']
+                          const labels: Record<string, string> = { free: 'Free', starter: '✦ Starter', pro: '⭐ Pro' }
                           function switchTo(target: 'free' | 'starter' | 'pro') {
-                            // Warn when moving to a less-featured tier.
+                            if (target === current) return
                             const downgradeRanks: Record<string, number> = { free: 0, starter: 1, pro: 2 }
                             if (downgradeRanks[target] < downgradeRanks[current]) {
                               if (!confirm(`Move ${u.email} from ${current} to ${target}? They'll lose tier-gated features (templates, custom domain, etc.) immediately.`)) return
                             }
                             setUserPlan(u.id, target)
                           }
-                          const tiers: ('free' | 'starter' | 'pro')[] = ['free', 'starter', 'pro']
-                          const labels: Record<string, string> = { free: 'Free', starter: '✦ Starter', pro: '⭐ Pro' }
+                          function activeStyles(t: 'free' | 'starter' | 'pro'): React.CSSProperties {
+                            if (t === 'pro')     return { background: 'var(--gold)', color: 'var(--ink)', fontWeight: 700 }
+                            if (t === 'starter') return { background: 'rgba(196,146,42,.18)', color: 'var(--gold)', fontWeight: 700 }
+                            return { background: 'var(--ink)', color: 'var(--cream)', fontWeight: 700 }
+                          }
                           return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: pillBg, color: pillFg }}>{pillIcon}{current}</span>
-                              {tiers.filter(t => t !== current).map(t => (
-                                <button
-                                  key={t}
-                                  onClick={() => switchTo(t)}
-                                  style={{
-                                    padding: '2px 7px', borderRadius: 4,
-                                    background: t === 'pro' ? 'var(--ink)' : t === 'starter' ? 'rgba(196,146,42,.12)' : 'transparent',
-                                    border: t === 'pro' ? 'none' : t === 'starter' ? '1px solid rgba(196,146,42,.4)' : '1px solid rgba(181,75,42,.25)',
-                                    fontSize: 10, fontWeight: 500,
-                                    color: t === 'pro' ? 'var(--cream)' : t === 'starter' ? 'var(--gold)' : 'var(--rust)',
-                                    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                  }}
-                                >→ {labels[t]}</button>
-                              ))}
+                            <div style={{ display: 'inline-flex', borderRadius: 6, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+                              {tiers.map((t, i) => {
+                                const isActive = t === current
+                                return (
+                                  <button
+                                    key={t}
+                                    onClick={() => switchTo(t)}
+                                    title={isActive ? `Currently ${t}` : `Switch to ${t}`}
+                                    style={{
+                                      padding: '5px 12px',
+                                      border: 'none',
+                                      borderRight: i < tiers.length - 1 ? '1px solid var(--cream-dark)' : 'none',
+                                      fontSize: 11,
+                                      fontFamily: 'inherit',
+                                      whiteSpace: 'nowrap',
+                                      cursor: isActive ? 'default' : 'pointer',
+                                      ...(isActive
+                                        ? activeStyles(t)
+                                        : { background: 'white', color: 'var(--ink-soft)', fontWeight: 400 }),
+                                    }}
+                                  >
+                                    {labels[t]}
+                                  </button>
+                                )
+                              })}
                             </div>
                           )
                         })()}
@@ -401,6 +439,8 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+        )
+        })()}
 
         {/* PENDING SUBMISSIONS */}
         {pendingLocs.length > 0 && (
