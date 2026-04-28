@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import AuthModal from '@/components/AuthModal'
 import TemplatePreview from '@/components/TemplatePreview'
 import { LaptopFrame, PhoneFrame } from '@/components/DeviceFrame'
-import { PRESETS } from '@/lib/pick-template'
+import { DEFAULT_TEMPLATE, type LayoutKind } from '@/lib/pick-template'
 import type { User } from '@supabase/supabase-js'
 
 const HomeMap = dynamic(() => import('@/components/HomeMap'), { ssr: false })
@@ -321,23 +321,49 @@ export default function HomePage() {
             </h2>
           </div>
 
-          {/* Row 1 — Templates (visual left, text right) */}
+          {/* Row 1 — Templates (visual left, text right). The visual
+              mirrors the Profile → Branding layout picker: six thumb-
+              previews, each rendering the same template but with a
+              different layout, in a 3×2 grid with a mask gradient that
+              fades the bottom of each thumbnail so they line up evenly. */}
           <div className="feature-stripe">
             <div className="feature-stripe-visual">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: 14, background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 12, boxShadow: '0 4px 20px rgba(26,22,18,.05)' }}>
-                <TemplatePreview template={PRESETS[0].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
-                <TemplatePreview template={PRESETS[1].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
-                <TemplatePreview template={PRESETS[2].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
-                <TemplatePreview template={PRESETS[3].config} variant="thumb" studioName="Studio" intro="Pick your spot" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, padding: 14, background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 12, boxShadow: '0 4px 20px rgba(26,22,18,.05)' }}>
+                {([
+                  { value: 'editorial', label: 'Editorial' },
+                  { value: 'card',      label: 'Card' },
+                  { value: 'grid',      label: 'Grid' },
+                  { value: 'magazine',  label: 'Magazine' },
+                  { value: 'list',      label: 'Compact list' },
+                  { value: 'minimal',   label: 'Minimal' },
+                ] as { value: LayoutKind; label: string }[]).map(opt => (
+                  <div key={opt.value} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 12, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2 }}>
+                      {opt.label}
+                    </div>
+                    <div style={{
+                      height: 130, overflow: 'hidden', borderRadius: 4,
+                      WebkitMaskImage: 'linear-gradient(to bottom, black 78%, transparent 100%)',
+                      maskImage:        'linear-gradient(to bottom, black 78%, transparent 100%)',
+                    }}>
+                      <TemplatePreview
+                        template={{ ...DEFAULT_TEMPLATE, layout: opt.value }}
+                        variant="thumb"
+                        studioName="Studio"
+                        intro="Pick your spot"
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="feature-stripe-text">
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 10 }}>Templates</div>
               <h3 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 14px' }}>
-                Five layout templates to choose from.
+                Six layout templates to choose from.
               </h3>
               <p style={{ fontSize: 15, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, margin: '0 0 14px' }}>
-                Wedding-magazine editorial, modern minimal, romantic blush, bold studio dark, and warm boho — each designed to fit a different photographer&apos;s brand. Pick the one that matches yours.
+                Editorial, Card, Grid, Magazine, Compact list, and Minimal — each one a different way to walk a client through your locations. Pick the one that fits your brand and tweak the font, colors, and header from there.
               </p>
               <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, margin: 0 }}>
                 Set a default and assign a different template per Location Guide — wedding clients see one look; engagement clients see another.

@@ -315,9 +315,9 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
                 </div>
                 <div
                   style={{
-                    height: 220, overflow: 'hidden', borderRadius: 6,
-                    WebkitMaskImage: 'linear-gradient(to bottom, black 78%, transparent 100%)',
-                    maskImage:        'linear-gradient(to bottom, black 78%, transparent 100%)',
+                    height: 290, overflow: 'hidden', borderRadius: 6,
+                    WebkitMaskImage: 'linear-gradient(to bottom, black 82%, transparent 100%)',
+                    maskImage:        'linear-gradient(to bottom, black 82%, transparent 100%)',
                   }}
                 >
                   <TemplatePreview template={{ ...livePreview, layout: opt.value }} variant="thumb" studioName="Studio" intro="Pick a location" />
