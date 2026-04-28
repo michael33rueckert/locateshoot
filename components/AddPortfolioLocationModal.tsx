@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import { validateImageUpload } from '@/lib/upload-validate'
+import { compressImageIfNeeded } from '@/lib/image-compress'
 
 // Shared "add to portfolio" modal. Mirrors the Edit modal's full field set —
 // name, description, city/state, access, tags, best time, parking, permit,
@@ -52,15 +53,21 @@ export default function AddPortfolioLocationModal({
   }
   function removeTag(t: string) { setTags(p => p.filter(x => x !== t)) }
 
-  function handleFiles(files: FileList | null) {
+  async function handleFiles(files: FileList | null) {
     if (!files) return
     const next: PendingPhoto[] = []
     const rejected: string[] = []
-    for (const f of Array.from(files).slice(0, 10 - photos.length)) {
-      // Validate at intake so the user gets immediate feedback (no
-      // SVG, no oversize, no exotic types). Backstopped at upload.
+    // Run compression up front so a 30 MB raw camera export gets
+    // shrunk before the 10 MB validator sees it. Files already under
+    // the cap pass through untouched. We compress sequentially because
+    // the helper relies on a single Image decoder; it's fast for the
+    // typical 1–10 file batch a photographer drops in.
+    for (const raw of Array.from(files).slice(0, 10 - photos.length)) {
+      let f = raw
+      try { f = await compressImageIfNeeded(raw) }
+      catch (e: any) { rejected.push(`${raw.name}: couldn't process (${e?.message ?? 'unknown'})`); continue }
       const v = validateImageUpload(f)
-      if (!v.ok) { rejected.push(`${f.name}: ${v.message}`); continue }
+      if (!v.ok) { rejected.push(`${raw.name}: ${v.message}`); continue }
       next.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file: f, previewUrl: URL.createObjectURL(f) })
     }
     setPhotos(p => [...p, ...next])

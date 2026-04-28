@@ -7,6 +7,7 @@ import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
 import { validateImageUpload } from '@/lib/upload-validate'
+import { compressImageIfNeeded } from '@/lib/image-compress'
 
 // Shared edit modal for a portfolio location. Mounted from the Dashboard and
 // the dedicated /portfolio page — both read/write the same portfolio_locations
@@ -235,9 +236,15 @@ export default function PortfolioEditModal({
     // Start new photos at the end of the current order.
     let nextOrder = photos.length
     let firstError: string | null = null
-    for (const f of files) {
+    for (const raw of files) {
       try {
-        // File-extension extraction. Files dropped from some apps come
+        // Auto-resize files over the 10MB cap before validation —
+        // a 30MB raw camera export gets shrunk to a web-friendly size
+        // so the photographer doesn't have to hand-resize. Files
+        // already under the cap pass through unchanged.
+        let f = raw
+        try { f = await compressImageIfNeeded(raw) }
+        catch (e: any) { if (!firstError) firstError = `Couldn't process ${raw.name}: ${e?.message ?? 'unknown'}`; continue }
         // Centralized image validation: blocks SVG (script-bearing
         // XSS risk when served via getPublicUrl), enforces 10MB cap,
         // and normalizes the extension/MIME so iOS screenshots with
@@ -271,7 +278,7 @@ export default function PortfolioEditModal({
         }
         if (inserted) uploaded.push(inserted)
       } catch (e: any) {
-        console.error('upload threw', e, { name: f.name })
+        console.error('upload threw', e, { name: raw.name })
         if (!firstError) firstError = e?.message ?? 'Upload threw an unexpected error.'
       }
     }

@@ -202,8 +202,11 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
   const [logoBusy, setLogoBusy]         = useState<'upload' | 'remove' | null>(null)
   const logoFileRef = useRef<HTMLInputElement>(null)
   useEffect(() => { setLocalLogoUrl(logoUrl ?? null) }, [logoUrl])
-  async function handleLogoUpload(file: File) {
+  async function handleLogoUpload(rawFile: File) {
     setError(null)
+    let file = rawFile
+    try { file = await compressImageIfNeeded(rawFile) }
+    catch (e: any) { setError(`Couldn’t process logo: ${e?.message ?? 'unknown error'}`); return }
     const v = validateImageUpload(file)
     if (!v.ok) { setError(v.message); return }
     setLogoBusy('upload')
