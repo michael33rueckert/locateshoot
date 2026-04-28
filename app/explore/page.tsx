@@ -183,7 +183,13 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
                   </div>
                 : <button onClick={()=>onAddToPortfolio(loc.id)} style={{width:'100%',padding:'12px',borderRadius:4,cursor:'pointer',fontFamily:'inherit',fontSize:14,fontWeight:600,marginBottom:10,background:'var(--gold)',color:'var(--ink)',border:'none'}}>Add to my portfolio</button>)
             : <button onClick={onSignIn} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--ink)',color:'var(--cream)',fontFamily:'inherit',fontSize:14,fontWeight:600,border:'none',cursor:'pointer',marginBottom:10}}>Sign in to add to your portfolio</button>}
-          {user && (
+          {/* Favorite + Share are skipped for manually-added portfolio
+              entries: favoriting them would FK-fail (location_favorites
+              references public locations.id; manual entries don't have
+              one), and the share-with-client flow expects a public
+              location id too. Photographers can already share manual
+              entries via the regular Location Guide creation flow. */}
+          {user && !loc.isManualPortfolio && (
             <button
               onClick={() => onToggleFavorite(loc.id)}
               style={{
@@ -199,7 +205,7 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
               {isFavorite ? '★ Favorited — saved for later' : '☆ Save to favorites'}
             </button>
           )}
-          {user&&<button onClick={shareWithClient} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer',marginBottom:'1rem'}}>🔗 Share with client</button>}
+          {user && !loc.isManualPortfolio && <button onClick={shareWithClient} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer',marginBottom:'1rem'}}>🔗 Share with client</button>}
           {isAdmin&&(
             <div style={{padding:'10px 12px',background:'rgba(26,22,18,.04)',border:'1px dashed var(--cream-dark)',borderRadius:6,marginBottom:'1rem',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginRight:'auto'}}>🛠 Admin</span>
@@ -251,6 +257,13 @@ export default function ExplorePage() {
   // separate from portfolio adds — see migration 20260428_location_favorites).
   // Loaded once when the user logs in; toggled via toggleFavorite below.
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  // Manually-added portfolio locations (no source_location_id linking
+  // back to a public locations row). These don't appear in the public
+  // locations query at all, so we load them separately and merge them
+  // into the map so the user sees their full portfolio when filtering
+  // to "My Portfolio". Visible only to the owner — no one else's manual
+  // portfolio entries leak into anyone else's Explore view.
+  const [manualPortfolioLocs, setManualPortfolioLocs] = useState<any[]>([])
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
   const [showPinSearch,    setShowPinSearch]    = useState(false)
@@ -397,6 +410,55 @@ export default function ExplorePage() {
       })
   }, [user])
 
+  // Load the user's manually-added portfolio locations (no
+  // source_location_id) so they show up on the map under "My Portfolio".
+  // Public-locations-via-source already render through the main
+  // locations query — those are filtered to is null here so we don't
+  // double-render them.
+  useEffect(() => {
+    if (!user) { setManualPortfolioLocs([]); return }
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('portfolio_locations')
+        .select('id,name,city,state,latitude,longitude,access_type,tags,description,is_secret,permit_required,permit_notes,permit_fee,permit_website,sort_order,created_at')
+        .eq('user_id', user.id)
+        .is('source_location_id', null)
+      if (cancelled || error || !data) return
+      const rows = data
+        .filter((p: any) => p.latitude != null && p.longitude != null)
+        .map((p: any, idx: number) => ({
+          id:                `manual:${p.id}`,
+          portfolio_location_id: p.id,
+          isManualPortfolio: true,
+          name:              p.name,
+          city:              p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
+          lat:               p.latitude,
+          lng:               p.longitude,
+          access:            p.access_type ?? 'public',
+          rating:            '—',
+          ratingNum:         0,
+          bg:                BG_CYCLE[idx % BG_CYCLE.length],
+          tags:              p.tags ?? [],
+          saves:             0,
+          favoriteCount:     0,
+          desc:              p.description ?? '',
+          qualityScore:      0,
+          createdAt:         p.created_at,
+          addedBy:           user.id,
+          source:            'manual_portfolio',
+          permit_required:   p.permit_required ?? false,
+          permit_notes:      p.permit_notes ?? null,
+          permit_fee:        p.permit_fee ?? null,
+          permit_website:    p.permit_website ?? null,
+          permit_certainty:  'unknown',
+          permit_scanned_at: null,
+        }))
+      setManualPortfolioLocs(rows)
+    })()
+    return () => { cancelled = true }
+  }, [user])
+
   async function toggleFavorite(locId: any) {
     if (!user) { setAuthOpen('login'); return }
     const key = String(locId)
@@ -484,9 +546,12 @@ export default function ExplorePage() {
   function handlePinSearch(r:AddressResult){setSearchPin({lat:r.lat,lng:r.lng,label:r.label??r.shortLabel??''});setUserLocation({lat:r.lat,lng:r.lng});setShowPinSearch(false);setToast(`📍 Showing locations near ${r.shortLabel}`)}
 
   const handleMarkerClick = useCallback((id:any)=>{
-    const loc=locations.find((l:any)=>String(l.id)===String(id))
+    // Look in both arrays — manual portfolio entries (id prefixed
+    // "manual:") live in manualPortfolioLocs, public ones in locations.
+    const loc = locations.find((l:any) => String(l.id) === String(id))
+              ?? manualPortfolioLocs.find((l:any) => String(l.id) === String(id))
     if(loc){setDetailLoc(loc);setActiveId(id);setMobileMapVisible(false)}
-  },[locations])
+  },[locations, manualPortfolioLocs])
 
   async function addToPortfolio(locId:any) {
     if(!user){setToast('Sign in to build your portfolio');return}
@@ -637,8 +702,15 @@ export default function ExplorePage() {
   const homeOnly       = !!homeLocation && !strictNearRef
 
   const filtered = useMemo(()=>{
-    let result=locations.filter((loc:any)=>{
-      const matchesAccess=accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Portfolio'?portfolioSources.has(loc.id):true
+    // Merge in the user's manually-added portfolio locations so they
+    // appear on the map alongside the public catalog. Manual entries
+    // are identified by isManualPortfolio so the My Portfolio filter
+    // includes them even though they aren't in portfolioSources (which
+    // only tracks Explore-sourced portfolio adds).
+    const merged = manualPortfolioLocs.length > 0 ? [...locations, ...manualPortfolioLocs] : locations
+    let result=merged.filter((loc:any)=>{
+      const isMine = portfolioSources.has(loc.id) || loc.isManualPortfolio === true
+      const matchesAccess=accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Portfolio'?isMine:true
       const matchesTags=selectedTags.length===0||selectedTags.some(t=>(loc.tags??[]).some((lt:string)=>lt.toLowerCase().includes(t.toLowerCase())))
       const q=searchQuery.toLowerCase().trim()
       const matchesSearch=q===''||loc.name.toLowerCase().includes(q)||loc.city.toLowerCase().includes(q)||(loc.tags??[]).some((t:string)=>t.toLowerCase().includes(q))
@@ -707,7 +779,7 @@ export default function ExplorePage() {
       sorted = [...trending, ...rest]
     }
     return sorted
-  },[locations,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,strictNearRef,homeLocation,homeOnly,isDefaultState])
+  },[locations,manualPortfolioLocs,portfolioSources,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,strictNearRef,homeLocation,homeOnly,isDefaultState])
 
   const activeFilterCount=(accessFilter!=='All'?1:0)+selectedTags.length+(minRating>0?1:0)+(sortBy!=='quality'?1:0)
 
@@ -879,7 +951,30 @@ export default function ExplorePage() {
       </button>
 
       {detailLoc&&(
-        <DetailPanel loc={detailLoc} portfolioId={portfolioSources.get(String(detailLoc.id)) ?? null} isFavorite={favoriteIds.has(String(detailLoc.id))} onToggleFavorite={toggleFavorite} onClose={()=>setDetailLoc(null)} onAddToPortfolio={addToPortfolio} onSignIn={()=>setAuthOpen('login')} onOpenLightbox={openLightbox} user={user} isAdmin={isAdmin} onAdminEdit={adminEditLocation} onAdminDelete={adminDeleteLocation}/>
+        <DetailPanel
+          loc={detailLoc}
+          /* For Explore-sourced portfolio entries, look up the linked
+             portfolio_location.id via portfolioSources. For manually-
+             added portfolio entries (which have no public location
+             row), fall back to the portfolio_location_id we stored on
+             the merged map row. Either way, a non-null portfolioId
+             means the panel renders the "✓ In your portfolio" UI. */
+          portfolioId={
+            detailLoc.isManualPortfolio
+              ? (detailLoc.portfolio_location_id ?? null)
+              : (portfolioSources.get(String(detailLoc.id)) ?? null)
+          }
+          isFavorite={favoriteIds.has(String(detailLoc.id))}
+          onToggleFavorite={toggleFavorite}
+          onClose={()=>setDetailLoc(null)}
+          onAddToPortfolio={addToPortfolio}
+          onSignIn={()=>setAuthOpen('login')}
+          onOpenLightbox={openLightbox}
+          user={user}
+          isAdmin={isAdmin}
+          onAdminEdit={adminEditLocation}
+          onAdminDelete={adminDeleteLocation}
+        />
       )}
       {adminEditLoc&&(
         <LocationEditModal loc={adminEditLoc} onClose={()=>setAdminEditLoc(null)} onSave={adminSaveLocation}/>
