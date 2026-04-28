@@ -97,7 +97,6 @@ export default function ClientPickerPage() {
   // null when the photographer hasn't configured one or isn't on Pro
   // — we render the default Pick page in that case.
   const [pickTemplate,     setPickTemplate]     = useState<PickTemplate | null>(null)
-  const [logoIsLight,      setLogoIsLight]      = useState<boolean | null>(null)
   const [lightboxSrc,      setLightboxSrc]      = useState<string | string[] | null>(null)
   const [lightboxStart,    setLightboxStart]    = useState(0)
   const [locations,        setLocations]        = useState<FullLocation[]>([])
@@ -333,44 +332,6 @@ export default function ClientPickerPage() {
     if (showEmailPrompt) setTimeout(() => firstNameRef.current?.focus(), 100)
   }, [showEmailPrompt])
 
-  // Detect whether the photographer's logo is visually light or dark so we
-  // can flip the header background + text colors for contrast.
-  useEffect(() => {
-    const url = branding?.logo_url
-    if (!branding?.remove_ls_branding || !url) { setLogoIsLight(null); return }
-    let cancelled = false
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      if (cancelled) return
-      try {
-        const w = Math.min(img.naturalWidth  || 100, 100)
-        const h = Math.min(img.naturalHeight || 100, 100)
-        const canvas = document.createElement('canvas')
-        canvas.width = w; canvas.height = h
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        ctx.drawImage(img, 0, 0, w, h)
-        const { data } = ctx.getImageData(0, 0, w, h)
-        let totalL = 0, totalA = 0
-        for (let i = 0; i < data.length; i += 4) {
-          const a = data[i + 3] / 255
-          if (a < 0.1) continue
-          const l = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
-          totalL += l * a
-          totalA += a
-        }
-        if (totalA > 0) setLogoIsLight((totalL / totalA) > 140)
-      } catch {
-        // Canvas was tainted by CORS or similar — fall back to default dark header.
-        setLogoIsLight(null)
-      }
-    }
-    img.onerror = () => { if (!cancelled) setLogoIsLight(null) }
-    img.src = url
-    return () => { cancelled = true }
-  }, [branding?.logo_url, branding?.remove_ls_branding])
-
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') { setDetailLoc(null); setShowEmailPrompt(false) }
@@ -585,17 +546,17 @@ export default function ClientPickerPage() {
       {/* Header */}
       {(() => {
         const whiteLabel    = branding?.remove_ls_branding && branding?.logo_url
-        // Header background — explicit template choice wins, otherwise
-        // fall back to the auto-detected dark-or-cream pair based on
-        // the logo's luminance (white-label only). When the photographer
-        // picks a custom bgColor, derive the text color from the
-        // chosen color's luminance so we don't end up with white text
-        // on a cream header (or vice versa).
+        // Header background — purely photographer-controlled now.
+        // The old auto-detection that flipped the header to cream when
+        // the photographer's logo looked dark was surprising (and the
+        // photographer had no UI control over it). Simplified to:
+        //   - bgColor set    → use it; text color derives from luminance
+        //   - bgColor empty  → dark default (var(--ink) = tpl.colors.text)
+        // If a photographer wants a cream header they pick #f9f6f1 (or
+        // any other) explicitly via the editor's Header background field.
         const customBg      = (tpl.header.bgColor && /^#[0-9a-f]{3,8}$/i.test(tpl.header.bgColor)) ? tpl.header.bgColor : ''
-        const lightHeader   = customBg
-          ? hexLuminance(customBg) > 0.55
-          : (whiteLabel && logoIsLight === false)
-        const headerBg      = customBg || (lightHeader ? '#f9f6f1' : 'var(--ink)')
+        const lightHeader   = customBg ? hexLuminance(customBg) > 0.55 : false
+        const headerBg      = customBg || 'var(--ink)'
         const headerBorder  = lightHeader ? '1px solid var(--cream-dark)' : '1px solid rgba(255,255,255,.08)'
         const primaryText   = lightHeader ? 'var(--ink)' : 'var(--cream)'
         const secondaryText = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.55)'
