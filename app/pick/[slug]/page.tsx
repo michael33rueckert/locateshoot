@@ -111,6 +111,17 @@ export default function ClientPickerPage() {
   const [detailLoc,        setDetailLoc]        = useState<FullLocation | null>(null)
   const [confirmed,        setConfirmed]        = useState(false)
   const [showEmailPrompt,  setShowEmailPrompt]  = useState(false)
+  // Favorites flow — separate from final picks. Client marks several
+  // spots they're considering, hits "Send favorites to discuss" which
+  // emails the photographer + the client a list with an optional
+  // comment. No DB account, identity is the email address. Lives in
+  // localStorage too so a client who closes the tab and comes back
+  // doesn't lose what they marked.
+  const [favoritedIds,         setFavoritedIds]         = useState<string[]>([])
+  const [showFavoritesPrompt,  setShowFavoritesPrompt]  = useState(false)
+  const [favoritesComment,     setFavoritesComment]     = useState('')
+  const [favoritesSubmitting,  setFavoritesSubmitting]  = useState(false)
+  const [favoritesSent,        setFavoritesSent]        = useState(false)
   const [clientFirstName,  setClientFirstName]  = useState('')
   const [clientLastName,   setClientLastName]   = useState('')
   const [clientEmail,      setClientEmail]      = useState('')
@@ -370,6 +381,36 @@ export default function ClientPickerPage() {
     : (shareData?.max_pick_distance_miles != null ? parseFloat(shareData.max_pick_distance_miles) : null)
 
   const chosenSet = new Set(chosenIds)
+  const favoritedSet = new Set(favoritedIds)
+  const favoritedLocs = favoritedIds
+    .map(id => locations.find(l => String(l.id) === String(id)))
+    .filter((l): l is FullLocation => !!l)
+
+  // Persist favorites in localStorage keyed by share-link slug. Lets a
+  // client mark some spots, close the tab, and come back later without
+  // losing what they already picked. Hydrate once when shareData lands.
+  const favoritesStorageKey = shareData?.slug ? `lf:favorites:${shareData.slug}` : null
+  useEffect(() => {
+    if (!favoritesStorageKey) return
+    try {
+      const raw = localStorage.getItem(favoritesStorageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) setFavoritedIds(parsed.map(String))
+      }
+    } catch { /* corrupt entry; ignore */ }
+    // Only hydrate once on first slug-known render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favoritesStorageKey])
+  useEffect(() => {
+    if (!favoritesStorageKey) return
+    try { localStorage.setItem(favoritesStorageKey, JSON.stringify(favoritedIds)) } catch { /* quota etc. */ }
+  }, [favoritesStorageKey, favoritedIds])
+
+  function toggleFavorite(id: any) {
+    const key = String(id)
+    setFavoritedIds(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
+  }
   const chosenLocs = chosenIds
     .map(id => locations.find(l => String(l.id) === String(id)))
     .filter((l): l is FullLocation => !!l)
@@ -442,6 +483,38 @@ export default function ClientPickerPage() {
   function confirmChoice() {
     if (chosenIds.length === 0) return
     setShowEmailPrompt(true)
+  }
+
+  async function submitFavorites(first: string, last: string, email: string, comment: string) {
+    if (!shareData || favoritedLocs.length === 0) return
+    setFavoritesSubmitting(true)
+    try {
+      const res = await fetch('/api/submit-favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shareLinkId: shareData.id,
+          firstName:   first,
+          lastName:    last,
+          email,
+          comment,
+          favorites:   favoritedLocs.map(l => ({ id: String(l.id), name: l.name })),
+        }),
+      })
+      if (!res.ok) {
+        setPickToast('Couldn’t send your favorites. Please try again in a moment.')
+        return
+      }
+      setFavoritesSent(true)
+      setShowFavoritesPrompt(false)
+      // Clear the local list — they've sent it; if they come back to
+      // pick a final spot they shouldn't see stale hearts.
+      setFavoritedIds([])
+    } catch {
+      setPickToast('Couldn’t send your favorites. Please try again in a moment.')
+    } finally {
+      setFavoritesSubmitting(false)
+    }
   }
 
   function submitEmail() {
@@ -768,6 +841,25 @@ export default function ClientPickerPage() {
         </div>
       )}
 
+      {/* Favorites strip — shown above the confirm bar whenever the
+          client has marked any spots as favorites. Tap to send the
+          list to the photographer for discussion (separate flow from
+          the final pick). */}
+      {favoritedLocs.length > 0 && !favoritesSent && (
+        <div style={{ background: 'rgba(196,146,42,.16)', borderTop: '1px solid rgba(196,146,42,.35)', padding: '8px 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 13, color: 'var(--cream)', minWidth: 0, flex: '1 1 200px', lineHeight: 1.4 }}>
+            <span style={{ marginRight: 6 }}>💜</span>
+            <strong style={{ fontWeight: 700 }}>{favoritedLocs.length}</strong> {favoritedLocs.length === 1 ? 'spot' : 'spots'} favorited — not sure yet?
+          </div>
+          <button
+            onClick={() => setShowFavoritesPrompt(true)}
+            style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 4, border: 'none', background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+          >
+            Send to discuss →
+          </button>
+        </div>
+      )}
+
       {/* Confirm bar */}
       <div style={{ background: 'var(--ink)', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', borderTop: '1px solid rgba(255,255,255,.08)', flexShrink: 0 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -951,6 +1043,30 @@ export default function ClientPickerPage() {
                   </a>
                 )}
               </div>
+              {/* Favorite (heart) toggle — soft "I'm considering this"
+                  signal separate from the final pick. Stays sticky on
+                  the detail panel rather than littering each list item
+                  across all six layout variants. */}
+              {(() => {
+                const isFav = favoritedSet.has(String(detailLoc.id))
+                return (
+                  <button
+                    onClick={() => toggleFavorite(detailLoc.id)}
+                    aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                    style={{
+                      width: '100%', padding: '10px', marginBottom: 10,
+                      borderRadius: 4,
+                      border: `1.5px solid ${isFav ? 'var(--rust)' : 'var(--cream-dark)'}`,
+                      background: isFav ? 'rgba(181,75,42,.08)' : 'white',
+                      color: isFav ? 'var(--rust)' : 'var(--ink-soft)',
+                      fontSize: 13, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    {isFav ? '💜 Favorited — tap to remove' : '🤍 Add to favorites'}
+                  </button>
+                )
+              })()}
               <div style={{ display: 'flex', gap: 10, paddingBottom: '1rem' }}>
                 <button onClick={() => setDetailLoc(null)} style={{ flex: 1, padding: '12px', borderRadius: 4, border: '1px solid var(--sand)', background: 'transparent', color: 'var(--ink-soft)', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Back</button>
                 {(() => {
@@ -1027,6 +1143,99 @@ export default function ClientPickerPage() {
               {submitting ? 'Sending…' : 'Confirm my choice →'}
             </button>
             <button onClick={() => setShowEmailPrompt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--ink-soft)', fontFamily: 'inherit', display: 'block', margin: '0 auto' }}>Go back</button>
+          </div>
+        </>
+      )}
+
+      {/* Send-favorites modal — separate from the final-pick modal.
+          Mirrors the same form fields (first/last/email) plus an
+          optional comment. The list of favorited spots is shown inline
+          so the client knows exactly what they're sending. */}
+      {showFavoritesPrompt && (
+        <>
+          <div onClick={() => setShowFavoritesPrompt(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 600 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 480, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', padding: '1.75rem', zIndex: 700 }}>
+            <div style={{ fontSize: 32, marginBottom: 8, textAlign: 'center' }}>💜</div>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 6, textAlign: 'center' }}>Send your favorites to discuss</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, marginBottom: '1.25rem', textAlign: 'center' }}>
+              <strong style={{ fontWeight: 600 }}>{shareData?.photographer_name ?? 'Your photographer'}</strong> will get your list and can reply directly to talk through your options.
+            </div>
+            <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 8, padding: '10px 12px', marginBottom: '1rem', maxHeight: 140, overflowY: 'auto' }}>
+              <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 6 }}>You're sending</div>
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                {favoritedLocs.map(l => (
+                  <li key={String(l.id)} style={{ fontSize: 13, color: 'var(--ink)', padding: '2px 0' }}>· {l.name}</li>
+                ))}
+              </ul>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <input
+                value={clientFirstName}
+                onChange={e => { setClientFirstName(e.target.value); setEmailError('') }}
+                placeholder="First name"
+                autoComplete="given-name"
+                style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: '1.5px solid var(--cream-dark)', borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+              />
+              <input
+                value={clientLastName}
+                onChange={e => { setClientLastName(e.target.value); setEmailError('') }}
+                placeholder="Last name"
+                autoComplete="family-name"
+                style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: '1.5px solid var(--cream-dark)', borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+              />
+            </div>
+            <input
+              type="email"
+              value={clientEmail}
+              onChange={e => { setClientEmail(e.target.value); setEmailError('') }}
+              placeholder="your@email.com"
+              autoComplete="email"
+              style={{ width: '100%', padding: '12px 14px', border: `1.5px solid ${emailError ? 'var(--rust)' : 'var(--cream-dark)'}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none', marginBottom: 10 }}
+            />
+            <textarea
+              value={favoritesComment}
+              onChange={e => setFavoritesComment(e.target.value)}
+              placeholder="Optional: anything you'd like to ask or share?"
+              rows={3}
+              maxLength={1500}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: '1.5px solid var(--cream-dark)', borderRadius: 8, fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)', outline: 'none', resize: 'vertical', marginBottom: emailError ? 6 : 14 }}
+            />
+            {emailError && <div style={{ fontSize: 12, color: 'var(--rust)', marginBottom: 12, textAlign: 'center' }}>{emailError}</div>}
+            <button
+              onClick={() => {
+                const first = clientFirstName.trim()
+                const last  = clientLastName.trim()
+                const email = clientEmail.trim()
+                if (!first || !last) { setEmailError('Please enter your first and last name.'); return }
+                if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError('Please enter a valid email.'); return }
+                setEmailError('')
+                submitFavorites(first, last, email, favoritesComment.trim())
+              }}
+              disabled={favoritesSubmitting}
+              style={{ width: '100%', padding: '13px', borderRadius: 8, background: isGoldAccent ? 'var(--gold)' : accentColor, color: 'var(--gold-text)', border: 'none', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginBottom: 10, opacity: favoritesSubmitting ? 0.7 : 1 }}
+            >
+              {favoritesSubmitting ? 'Sending…' : 'Send favorites →'}
+            </button>
+            <button onClick={() => setShowFavoritesPrompt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--ink-soft)', fontFamily: 'inherit', display: 'block', margin: '0 auto' }}>Go back</button>
+          </div>
+        </>
+      )}
+
+      {/* Favorites-sent confirmation overlay — replaces the strip after
+          the client successfully submits their list. Keeps the page in
+          place so they can still send a final pick afterwards. */}
+      {favoritesSent && (
+        <>
+          <div onClick={() => setFavoritesSent(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 600 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 420, maxWidth: '92vw', padding: '2rem', zIndex: 700, textAlign: 'center' }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>💜</div>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>Sent! Your list is on its way.</div>
+            <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, marginBottom: '1.5rem' }}>
+              <strong style={{ fontWeight: 600 }}>{shareData?.photographer_name ?? 'Your photographer'}</strong> will reach out to talk through your favorites. Check your email for a copy.
+            </div>
+            <button onClick={() => setFavoritesSent(false)} style={{ width: '100%', padding: '12px', borderRadius: 8, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+              Got it
+            </button>
           </div>
         </>
       )}

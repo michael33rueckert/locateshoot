@@ -54,6 +54,23 @@ export default function DashboardPage() {
   // from portfolio. Loaded alongside the rest of the dashboard data;
   // displayed in a panel above Client Selections.
   const [favoriteLocs, setFavoriteLocs] = useState<Array<{ id: string; name: string; city: string | null; state: string | null; preview_url: string | null; created_at: string }>>([])
+  // Client-submitted "favorite lists" — soft "let's discuss these"
+  // signals from the new Pick-page favorites flow (see
+  // /api/submit-favorites + 20260428_client_favorite_lists). Distinct
+  // from final picks; rendered in their own section near picks so the
+  // photographer sees both types of feedback at a glance.
+  interface ClientFavoriteList {
+    id:                string
+    share_link_id:     string
+    client_first_name: string | null
+    client_last_name:  string | null
+    client_email:      string
+    locations:         { id: string | null; name: string }[]
+    comment:           string | null
+    created_at:        string
+    session_name:      string | null
+  }
+  const [clientFavoriteLists, setClientFavoriteLists] = useState<ClientFavoriteList[]>([])
   const [loading,             setLoading]              = useState(true)
   const [toast,               setToast]                = useState<string | null>(null)
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
@@ -225,13 +242,16 @@ export default function DashboardPage() {
         .select('id,share_link_id,client_first_name,client_last_name,client_email,location_name,location_names,created_at')
         .order('created_at', { ascending: false })
         .limit(50)
+      // Hoisted out of the rawPicks block so the favorite-lists loader
+      // below can reuse + extend it (different rows can reference
+      // share_links the picks loader hasn't fetched yet).
+      const linkMap = new Map<string, { session_name: string | null; slug: string | null; is_full_portfolio: boolean }>()
       if (rawPicks && rawPicks.length > 0) {
         const linkIds = Array.from(new Set(rawPicks.map((p: any) => p.share_link_id).filter(Boolean)))
         const { data: linkRows } = await supabase
           .from('share_links')
           .select('id,session_name,slug,is_full_portfolio')
           .in('id', linkIds)
-        const linkMap = new Map<string, { session_name: string | null; slug: string | null; is_full_portfolio: boolean }>()
         ;(linkRows ?? []).forEach((r: any) => linkMap.set(r.id, { session_name: r.session_name ?? null, slug: r.slug ?? null, is_full_portfolio: !!r.is_full_portfolio }))
         setRecentPicks(rawPicks.map((p: any) => ({
           id:                p.id,
@@ -248,6 +268,44 @@ export default function DashboardPage() {
         })))
       } else {
         setRecentPicks([])
+      }
+
+      // Client favorite lists — submissions from the Pick-page
+      // "Send favorites to discuss" flow. Falls through silently if
+      // the migration hasn't been applied so the rest of the
+      // dashboard still renders. Joined to share_links for the
+      // session name; same map we already built above for picks.
+      const favListsRes = await supabase
+        .from('client_favorite_lists')
+        .select('id,share_link_id,client_first_name,client_last_name,client_email,locations,comment,created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(40)
+      if (!favListsRes.error && favListsRes.data) {
+        // Pull session_name for share links not already in linkMap.
+        const newLinkIds = Array.from(new Set(
+          favListsRes.data.map((r: any) => r.share_link_id).filter((id: any) => id && !linkMap.has(id)),
+        ))
+        if (newLinkIds.length > 0) {
+          const { data: extraLinks } = await supabase
+            .from('share_links')
+            .select('id,session_name,slug,is_full_portfolio')
+            .in('id', newLinkIds)
+          ;(extraLinks ?? []).forEach((r: any) => linkMap.set(r.id, { session_name: r.session_name ?? null, slug: r.slug ?? null, is_full_portfolio: !!r.is_full_portfolio }))
+        }
+        setClientFavoriteLists(favListsRes.data.map((r: any) => ({
+          id:                r.id,
+          share_link_id:     r.share_link_id,
+          client_first_name: r.client_first_name ?? null,
+          client_last_name:  r.client_last_name  ?? null,
+          client_email:      r.client_email      ?? '',
+          locations:         Array.isArray(r.locations) ? r.locations : [],
+          comment:           r.comment ?? null,
+          created_at:        r.created_at,
+          session_name:      linkMap.get(r.share_link_id)?.session_name ?? null,
+        })))
+      } else {
+        setClientFavoriteLists([])
       }
 
       // Favorites — joined with locations so the dashboard panel can show
@@ -777,6 +835,75 @@ export default function DashboardPage() {
                 </ul>
               )}
             </div>
+
+            {/* Client Favorite Lists — soft "let's discuss these" signals
+                from the Pick-page favorites flow. Distinct from final
+                picks: the client hasn't committed yet and wants to
+                talk through their options. Each row shows the spots
+                they marked + their question/comment if they wrote one,
+                with a mailto link to reply directly. */}
+            {clientFavoriteLists.length > 0 && (
+              <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem' }}>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    💜 Client Favorites
+                    <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(196,146,42,.1)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.2)' }}>{clientFavoriteLists.length}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Lists clients sent for discussion — they aren&apos;t ready to commit yet. Reply to talk through their options.</div>
+                </div>
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {clientFavoriteLists.slice(0, 12).map(f => {
+                    const fullName = [f.client_first_name, f.client_last_name].filter(Boolean).join(' ').trim()
+                    const display  = fullName || f.client_email || 'Anonymous client'
+                    const guideLabel = f.session_name ?? 'Custom guide'
+                    const created    = new Date(f.created_at)
+                    const dateText   = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+                    const timeText   = created.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                    return (
+                      <li key={f.id} style={{ padding: '14px 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                          <div style={{ minWidth: 0, flex: '1 1 240px' }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
+                              {display}
+                              {fullName && f.client_email && (
+                                <span style={{ fontWeight: 400, color: 'var(--ink-soft)', fontSize: 12, marginLeft: 6 }}>· {f.client_email}</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                              from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
+                            </div>
+                          </div>
+                          <div style={{ flexShrink: 0, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, textAlign: 'right' }}>
+                            {dateText}<br /><span style={{ fontSize: 11 }}>{timeText}</span>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.5, marginBottom: f.comment ? 8 : 0 }}>
+                          <span style={{ color: 'var(--ink-soft)' }}>💜</span> {f.locations.map(l => l.name).join(' · ')}
+                        </div>
+                        {f.comment && (
+                          <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 6, padding: '8px 10px', fontSize: 13, color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.5, marginTop: 4 }}>
+                            <span style={{ fontSize: 11, color: 'var(--ink-soft)', display: 'block', marginBottom: 3 }}>Their comment:</span>
+                            {f.comment}
+                          </div>
+                        )}
+                        {f.client_email && (
+                          <div style={{ marginTop: 8 }}>
+                            <a href={`mailto:${f.client_email}`} style={{ fontSize: 12, color: 'var(--gold)', textDecoration: 'none', fontWeight: 500 }}>
+                              Reply to {fullName || f.client_email} →
+                            </a>
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                  {clientFavoriteLists.length > 12 && (
+                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                      Showing 12 of {clientFavoriteLists.length} most recent
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
 
             {/* Favorites — bookmarked locations from the Explore map.
                 Forward-looking ideas the photographer wants to remember

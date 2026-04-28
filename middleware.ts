@@ -60,6 +60,7 @@ export function middleware(request: NextRequest) {
          pathname.startsWith('/pick/')
       || pathname.startsWith('/api/pick-data/')
       || pathname === '/api/submit-pick'
+      || pathname === '/api/submit-favorites'
       || pathname === '/api/place-photos'
     const isStaticAsset = pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname === '/robots.txt' || pathname === '/sitemap.xml'
     if (!isPickRoute && !isStaticAsset) {
@@ -81,6 +82,7 @@ export function middleware(request: NextRequest) {
        pathname.startsWith('/pick/')
     || pathname.startsWith('/api/pick-data/')
     || pathname === '/api/submit-pick'
+    || pathname === '/api/submit-favorites'
     || pathname === '/api/place-photos'
     // Share-link analytics — the client's browser fires these as the
     // pick page renders + heartbeats. No cookie, must bypass the gate.
