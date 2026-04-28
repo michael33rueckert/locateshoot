@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -345,15 +345,17 @@ export default function ExplorePage() {
     load()
   }, [])
 
+  // Bulk-load DB photos for the entire catalog (one query, cheap).
+  // Google Place photo fetches are NOT done here — those fire only
+  // when a list item actually scrolls into view, via the observer
+  // below. Otherwise the catalog growth past 500 entries meant 600+
+  // parallel /api/place-photos calls on every page load, exhausting
+  // the Google API budget for items the user never looked at.
   useEffect(() => {
     if (!locations.length) return
     const ids = locations.map((l: any) => l.id)
     let cancelled = false
     ;(async () => {
-      // Bumped from limit(1000) — with ~500 explore locations and
-      // multiple photos per source location, the old cap could starve
-      // some tiles of any photo at all (same row-limit issue as the
-      // dashboard fix earlier).
       const { data } = await supabase
         .from('location_photos')
         .select('location_id,url')
@@ -363,45 +365,88 @@ export default function ExplorePage() {
       if (cancelled || !data) return
       const m: Record<string, string> = {}
       data.forEach((p: any) => { if (!m[p.location_id]) m[p.location_id] = p.url })
-      setPhotoMap(m)
-
-      // Lazy-fetch Google Place photos for locations with no DB photo.
-      // Same sessionStorage cache key as dashboard/portfolio so once a
-      // photo is resolved on any page, all three pages reuse it without
-      // re-spending Google API credits in the same browser session.
-      const numCoerce = (v: any): number => typeof v === 'number' ? v : parseFloat(v)
-      const missing = locations.filter((l: any) => {
-        if (m[l.id]) return false
-        const lat = numCoerce(l.lat); const lng = numCoerce(l.lng)
-        return Number.isFinite(lat) && Number.isFinite(lng)
-      })
-      missing.forEach(async (loc: any) => {
-        if (cancelled) return
-        const cacheKey = `google-photo:${loc.id}`
-        const lat = numCoerce(loc.lat); const lng = numCoerce(loc.lng)
-        try {
-          const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
-          if (cached) {
-            setPhotoMap(prev => ({ ...prev, [loc.id]: cached }))
-            return
-          }
-          const res = await fetch('/api/place-photos', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: loc.name, city: loc.city, lat, lng }),
-          })
-          if (!res.ok) return
-          const json = await res.json()
-          const url = json?.photos?.[0]?.url
-          if (!url) return
-          try { sessionStorage.setItem(cacheKey, url) } catch { /* quota etc. */ }
-          if (cancelled) return
-          setPhotoMap(prev => ({ ...prev, [loc.id]: url }))
-        } catch { /* non-fatal */ }
-      })
+      setPhotoMap(prev => ({ ...m, ...prev }))
     })()
     return () => { cancelled = true }
   }, [locations])
+
+  // Viewport-driven Google Place photo fetcher. List items register
+  // themselves with a shared IntersectionObserver via ref callback; on
+  // first viewport entry we kick a fetch (one-shot — observer
+  // unobserves so we never re-trigger for the same row). Concurrency
+  // capped at 4 so a fast scroll doesn't fire 100 parallel calls.
+  const photoQueueRef    = useRef<any[]>([])
+  const photoInflightRef = useRef(0)
+  const photoSeenRef     = useRef<Set<string>>(new Set())
+  // Mirror of the merged location list — the observer callback closes
+  // over this once, so we keep a ref that always points at the latest.
+  const photoLocsRef     = useRef<any[]>([])
+  useEffect(() => {
+    photoLocsRef.current = manualPortfolioLocs.length > 0
+      ? [...locations, ...manualPortfolioLocs]
+      : locations
+  }, [locations, manualPortfolioLocs])
+
+  const fetchOnePhoto = useCallback(async (loc: any) => {
+    const cacheKey = `google-photo:${loc.id}`
+    const lat = typeof loc.lat === 'number' ? loc.lat : parseFloat(loc.lat)
+    const lng = typeof loc.lng === 'number' ? loc.lng : parseFloat(loc.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    try {
+      const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
+      if (cached) {
+        setPhotoMap(prev => ({ ...prev, [loc.id]: cached }))
+        return
+      }
+      const res = await fetch('/api/place-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: loc.name, city: loc.city, lat, lng }),
+      })
+      if (!res.ok) return
+      const json = await res.json()
+      const url = json?.photos?.[0]?.url
+      if (!url) return
+      try { sessionStorage.setItem(cacheKey, url) } catch { /* quota etc. */ }
+      setPhotoMap(prev => ({ ...prev, [loc.id]: url }))
+    } catch { /* non-fatal */ }
+  }, [])
+
+  const processPhotoQueue = useCallback(() => {
+    const MAX = 4
+    while (photoInflightRef.current < MAX && photoQueueRef.current.length > 0) {
+      const loc = photoQueueRef.current.shift()
+      if (!loc) break
+      photoInflightRef.current++
+      fetchOnePhoto(loc).finally(() => {
+        photoInflightRef.current--
+        processPhotoQueue()
+      })
+    }
+  }, [fetchOnePhoto])
+
+  const photoObsRef = useRef<IntersectionObserver | null>(null)
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    photoObsRef.current = new IntersectionObserver(entries => {
+      let added = false
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        const id = entry.target.getAttribute('data-loc-id')
+        if (!id) continue
+        photoObsRef.current?.unobserve(entry.target)
+        if (photoSeenRef.current.has(id)) continue
+        photoSeenRef.current.add(id)
+        const loc = photoLocsRef.current.find((l: any) => String(l.id) === id)
+        if (loc) {
+          photoQueueRef.current.push(loc)
+          added = true
+        }
+      }
+      if (added) processPhotoQueue()
+    }, { rootMargin: '200px', threshold: 0 })
+    return () => photoObsRef.current?.disconnect()
+  }, [processPhotoQueue])
 
   useEffect(() => {
     if(!user){setPortfolioSources(new Map());return}
@@ -951,6 +996,8 @@ export default function ExplorePage() {
             const thumb=photoMap[loc.id]
             return(
               <div key={String(loc.id)}
+                ref={el => { if (el && photoObsRef.current && !thumb) photoObsRef.current.observe(el) }}
+                data-loc-id={String(loc.id)}
                 onClick={()=>{ setDetailLoc(loc); setActiveId(loc.id); setClickedNearLoc({ lat: loc.lat, lng: loc.lng, name: loc.name }) }}
                 style={{display:'flex',gap:10,padding:'10px 1.25rem',borderBottom:'1px solid var(--cream-dark)',cursor:'pointer',background:isActive?'rgba(196,146,42,.06)':'white',borderLeft:`3px solid ${isActive?'var(--gold)':'transparent'}`,transition:'background .12s'}}>
                 <div
