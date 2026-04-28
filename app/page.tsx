@@ -334,13 +334,13 @@ export default function HomePage() {
             <div className="feature-stripe-text">
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 10 }}>Templates</div>
               <h3 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, color: 'var(--ink)', lineHeight: 1.2, margin: '0 0 14px' }}>
-                Five starter looks. Or build your own.
+                Five layout templates to choose from.
               </h3>
               <p style={{ fontSize: 15, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.7, margin: '0 0 14px' }}>
-                Wedding-magazine editorial, modern minimal, romantic blush, bold studio dark, warm boho. Pick a starting point and tweak the font, colors, layout, and header to match your brand.
+                Wedding-magazine editorial, modern minimal, romantic blush, bold studio dark, and warm boho — each designed to fit a different photographer&apos;s brand. Pick the one that matches yours.
               </p>
               <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, margin: 0 }}>
-                Save as many templates as you want and pick a different one per Location Guide. Wedding clients see one look; engagement clients see another.
+                Set a default and assign a different template per Location Guide — wedding clients see one look; engagement clients see another.
               </p>
             </div>
           </div>
