@@ -70,6 +70,12 @@ export default function ProfilePage() {
   const [active,        setActive]        = useState('profile')
   const [userId,        setUserId]        = useState<string | null>(null)
   const [plan,          setPlan]          = useState<string>('free')
+  // True once loadProfile has resolved at least once — used to suppress
+  // the brief Pro upgrade prompt flash that Pro users were seeing on
+  // every Branding-tab visit. The default `plan='free'` means isPro is
+  // false until the async DB read updates it; gating the upgrade UI on
+  // this flag hides the prompt during that race.
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [toast,         setToast]         = useState<string | null>(null)
   const [saving,        setSaving]        = useState(false)
 
@@ -187,6 +193,7 @@ export default function ProfilePage() {
         if (p.website)         setWebsite(p.website)
       }
     }
+    setProfileLoaded(true)
   }, [])
 
   useEffect(() => { loadProfile() }, [loadProfile])
@@ -658,7 +665,7 @@ export default function ProfilePage() {
         {active === 'branding' && (
           <div>
             {sectionTitle('Branding', 'Your studio logo and the layout templates that style the Location Guides you send to clients.')}
-            {!isPro && (
+            {profileLoaded && !isPro && (
               <div style={{ marginBottom: '1.5rem' }}>
                 <UpgradePrompt
                   feature="white-label Location Guides + custom templates"
@@ -700,16 +707,21 @@ export default function ProfilePage() {
                 the title clear of the sticky AppNav. */}
             <div id="layout-templates" style={{ marginTop: '2rem', scrollMarginTop: 80 }}>
               {sectionTitle('Layout Templates', 'Design how your Location Guides look — logo, layout, font, colors, header. Saved templates are picked per guide.')}
-              <SavedTemplatesPanel
-                userId={userId ?? ''}
-                isPro={isPro}
-                currentPlan={isPro ? 'pro' : isStarter ? 'starter' : 'free'}
-                logoUrl={logoPreview}
-                onLogoChange={url => {
-                  setLogoPreview(url)
-                  setPrefs(p => ({ ...p, logo_url: url ?? '' }))
-                }}
-              />
+              {/* Wait for the plan to load before rendering — otherwise
+                  Pro users see the grayed-out non-Pro preview for a
+                  beat before isPro flips and the real editor mounts. */}
+              {profileLoaded && (
+                <SavedTemplatesPanel
+                  userId={userId ?? ''}
+                  isPro={isPro}
+                  currentPlan={isPro ? 'pro' : isStarter ? 'starter' : 'free'}
+                  logoUrl={logoPreview}
+                  onLogoChange={url => {
+                    setLogoPreview(url)
+                    setPrefs(p => ({ ...p, logo_url: url ?? '' }))
+                  }}
+                />
+              )}
             </div>
           </div>
         )}
@@ -718,7 +730,7 @@ export default function ProfilePage() {
         {active === 'domain' && (
           <div>
             {sectionTitle('Custom Domain', 'Serve your Location Guides from your own domain (e.g. locations.yoursite.com).')}
-            {!isPro && (
+            {profileLoaded && !isPro && (
               <div style={{ marginBottom: '1.5rem' }}>
                 <UpgradePrompt
                   feature="custom domain for your Location Guides"
@@ -771,7 +783,7 @@ export default function ProfilePage() {
                 Send client confirmation emails from your own address (e.g. <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>you@yoursite.com</code>) instead of <code style={{ background: 'var(--cream)', padding: '1px 5px', borderRadius: 3 }}>notifications@locateshoot.com</code>. Requires SPF + DKIM records at your DNS provider.
               </p>
 
-              {!isPro && (
+              {profileLoaded && !isPro && (
                 <div style={{ marginBottom: '1.5rem' }}>
                   <UpgradePrompt
                     feature="custom sending email"
