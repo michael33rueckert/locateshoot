@@ -582,8 +582,11 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* MAIN CONTENT — className enables mobile full-width */}
-      <div className="profile-main">
+      {/* MAIN CONTENT — className enables mobile full-width. Branding
+          tab gets the wider canvas via profile-main-wide so the layout
+          picker can show three thumbnails per row and the template
+          editor's preview pane has room to breathe. */}
+      <div className={`profile-main${active === 'branding' ? ' profile-main-wide' : ''}`}>
 
         {/* Back link visible on tablet + mobile (≤1024px). On desktop the
             sidebar already hosts a "Back to dashboard" link, so this one

@@ -266,10 +266,19 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
           current colors and font. Title at the top of each card so
           you can scan layouts by name; bottom band is the action
           state (gold filled = currently selected; cream outline = tap
-          to switch) so the picked layout reads immediately. */}
+          to switch) so the picked layout reads immediately.
+
+          Each preview is wrapped in a fixed-height container with a
+          mask-image gradient so cards with more content than the box
+          (editorial, magazine, grid) fade out at the bottom instead
+          of pushing the card taller than its neighbors. Result: every
+          layout button is the same size on every viewport.
+
+          Grid is 3 columns on desktop (so the six layouts wrap as
+          two rows of three), 2 columns on tablet, 1 on phone. */}
       <div style={{ marginBottom: '1.25rem' }}>
         <label style={labelStyle}>Layout</label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        <div className="layout-picker-grid">
           {layouts.map(opt => {
             const active = currentLayout === opt.value
             return (
@@ -293,7 +302,15 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2, padding: '0 2px' }}>
                   {opt.label}
                 </div>
-                <TemplatePreview template={{ ...livePreview, layout: opt.value }} variant="thumb" studioName="Studio" intro="Pick a location" />
+                <div
+                  style={{
+                    height: 220, overflow: 'hidden', borderRadius: 6,
+                    WebkitMaskImage: 'linear-gradient(to bottom, black 78%, transparent 100%)',
+                    maskImage:        'linear-gradient(to bottom, black 78%, transparent 100%)',
+                  }}
+                >
+                  <TemplatePreview template={{ ...livePreview, layout: opt.value }} variant="thumb" studioName="Studio" intro="Pick a location" />
+                </div>
                 <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.4, padding: '0 2px' }}>{opt.desc}</div>
                 {/* Bottom action band — solid gold when this layout is
                     the active one (clear, big, hard to miss); cream

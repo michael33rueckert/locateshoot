@@ -1144,7 +1144,19 @@ body {
 .profile-outer   { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; background: #f0ece4; }
 .profile-sidebar { background: white; border-right: 1px solid var(--cream-dark); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .profile-main    { padding: 2.5rem 3rem; max-width: 760px; }
+/* Branding tab gets a wider canvas — the layout-template picker
+   wants 3-up thumbnails at desktop sizes, and the live preview
+   panel below needs room to show the real Pick page proportions. */
+.profile-main.profile-main-wide { max-width: 1240px; }
 .profile-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+
+/* Layout picker grid — three across on desktop so the six template
+   options wrap as two rows of three; two across on tablet; one on
+   phone. Each thumbnail has a fixed-height visual area so cards line
+   up evenly regardless of how much content the layout has. */
+.layout-picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 1024px) { .layout-picker-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .layout-picker-grid { grid-template-columns: 1fr; } }
  
 /* ─────────────────────────────────────────────────────────────────────────────
    TABLET (769px – 1024px)

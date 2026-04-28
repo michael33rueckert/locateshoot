@@ -228,34 +228,41 @@ function LocationsLayout({ layout, variant, accent, accentText, text }: { layout
   }
 
   if (layout === 'editorial') {
-    // Long-form story per location — magazine-article feel. Each
-    // block: section number ('01 / 03'), big serif name, paragraph
-    // lines representing description copy, then a select button.
-    // Photos are taller (4/5 aspect) so they read as cinematic
-    // hero shots rather than thumbnails.
+    // Long-form story per location — magazine-article feel. Two-col
+    // stripe with a 4:3 photo on one side and a section number +
+    // headline + body copy + select button on the other. Odd rows
+    // are photo-left, even rows are photo-right (alternating left/
+    // right zigzag), matching the real /pick page editorial layout.
     return (
-      <div style={{ padding: `0 ${padding}px ${padding}px`, display: 'flex', flexDirection: 'column', gap: gap * 1.4 }}>
-        {[0, 1].map(i => (
-          <div key={i} style={{ background: 'white', borderRadius: radius, overflow: 'hidden', border: `1px solid ${hexWithAlpha(text, .06)}` }}>
-            <div style={{ aspectRatio: '4 / 5', background: placeholderBg(i) }} />
-            <div style={{ padding: `${gap}px ${gap * 1.2}px ${gap}px`, display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 2 : 6 }}>
-              {/* Index "01 / 02" */}
+      <div style={{ padding: `0 ${padding}px ${padding}px`, display: 'flex', flexDirection: 'column', gap: gap * 1.6 }}>
+        {[0, 1].map(i => {
+          const photoLeft = i % 2 === 0
+          const photoEl = (
+            <div style={{ aspectRatio: '4 / 3', background: placeholderBg(i), borderRadius: radius, overflow: 'hidden' }} />
+          )
+          const textEl = (
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: variant === 'thumb' ? 2 : 5 }}>
               <div style={{ fontSize: variant === 'thumb' ? 5 : 10, fontWeight: 600, letterSpacing: '.12em', color: hexWithAlpha(text, .5), textTransform: 'uppercase' }}>
                 {String(i + 1).padStart(2, '0')} / 02
               </div>
-              <SampleNameLine variant={variant} text={text} width="65%" big />
-              {/* Description paragraph lines */}
+              <SampleNameLine variant={variant} text={text} width="85%" big />
               <div style={{ display: 'flex', flexDirection: 'column', gap: variant === 'thumb' ? 1.5 : 3 }}>
-                <div style={{ height: variant === 'thumb' ? 2 : 4, width: '100%', background: text, opacity: .35, borderRadius: 1 }} />
-                <div style={{ height: variant === 'thumb' ? 2 : 4, width: '95%', background: text, opacity: .35, borderRadius: 1 }} />
-                <div style={{ height: variant === 'thumb' ? 2 : 4, width: '70%', background: text, opacity: .35, borderRadius: 1 }} />
+                <div style={{ height: variant === 'thumb' ? 1.5 : 4, width: '100%',  background: text, opacity: .35, borderRadius: 1 }} />
+                <div style={{ height: variant === 'thumb' ? 1.5 : 4, width: '92%',   background: text, opacity: .35, borderRadius: 1 }} />
+                <div style={{ height: variant === 'thumb' ? 1.5 : 4, width: '70%',   background: text, opacity: .35, borderRadius: 1 }} />
               </div>
-              <div style={{ marginTop: variant === 'thumb' ? 3 : 6, alignSelf: 'flex-start' }}>
-                <SampleButton variant={variant} accent={accent} accentText={accentText} />
+              <div style={{ marginTop: variant === 'thumb' ? 2 : 4, alignSelf: 'flex-start' }}>
+                <SampleButton variant={variant} accent={accent} accentText={accentText} small={isThumb} />
               </div>
             </div>
-          </div>
-        ))}
+          )
+          return (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: gap * 1.4, alignItems: 'center' }}>
+              {photoLeft ? photoEl : textEl}
+              {photoLeft ? textEl : photoEl}
+            </div>
+          )
+        })}
       </div>
     )
   }
