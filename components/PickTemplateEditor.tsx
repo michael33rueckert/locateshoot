@@ -12,6 +12,7 @@ import {
 } from '@/lib/pick-template'
 import TemplatePreview from '@/components/TemplatePreview'
 import { validateImageUpload } from '@/lib/upload-validate'
+import { compressImageIfNeeded } from '@/lib/image-compress'
 
 // Pro-only Location Guide template editor. Saves debounced as the
 // photographer edits — no manual Save button.
@@ -122,9 +123,19 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
   // photographer's logo + photos use. Stored under <userId>/template/.
   // SVG is blocked by validateImageUpload — SVG can embed <script>
   // and would execute when the file is served via getPublicUrl().
+  // Files over 10 MB get auto-resized to fit (so a photographer
+  // dropping a raw camera export doesn't get bounced); the helper
+  // returns the file unchanged when it's already small enough.
   const fileRef = useRef<HTMLInputElement>(null)
-  async function handleBgUpload(file: File) {
+  async function handleBgUpload(rawFile: File) {
     setError(null)
+    let file = rawFile
+    try {
+      file = await compressImageIfNeeded(rawFile)
+    } catch (e: any) {
+      setError(`Couldn’t process image: ${e?.message ?? 'unknown error'}`)
+      return
+    }
     const v = validateImageUpload(file)
     if (!v.ok) { setError(v.message); return }
     const path = `${userId}/template/bg-${Date.now()}.${v.ext}`
