@@ -89,25 +89,12 @@ export default function ExploreMap({
         : USA_VIEW
       const map = L.map(container, {
         zoomControl: false,
-        // Don't animate every marker individually during zoom — at 600+
-        // markers the per-marker transform updates choke both desktop
-        // and touch zoom. With this off, markers vanish for the ~250ms
-        // zoom animation and reappear at the new zoom level. Tiles
-        // still animate smoothly (zoomAnimation defaults true), so the
-        // visual effect is "tile zoom + markers snap" instead of a
-        // janky everything-moves-at-once.
-        markerZoomAnimation: false,
-        // Render any vector layers (CircleMarker etc.) via canvas
-        // rather than SVG. divIcon markers don't benefit, but it's the
-        // safe default once the marker count gets high.
+        // Render markers + vector layers to a single canvas instead of
+        // a DOM element each. With ~700 markers, the previous divIcon
+        // approach created 700 HTML elements that the browser had to
+        // reposition every frame of zoom. canvas rendering pushes all
+        // of them to the GPU as one layer.
         preferCanvas: true,
-        // Higher = more wheel travel per zoom level on desktop, which
-        // feels smoother and gives users finer-grained control. Default
-        // is 60; 100 makes scroll-wheel zoom less stutter-prone.
-        wheelPxPerZoomLevel: 100,
-        // Allow half-zoom-level steps so pinch + wheel zoom can land on
-        // intermediate scales instead of snapping to integers.
-        zoomSnap: 0.5,
       }).setView(initial.center, initial.zoom)
       if (homeLocation) initialViewApplied.current = true
 
@@ -210,23 +197,23 @@ export default function ExploreMap({
         if (!isFiniteLatLng(loc.lat, loc.lng)) return
         const isActive = activeId === loc.id
         const color    = loc.access === 'private' ? '#b54b2a' : '#4a6741'
-        const size     = isActive ? 22 : 16
-        const bg       = isActive ? '#c4922a' : color
-        const border   = isActive ? '3px' : '2px'
+        const fill     = isActive ? '#c4922a' : color
 
-        const marker = L.marker([loc.lat, loc.lng], {
-          icon: L.divIcon({
-            className: '',
-            html: `<div style="
-              width:${size}px; height:${size}px; border-radius:50%;
-              background:${bg}; border:${border} solid white;
-              box-shadow:0 ${isActive ? '4px 14px' : '2px 6px'} rgba(0,0,0,.3);
-              transition:all .25s; cursor:pointer;
-            "></div>`,
-            iconSize:   [size, size],
-            iconAnchor: [size / 2, size / 2],
-          }),
-          zIndexOffset: isActive ? 1000 : 0,
+        // CircleMarker renders to the map's preferred renderer (canvas
+        // here), so 700 markers stay smooth during pan + zoom — the
+        // earlier divIcon version ran 700 separate DOM repositions per
+        // frame and choked. The visual is essentially the same: a
+        // colored circle with a white outline; active markers grow +
+        // turn gold. The previous CSS box-shadow can't cross from DOM
+        // to canvas, but the size + color difference still reads as
+        // "this one is selected".
+        const marker = L.circleMarker([loc.lat, loc.lng], {
+          radius:      isActive ? 10 : 6,
+          fillColor:   fill,
+          color:       'white',
+          weight:      isActive ? 3 : 2,
+          fillOpacity: 1,
+          opacity:     1,
         }).addTo(map)
 
         marker.on('click', () => onMarkerClick(loc.id))
@@ -235,6 +222,7 @@ export default function ExploreMap({
            <span style="color:#6b5f52;font-size:12px;">📍 ${loc.city}</span><br>
            <span style="color:#c4922a;font-size:12px;">★ ${loc.rating}</span>`
         )
+        if (isActive) marker.bringToFront()
 
         markersRef.current[loc.id] = marker
       })
