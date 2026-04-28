@@ -616,7 +616,18 @@ export default function ClientPickerPage() {
   return (
     <div
       style={{
-        height: '100svh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        // position:fixed + inset:0 instead of height:100svh — locks the
+        // wrapper to the visible viewport and prevents iOS Safari from
+        // letting the body scroll behind it (which was making the
+        // confirm bar appear to drift on touch scroll). Combined with
+        // overflow:hidden, nothing can scroll at the wrapper level;
+        // only the inner overflowY:auto regions scroll.
+        position: 'fixed', inset: 0,
+        // Respect notches / status bars on iOS so the "Browse locations"
+        // header at the top of the sidebar isn't hidden behind the
+        // status bar on phones.
+        paddingTop: 'env(safe-area-inset-top, 0)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
         backgroundColor: 'var(--ink)',
         backgroundImage: tplBgImage,
         backgroundSize: 'cover',
@@ -851,8 +862,11 @@ export default function ClientPickerPage() {
           list to the photographer for discussion (separate flow from
           the final pick). */}
       {favoritedLocs.length > 0 && !favoritesSent && (
-        <div style={{ background: 'rgba(196,146,42,.16)', borderTop: '1px solid rgba(196,146,42,.35)', padding: '8px 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 13, color: 'var(--cream)', minWidth: 0, flex: '1 1 200px', lineHeight: 1.4 }}>
+        // Single-row layout — text truncates with ellipsis if it would
+        // otherwise wrap, so the strip stays a predictable ~46px tall
+        // and the View Map pill below has consistent clearance.
+        <div style={{ background: 'rgba(196,146,42,.16)', borderTop: '1px solid rgba(196,146,42,.35)', padding: '8px 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 }}>
+          <div style={{ fontSize: 13, color: 'var(--cream)', minWidth: 0, flex: 1, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <span style={{ marginRight: 6 }}>💜</span>
             <strong style={{ fontWeight: 700 }}>{favoritedLocs.length}</strong> {favoritedLocs.length === 1 ? 'spot' : 'spots'} favorited — not sure yet?
           </div>
@@ -1562,9 +1576,11 @@ export default function ClientPickerPage() {
           }
           /* Bumped up when the favorites strip is sitting above the
              confirm bar — without this the View Map pill ends up
-             stacked on top of the strip on mobile. */
+             stacked on top of the strip on mobile. The strip is now
+             single-row ~46px tall plus the confirm bar's ~78px,
+             so 145px clears both with a small gap. */
           .pick-mobile-toggle.has-favorites-strip {
-            bottom: calc(env(safe-area-inset-bottom, 0) + 140px) !important;
+            bottom: calc(env(safe-area-inset-bottom, 0) + 145px) !important;
           }
         }
       `}</style>
