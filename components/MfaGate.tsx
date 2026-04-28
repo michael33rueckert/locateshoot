@@ -20,9 +20,12 @@ export default function MfaGate() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setNeeded(false); return }
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (!aal || aal.currentLevel !== 'aal1' || aal.nextLevel !== 'aal2') {
-      setNeeded(false); return
-    }
+    // Already at aal2 — verified earlier this session, no challenge needed.
+    if (aal?.currentLevel === 'aal2') { setNeeded(false); return }
+    // Use listFactors directly rather than the AAL nextLevel field —
+    // right after signInWithPassword the factor list hasn't always been
+    // fetched yet, so nextLevel can momentarily read 'aal1' even for
+    // an MFA-enabled account. listFactors hits the API and is reliable.
     const { data: factors } = await supabase.auth.mfa.listFactors()
     const totp = factors?.totp?.find(f => f.status === 'verified')
     if (!totp) { setNeeded(false); return }

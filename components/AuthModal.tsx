@@ -26,24 +26,33 @@ export default function AuthModal({ initialMode, onClose }: Props) {
     setMode(m); setError(''); setSuccess('')
   }
 
-  // After a successful password sign-in, check whether this account has an
-  // unverified MFA factor pending for this session (currentLevel=aal1, nextLevel=aal2).
-  // If so, swap the modal into MFA entry mode; otherwise complete sign-in.
+  // After a successful password sign-in, decide whether to challenge for MFA.
+  //
+  // Previously this gated on getAuthenticatorAssuranceLevel()'s
+  // nextLevel === 'aal2' — but that field is derived from the cached
+  // factor list, and right after signInWithPassword the factors
+  // haven't always been fetched yet. Result: nextLevel briefly reads
+  // 'aal1' (no MFA) and the modal redirects to /dashboard, where the
+  // global MfaGate then catches the same account on the second pass
+  // and shows the prompt — i.e. MFA pops up AFTER the dashboard
+  // renders instead of blocking the redirect. Calling listFactors()
+  // directly bypasses the cache and gives a definitive answer.
   async function finishLoginOrChallenge() {
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (aal && aal.currentLevel === 'aal1' && aal.nextLevel === 'aal2') {
-      const { data: factors, error: fErr } = await supabase.auth.mfa.listFactors()
-      if (fErr) throw fErr
-      const totp = factors?.totp?.find(f => f.status === 'verified')
-      if (!totp) {
-        // Edge case: aal says there's a higher level available but no verified factor.
-        // Let the user through rather than locking them out.
-        onClose(); window.location.href = '/dashboard'; return
-      }
+    // Already verified earlier in this session (resumed login from a
+    // device that already passed MFA today) — straight through.
+    if (aal?.currentLevel === 'aal2') {
+      onClose(); window.location.href = '/dashboard'; return
+    }
+    const { data: factors, error: fErr } = await supabase.auth.mfa.listFactors()
+    if (fErr) throw fErr
+    const totp = factors?.totp?.find(f => f.status === 'verified')
+    if (totp) {
       setMfaFactorId(totp.id)
       setMode('mfa')
       return
     }
+    // No verified factors — pure password account, proceed.
     onClose(); window.location.href = '/dashboard'
   }
 
