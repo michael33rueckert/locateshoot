@@ -83,8 +83,9 @@ export function LaptopFrame({ src, alt, caption }: FrameProps) {
 
       {caption && (
         <figcaption style={{
-          marginTop: 6, fontSize: 12, color: 'var(--ink-soft)',
-          textAlign: 'center', fontWeight: 300,
+          marginTop: 12, fontSize: 17, color: 'var(--ink)',
+          textAlign: 'center', fontWeight: 500,
+          fontFamily: 'var(--font-playfair),serif',
         }}>
           {caption}
         </figcaption>
@@ -168,8 +169,9 @@ export function PhoneFrame({ src, alt, caption }: FrameProps) {
 
       {caption && (
         <figcaption style={{
-          marginTop: 6, fontSize: 12, color: 'var(--ink-soft)',
-          textAlign: 'center', fontWeight: 300,
+          marginTop: 12, fontSize: 17, color: 'var(--ink)',
+          textAlign: 'center', fontWeight: 500,
+          fontFamily: 'var(--font-playfair),serif',
         }}>
           {caption}
         </figcaption>
