@@ -343,10 +343,10 @@ export default function HowItWorksPage() {
                 </div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
-                    💚 <strong>Everything is free during the beta.</strong> No card needed, no usage caps for testing — even Pro features are open while you&apos;re here.
+                    💚 <strong>Everything is free during the beta.</strong>{' '}No card needed, no usage caps for testing — even Pro features are open while you&apos;re here.
                   </li>
                   <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
-                    🛠 <strong>Things may break or look off.</strong> If you see something weird, that&apos;s exactly what we want to know about.
+                    🛠 <strong>Things may break or look off.</strong>{' '}If you see something weird, that&apos;s exactly what we want to know about.
                   </li>
                   <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
                     🚀 <strong>We ship updates constantly</strong> based on what beta testers report.
@@ -360,13 +360,13 @@ export default function HowItWorksPage() {
                 </div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
-                    📸 <strong>Use it like you would for a real client</strong> — build out your portfolio, create a Location Guide, send the link somewhere you&apos;d actually share it (a friend&apos;s inbox is fine).
+                    📸 <strong>Use it like you would for a real client</strong>{' '}— build out your portfolio, create a Location Guide, send the link somewhere you&apos;d actually share it (a friend&apos;s inbox is fine).
                   </li>
                   <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
                     🐛 <strong>Report every problem</strong> — even tiny ones. The 💬 Feedback button in the bottom-right of every screen is the fastest way.
                   </li>
                   <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
-                    💡 <strong>Tell us what&apos;s missing.</strong> Features that would actually save you time, copy that&apos;s confusing, anything that doesn&apos;t quite fit your workflow.
+                    💡 <strong>Tell us what&apos;s missing.</strong>{' '}Features that would actually save you time, copy that&apos;s confusing, anything that doesn&apos;t quite fit your workflow.
                   </li>
                   <li style={{ fontSize: 14, color: 'var(--ink)', fontWeight: 400, lineHeight: 1.55 }}>
                     👍 <strong>Tell us what works too.</strong> Knowing what to keep is just as useful as knowing what to fix.

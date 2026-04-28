@@ -65,7 +65,7 @@ export default function AddPortfolioLocationModal({
     for (const raw of Array.from(files).slice(0, 10 - photos.length)) {
       let f = raw
       try { f = await compressImageIfNeeded(raw) }
-      catch (e: any) { rejected.push(`${raw.name}: couldn't process (${e?.message ?? 'unknown'})`); continue }
+      catch (e: any) { rejected.push(e?.message ?? `${raw.name}: couldn't process`); continue }
       const v = validateImageUpload(f)
       if (!v.ok) { rejected.push(`${raw.name}: ${v.message}`); continue }
       next.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file: f, previewUrl: URL.createObjectURL(f) })

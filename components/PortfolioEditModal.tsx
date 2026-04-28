@@ -244,7 +244,7 @@ export default function PortfolioEditModal({
         // already under the cap pass through unchanged.
         let f = raw
         try { f = await compressImageIfNeeded(raw) }
-        catch (e: any) { if (!firstError) firstError = `Couldn't process ${raw.name}: ${e?.message ?? 'unknown'}`; continue }
+        catch (e: any) { if (!firstError) firstError = e?.message ?? `Couldn't process ${raw.name}`; continue }
         // Centralized image validation: blocks SVG (script-bearing
         // XSS risk when served via getPublicUrl), enforces 10MB cap,
         // and normalizes the extension/MIME so iOS screenshots with

@@ -7,11 +7,16 @@
 // from server code — it'll throw at module load.
 //
 // Type policy:
-//   - JPEG / PNG / WebP   → decoded + recompressed to JPEG.
-//   - Anything else (HEIC, AVIF, GIF, etc.) → returned unchanged so
-//     validateImageUpload's normal rules apply. Canvas can't decode
-//     HEIC in most browsers, and we don't want to flatten an animated
-//     GIF without telling the user.
+//   - File ≤ maxBytes                       → returned unchanged.
+//   - File > maxBytes, browser can decode   → recompressed to JPEG.
+//   - File > maxBytes, browser can't decode → throws with a useful
+//     message (most often a HEIC/HEIF photo from an iPhone — Chrome
+//     and Firefox can't render it, so we can't shrink it client-side).
+//
+// Don't pre-filter by file.type — some browsers report `image/jpg`
+// instead of `image/jpeg`, drag-drop sometimes loses the MIME entirely,
+// and modern Safari can decode HEIC. Cheaper to just hand the bytes
+// to <img> and let the browser say no.
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024 // match upload-validate.ts
 const DEFAULT_MAX_DIM   = 2400              // longest side, in pixels
@@ -32,16 +37,30 @@ export async function compressImageIfNeeded(file: File, opts: CompressOptions = 
   const maxDim   = opts.maxDim   ?? DEFAULT_MAX_DIM
 
   if (file.size <= maxBytes) return file
-  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) return file
 
   const objectUrl = URL.createObjectURL(file)
+  let img: HTMLImageElement
   try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const i = new Image()
       i.onload  = () => resolve(i)
-      i.onerror = () => reject(new Error('Could not decode image'))
+      i.onerror = () => reject(new Error('decode_failed'))
       i.src     = objectUrl
     })
+  } catch {
+    URL.revokeObjectURL(objectUrl)
+    // Most common cause: an iPhone HEIC/HEIF photo on a non-Safari
+    // browser. Chrome/Firefox can't decode HEIC, so we can't shrink
+    // it from JS. Tell the user how to recover.
+    const ext = (file.name.split('.').pop() ?? '').toLowerCase()
+    const isHeic = ext === 'heic' || ext === 'heif' || /heic|heif/i.test(file.type)
+    const cap = `${Math.round(maxBytes / 1024 / 1024)}MB`
+    throw new Error(isHeic
+      ? `${file.name} is a HEIC/HEIF photo over ${cap}. Please export it as JPEG (in Photos: File → Export → Export Unmodified Original → choose "Most Compatible").`
+      : `${file.name} is over ${cap} and we couldn't auto-resize it. Please save it as a JPEG and try again.`,
+    )
+  }
+  try {
 
     // Cap the longest side at maxDim before any quality-driven
     // shrinking. A 6000 px wide JPEG at q=0.85 is still huge — fitting
