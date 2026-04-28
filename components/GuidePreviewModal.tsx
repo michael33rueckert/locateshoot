@@ -16,7 +16,14 @@ interface Props {
 }
 
 export default function GuidePreviewModal({ url, onClose }: Props) {
-  const [mode, setMode] = useState<'desktop' | 'mobile'>('desktop')
+  // Default to whichever view the photographer is actually USING the
+  // app on. If they're on their phone, "Desktop" mode squeezes a
+  // 1280-wide page into a 360px-wide modal — illegible. Mobile-first
+  // default for narrow viewports (and they can still toggle to desktop
+  // if they want to see the full layout).
+  const [mode, setMode] = useState<'desktop' | 'mobile'>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop',
+  )
 
   // Esc to close — same convention as the rest of the modals on the
   // photographer side.
@@ -37,7 +44,7 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
         background: '#1a1612',
         borderRadius: 14,
         width: 'min(1280px, 96vw)',
-        height: 'min(900px, 92vh)',
+        height: 'min(1040px, 94vh)',
         zIndex: 1001,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
@@ -100,7 +107,14 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
             />
           ) : (
             <div style={{
-              width: 390, height: 'min(844px, calc(92vh - 96px))',
+              // 430x932 — iPhone 14/15 Pro Max proportions. Drive
+              // sizing by height + aspect-ratio so on tablets (where
+              // viewport height clamps below ~932) the width shrinks
+              // proportionally instead of staying 430 and reading
+              // squished. Desktop with a tall viewport still hits the
+              // full 932px size.
+              height: 'min(932px, calc(94vh - 96px))',
+              aspectRatio: '430 / 932',
               background: 'white',
               borderRadius: 24, overflow: 'hidden',
               border: '1px solid rgba(255,255,255,.12)',
