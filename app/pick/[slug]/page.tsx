@@ -815,8 +815,13 @@ export default function ClientPickerPage() {
         </div>
       </div>
 
-      {/* Mobile map toggle — hidden on desktop via CSS, visible ≤768px */}
-      <button className="pick-mobile-toggle" onClick={() => setMobileMapVisible(p => !p)}>
+      {/* Mobile map toggle — hidden on desktop via CSS, visible ≤768px.
+          The has-favorites-strip class bumps it higher so it doesn't
+          overlap the favorites strip that sits above the confirm bar. */}
+      <button
+        className={`pick-mobile-toggle${favoritedLocs.length > 0 && !favoritesSent ? ' has-favorites-strip' : ''}`}
+        onClick={() => setMobileMapVisible(p => !p)}
+      >
         {mobileMapVisible ? '☰ View List' : '🗺 View Map'}
       </button>
 
@@ -871,9 +876,20 @@ export default function ClientPickerPage() {
             ? <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 700, color: 'var(--cream)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {chosenLocs.map(l => l.name).join(' · ')}
               </div>
-            : <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 14, color: 'rgba(245,240,232,.25)', fontStyle: 'italic' }}>
-                {maxPicks > 1 ? `Tap up to ${maxPicks} locations` : 'Tap a location above'}
-              </div>
+            : <>
+                <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 14, color: 'rgba(245,240,232,.4)', fontStyle: 'italic' }}>
+                  {maxPicks > 1 ? `Tap up to ${maxPicks} locations` : 'Tap a location above'}
+                </div>
+                {/* Surface the favorites flow even before the client has
+                    favorited anything — without this hint a first-time
+                    visitor never sees the option. Hidden once they
+                    have favorites (the strip above takes over). */}
+                {favoritedLocs.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'rgba(245,240,232,.35)', fontWeight: 300, marginTop: 3, lineHeight: 1.4 }}>
+                    Not sure yet? Tap 🤍 inside any location to favorite + send a list to discuss.
+                  </div>
+                )}
+              </>
           }
         </div>
         <button onClick={confirmChoice} disabled={chosenLocs.length === 0 || submitting}
@@ -1046,25 +1062,32 @@ export default function ClientPickerPage() {
               {/* Favorite (heart) toggle — soft "I'm considering this"
                   signal separate from the final pick. Stays sticky on
                   the detail panel rather than littering each list item
-                  across all six layout variants. */}
+                  across all six layout variants. The caption explains
+                  what favoriting actually does so a first-time client
+                  knows it's not just a private bookmark. */}
               {(() => {
                 const isFav = favoritedSet.has(String(detailLoc.id))
                 return (
-                  <button
-                    onClick={() => toggleFavorite(detailLoc.id)}
-                    aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                    style={{
-                      width: '100%', padding: '10px', marginBottom: 10,
-                      borderRadius: 4,
-                      border: `1.5px solid ${isFav ? 'var(--rust)' : 'var(--cream-dark)'}`,
-                      background: isFav ? 'rgba(181,75,42,.08)' : 'white',
-                      color: isFav ? 'var(--rust)' : 'var(--ink-soft)',
-                      fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', fontFamily: 'inherit',
-                    }}
-                  >
-                    {isFav ? '💜 Favorited — tap to remove' : '🤍 Add to favorites'}
-                  </button>
+                  <div style={{ marginBottom: 10 }}>
+                    <button
+                      onClick={() => toggleFavorite(detailLoc.id)}
+                      aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                      style={{
+                        width: '100%', padding: '10px',
+                        borderRadius: 4,
+                        border: `1.5px solid ${isFav ? 'var(--rust)' : 'var(--cream-dark)'}`,
+                        background: isFav ? 'rgba(181,75,42,.08)' : 'white',
+                        color: isFav ? 'var(--rust)' : 'var(--ink-soft)',
+                        fontSize: 13, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >
+                      {isFav ? '💜 Favorited — tap to remove' : '🤍 Add to favorites'}
+                    </button>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5, marginTop: 6, textAlign: 'center' }}>
+                      Not ready to commit? Add several spots and send the list to {shareData?.photographer_name ?? 'your photographer'} to talk through your options first.
+                    </div>
+                  </div>
                 )
               })()}
               <div style={{ display: 'flex', gap: 10, paddingBottom: '1rem' }}>
@@ -1536,6 +1559,12 @@ export default function ClientPickerPage() {
             white-space: nowrap !important;
             background: var(--ink) !important;
             color: var(--cream) !important;
+          }
+          /* Bumped up when the favorites strip is sitting above the
+             confirm bar — without this the View Map pill ends up
+             stacked on top of the strip on mobile. */
+          .pick-mobile-toggle.has-favorites-strip {
+            bottom: calc(env(safe-area-inset-bottom, 0) + 140px) !important;
           }
         }
       `}</style>
