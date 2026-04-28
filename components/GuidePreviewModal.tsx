@@ -52,33 +52,50 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
         border: '1px solid rgba(255,255,255,.08)',
       }}>
 
-        {/* Header — title left, viewport toggle center, close right. */}
+        {/* Header — title left, viewport toggle center, close right.
+            On narrow viewports (Pixel Fold outer, small phones) the
+            title is hidden so the toggle + close button always fit
+            without clipping. The toggle's text labels collapse to the
+            emoji-only versions below 480px to save another ~80px. */}
+        <style>{`
+          @media (max-width: 599px) {
+            .gpm-title { display: none !important; }
+          }
+          @media (max-width: 479px) {
+            .gpm-toggle-label { display: none !important; }
+            .gpm-toggle-btn { padding: 6px 10px !important; }
+          }
+        `}</style>
         <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottom: '1px solid rgba(255,255,255,.08)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--cream)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div className="gpm-title" style={{ fontSize: 13, fontWeight: 600, color: 'var(--cream)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             👁 Preview as client sees it
           </div>
 
           {/* Desktop / Mobile toggle */}
           <div style={{ display: 'inline-flex', borderRadius: 6, border: '1px solid rgba(255,255,255,.15)', overflow: 'hidden', flexShrink: 0 }}>
             <button
+              className="gpm-toggle-btn"
               onClick={() => setMode('desktop')}
               style={{
                 padding: '6px 14px', border: 'none',
                 background: mode === 'desktop' ? 'var(--gold)' : 'transparent',
                 color:      mode === 'desktop' ? 'var(--ink)'  : 'rgba(245,240,232,.7)',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
               }}
-            >🖥 Desktop</button>
+              aria-label="Desktop preview"
+            >🖥<span className="gpm-toggle-label"> Desktop</span></button>
             <button
+              className="gpm-toggle-btn"
               onClick={() => setMode('mobile')}
               style={{
                 padding: '6px 14px',
                 border: 'none', borderLeft: '1px solid rgba(255,255,255,.15)',
                 background: mode === 'mobile' ? 'var(--gold)' : 'transparent',
                 color:      mode === 'mobile' ? 'var(--ink)'  : 'rgba(245,240,232,.7)',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
               }}
-            >📱 Mobile</button>
+              aria-label="Mobile preview"
+            >📱<span className="gpm-toggle-label"> Mobile</span></button>
           </div>
 
           <button
