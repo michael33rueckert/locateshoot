@@ -307,7 +307,16 @@ export default function ExplorePage() {
       try {
         const { data } = await supabase.from('locations')
           .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,favorite_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at')
-          .eq('status','published').not('latitude','is',null).not('longitude','is',null).limit(500)
+          .eq('status','published').not('latitude','is',null).not('longitude','is',null)
+          // Order by quality_score so if we ever DO hit the cap, the
+          // best curated locations come back first instead of whatever
+          // order PostgREST happens to return.
+          .order('quality_score', { ascending: false })
+          // Bumped from 500 → 2000 because the seed expansions pushed
+          // us past the original cap and newer metros (Honolulu,
+          // Charleston, Asheville, etc.) were getting silently chopped
+          // off the bottom of the response.
+          .limit(2000)
         setLocations((data??[]).map((loc:any,idx:number)=>({
           id:loc.id, name:loc.name,
           city:loc.city&&loc.state?`${loc.city}, ${loc.state}`:(loc.city??loc.state??''),
@@ -861,7 +870,7 @@ export default function ExplorePage() {
           {/* Count — normal flow, no sticky */}
           <div style={{background:'#f9f6f1',borderBottom:'1px solid var(--cream-dark)',padding:'7px 1.25rem',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
             <div style={{fontSize:13,fontWeight:500,color:'var(--ink)'}}>
-              {dbLoading?<span style={{color:'var(--ink-soft)',fontWeight:300}}>Loading…</span>:<>{filtered.length}<span style={{fontWeight:300,color:'var(--ink-soft)',fontSize:11}}> of {locations.length}</span></>}
+              {dbLoading?<span style={{color:'var(--ink-soft)',fontWeight:300}}>Loading…</span>:<>{filtered.length}<span style={{fontWeight:300,color:'var(--ink-soft)',fontSize:11}}> of {locations.length + manualPortfolioLocs.length}</span></>}
             </div>
             <div style={{fontSize:11,color:'var(--ink-soft)'}}>{SORT_OPTIONS.find(s=>s.value===sortBy)?.label}</div>
           </div>
