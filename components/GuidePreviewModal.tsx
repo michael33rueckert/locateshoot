@@ -44,7 +44,13 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
         background: '#1a1612',
         borderRadius: 14,
         width: 'min(1280px, 96vw)',
-        height: 'min(1040px, 94vh)',
+        // dvh (dynamic viewport height) excludes the browser chrome /
+        // URL bar from the available height. With plain vh, the modal
+        // gets centered on the full viewport including chrome — which
+        // means the top of the modal slides UP behind the URL bar on
+        // tall mobile + foldable displays, clipping the header
+        // buttons. dvh fixes that. 90% leaves a comfortable margin.
+        height: 'min(1040px, 90dvh)',
         zIndex: 1001,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
@@ -130,7 +136,7 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
               // proportionally instead of staying 430 and reading
               // squished. Desktop with a tall viewport still hits the
               // full 932px size.
-              height: 'min(932px, calc(94vh - 96px))',
+              height: 'min(932px, calc(90dvh - 96px))',
               aspectRatio: '430 / 932',
               background: 'white',
               borderRadius: 24, overflow: 'hidden',
