@@ -543,101 +543,6 @@ export default function ClientPickerPage() {
            style would be too invasive; this is close enough. */
       `}</style>
 
-      {/* Header */}
-      {(() => {
-        const whiteLabel    = branding?.remove_ls_branding && branding?.logo_url
-        // Header background — purely photographer-controlled now.
-        // The old auto-detection that flipped the header to cream when
-        // the photographer's logo looked dark was surprising (and the
-        // photographer had no UI control over it). Simplified to:
-        //   - bgColor set    → use it; text color derives from luminance
-        //   - bgColor empty  → dark default (var(--ink) = tpl.colors.text)
-        // If a photographer wants a cream header they pick #f9f6f1 (or
-        // any other) explicitly via the editor's Header background field.
-        const customBg      = (tpl.header.bgColor && /^#[0-9a-f]{3,8}$/i.test(tpl.header.bgColor)) ? tpl.header.bgColor : ''
-        const lightHeader   = customBg ? hexLuminance(customBg) > 0.55 : false
-        const headerBg      = customBg || 'var(--ink)'
-        const headerBorder  = lightHeader ? '1px solid var(--cream-dark)' : '1px solid rgba(255,255,255,.08)'
-        const primaryText   = lightHeader ? 'var(--ink)' : 'var(--cream)'
-        const secondaryText = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.55)'
-        const mutedText     = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.4)'
-        const studioNameCol = lightHeader ? 'rgba(26,22,18,.75)' : 'rgba(245,240,232,.7)'
-
-        // Logo placement — controls horizontal alignment of the
-        // logo + studio name lockup at the top of the header. 'hidden'
-        // suppresses the logo block entirely (white-label users who
-        // want studio-name-only headers, etc.).
-        const logoPlacement = (tpl.header.logoPlacement ?? 'left') as 'left' | 'center' | 'right' | 'hidden'
-        const logoAlign     = logoPlacement === 'center' ? 'center'
-                            : logoPlacement === 'right'  ? 'flex-end'
-                            : 'flex-start'
-
-        const studioName = branding?.show_studio_name !== false ? branding?.studio_name : null
-        const instagramRaw = branding?.instagram ? String(branding.instagram).trim() : ''
-        const instagramHandle = instagramRaw.replace(/^@+/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '')
-        const instagramUrl = instagramHandle ? `https://instagram.com/${instagramHandle}` : null
-        const websiteRaw = branding?.website ? String(branding.website).trim() : ''
-        const websiteUrl = websiteRaw ? (websiteRaw.startsWith('http') ? websiteRaw : `https://${websiteRaw}`) : null
-        const websiteLabel = websiteRaw.replace(/^https?:\/\//, '').replace(/\/$/, '')
-        const meta = [
-          shareData?.photographer_name ? { key: 'name', icon: '📷', label: shareData.photographer_name, href: null as string | null } : null,
-          instagramHandle ? { key: 'ig', icon: '◎', label: `@${instagramHandle}`, href: instagramUrl } : null,
-          websiteLabel ? { key: 'web', icon: '🌐', label: websiteLabel, href: websiteUrl } : null,
-          shareData?.session_name ? { key: 'session', icon: '🗒', label: shareData.session_name, href: null } : null,
-        ].filter(Boolean) as { key: string; icon: string; label: string; href: string | null }[]
-
-        // Logo size from the template (small / medium / large). Falls
-        // back to medium if the template predates the logoSize field
-        // (e.g. a row created before the migration that added the
-        // header.logoSize column wrapper).
-        const logoSizeKey = (tpl.header.logoSize ?? 'medium') as keyof typeof LOGO_SIZE_PX
-        const logoBox     = LOGO_SIZE_PX[logoSizeKey] ?? LOGO_SIZE_PX.medium
-
-        return (
-          <div style={{ background: headerBg, padding: '1.25rem 1.5rem', flexShrink: 0, borderBottom: headerBorder, transition: 'background .2s' }}>
-            {/* Logo block. Suppressed entirely when logoPlacement is
-                'hidden'. Otherwise the lockup aligns left/center/right
-                via display:flex + the logoAlign computed above. */}
-            {logoPlacement !== 'hidden' && (whiteLabel ? (
-              <div style={{ display: 'flex', justifyContent: logoAlign, marginBottom: '1rem' }}>
-                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: logoPlacement === 'center' ? 'center' : logoPlacement === 'right' ? 'flex-end' : 'flex-start' }}>
-                  <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: logoBox.maxHeight, maxWidth: logoBox.maxWidth, width: 'auto', height: 'auto', objectFit: 'contain' }} />
-                  {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: studioNameCol, marginTop: 6 }}>{studioName}</div>}
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', justifyContent: logoAlign, gap: 6, marginBottom: '1rem' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
-              </div>
-            ))}
-
-            <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: primaryText, marginBottom: '.4rem' }}>
-              Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
-            </h1>
-            {shareData?.message && <p style={{ fontSize: 14, fontWeight: 300, color: secondaryText, lineHeight: 1.6, maxWidth: 560, marginBottom: '.75rem' }}>{shareData.message}</p>}
-            {meta.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11, color: mutedText }}>
-                {meta.map(m => {
-                  const content = <><span style={{ marginRight: 4 }}>{m.icon}</span>{m.label}</>
-                  return (
-                    <span key={m.key} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                      {m.href
-                        ? <a href={m.href} target="_blank" rel="noopener noreferrer" style={{ color: mutedText, textDecoration: 'none' }}>{content}</a>
-                        : <span>{content}</span>}
-                    </span>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })()}
-
-      {/* Progress bar */}
-      <div style={{ height: 2, background: 'rgba(255,255,255,.08)', flexShrink: 0 }}>
-        <div style={{ height: '100%', background: isGoldAccent ? 'var(--gold)' : accentColor, width: chosenIds.length > 0 ? `${Math.min(100, (chosenIds.length / maxPicks) * 100)}%` : '0%', transition: 'width .5s ease' }} />
-      </div>
-
       {/* Body — data-layout drives the editorial-specific behavior:
           on tablet + desktop, the editorial layout collapses to a
           full-width sidebar with the map hidden by default (toggled
@@ -656,6 +561,87 @@ export default function ClientPickerPage() {
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
+            {/* Header — scrolls with the location list (rather than
+                staying pinned at the top) so the photographer's brand
+                surface gets out of the way once the client starts
+                browsing. Inside the sidebar's scroll area means: on
+                desktop/tablet non-editorial layouts it's column-width
+                (left of map); on editorial + mobile it's full-width. */}
+            {(() => {
+              const whiteLabel    = branding?.remove_ls_branding && branding?.logo_url
+              const customBg      = (tpl.header.bgColor && /^#[0-9a-f]{3,8}$/i.test(tpl.header.bgColor)) ? tpl.header.bgColor : ''
+              const lightHeader   = customBg ? hexLuminance(customBg) > 0.55 : false
+              const headerBg      = customBg || 'var(--ink)'
+              const headerBorder  = lightHeader ? '1px solid var(--cream-dark)' : '1px solid rgba(255,255,255,.08)'
+              const primaryText   = lightHeader ? 'var(--ink)' : 'var(--cream)'
+              const secondaryText = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.55)'
+              const mutedText     = lightHeader ? 'var(--ink-soft)' : 'rgba(245,240,232,.4)'
+              const studioNameCol = lightHeader ? 'rgba(26,22,18,.75)' : 'rgba(245,240,232,.7)'
+
+              const logoPlacement = (tpl.header.logoPlacement ?? 'left') as 'left' | 'center' | 'right' | 'hidden'
+              const logoAlign     = logoPlacement === 'center' ? 'center'
+                                  : logoPlacement === 'right'  ? 'flex-end'
+                                  : 'flex-start'
+
+              const studioName = branding?.show_studio_name !== false ? branding?.studio_name : null
+              const instagramRaw = branding?.instagram ? String(branding.instagram).trim() : ''
+              const instagramHandle = instagramRaw.replace(/^@+/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '')
+              const instagramUrl = instagramHandle ? `https://instagram.com/${instagramHandle}` : null
+              const websiteRaw = branding?.website ? String(branding.website).trim() : ''
+              const websiteUrl = websiteRaw ? (websiteRaw.startsWith('http') ? websiteRaw : `https://${websiteRaw}`) : null
+              const websiteLabel = websiteRaw.replace(/^https?:\/\//, '').replace(/\/$/, '')
+              const meta = [
+                shareData?.photographer_name ? { key: 'name', icon: '📷', label: shareData.photographer_name, href: null as string | null } : null,
+                instagramHandle ? { key: 'ig', icon: '◎', label: `@${instagramHandle}`, href: instagramUrl } : null,
+                websiteLabel ? { key: 'web', icon: '🌐', label: websiteLabel, href: websiteUrl } : null,
+                shareData?.session_name ? { key: 'session', icon: '🗒', label: shareData.session_name, href: null } : null,
+              ].filter(Boolean) as { key: string; icon: string; label: string; href: string | null }[]
+
+              const logoSizeKey = (tpl.header.logoSize ?? 'medium') as keyof typeof LOGO_SIZE_PX
+              const logoBox     = LOGO_SIZE_PX[logoSizeKey] ?? LOGO_SIZE_PX.medium
+
+              return (
+                <div style={{ background: headerBg, padding: '1.25rem 1.5rem', borderBottom: headerBorder, transition: 'background .2s' }}>
+                  {logoPlacement !== 'hidden' && (whiteLabel ? (
+                    <div style={{ display: 'flex', justifyContent: logoAlign, marginBottom: '1rem' }}>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: logoPlacement === 'center' ? 'center' : logoPlacement === 'right' ? 'flex-end' : 'flex-start' }}>
+                        <img src={branding.logo_url} alt={studioName ?? 'Studio logo'} style={{ display: 'block', maxHeight: logoBox.maxHeight, maxWidth: logoBox.maxWidth, width: 'auto', height: 'auto', objectFit: 'contain' }} />
+                        {studioName && <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 13, fontWeight: 600, color: studioNameCol, marginTop: 6 }}>{studioName}</div>}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 900, color: 'rgba(245,240,232,.3)', display: 'flex', alignItems: 'center', justifyContent: logoAlign, gap: 6, marginBottom: '1rem' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
+                    </div>
+                  ))}
+
+                  <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(22px,4vw,36px)', fontWeight: 900, lineHeight: 1.1, color: primaryText, marginBottom: '.4rem' }}>
+                    Choose your <em style={{ fontStyle: 'italic', color: isGoldAccent ? 'var(--gold)' : accentColor }}>perfect</em> spot
+                  </h1>
+                  {shareData?.message && <p style={{ fontSize: 14, fontWeight: 300, color: secondaryText, lineHeight: 1.6, maxWidth: 560, marginBottom: '.75rem' }}>{shareData.message}</p>}
+                  {meta.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11, color: mutedText }}>
+                      {meta.map(m => {
+                        const content = <><span style={{ marginRight: 4 }}>{m.icon}</span>{m.label}</>
+                        return (
+                          <span key={m.key} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                            {m.href
+                              ? <a href={m.href} target="_blank" rel="noopener noreferrer" style={{ color: mutedText, textDecoration: 'none' }}>{content}</a>
+                              : <span>{content}</span>}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Progress bar — also scrolls with the header. */}
+            <div style={{ height: 2, background: 'rgba(255,255,255,.08)' }}>
+              <div style={{ height: '100%', background: isGoldAccent ? 'var(--gold)' : accentColor, width: chosenIds.length > 0 ? `${Math.min(100, (chosenIds.length / maxPicks) * 100)}%` : '0%', transition: 'width .5s ease' }} />
+            </div>
+
             {locations.length === 0 ? (
               <div style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>📍</div>
