@@ -87,8 +87,28 @@ export default function ExploreMap({
       const initial = homeLocation && isFiniteLatLng(homeLocation.lat, homeLocation.lng)
         ? { center: [homeLocation.lat, homeLocation.lng] as [number, number], zoom: HOME_CITY_ZOOM }
         : USA_VIEW
-      const map = L.map(container, { zoomControl: false })
-        .setView(initial.center, initial.zoom)
+      const map = L.map(container, {
+        zoomControl: false,
+        // Don't animate every marker individually during zoom — at 600+
+        // markers the per-marker transform updates choke both desktop
+        // and touch zoom. With this off, markers vanish for the ~250ms
+        // zoom animation and reappear at the new zoom level. Tiles
+        // still animate smoothly (zoomAnimation defaults true), so the
+        // visual effect is "tile zoom + markers snap" instead of a
+        // janky everything-moves-at-once.
+        markerZoomAnimation: false,
+        // Render any vector layers (CircleMarker etc.) via canvas
+        // rather than SVG. divIcon markers don't benefit, but it's the
+        // safe default once the marker count gets high.
+        preferCanvas: true,
+        // Higher = more wheel travel per zoom level on desktop, which
+        // feels smoother and gives users finer-grained control. Default
+        // is 60; 100 makes scroll-wheel zoom less stutter-prone.
+        wheelPxPerZoomLevel: 100,
+        // Allow half-zoom-level steps so pinch + wheel zoom can land on
+        // intermediate scales instead of snapping to integers.
+        zoomSnap: 0.5,
+      }).setView(initial.center, initial.zoom)
       if (homeLocation) initialViewApplied.current = true
 
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
