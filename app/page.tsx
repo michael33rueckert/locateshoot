@@ -292,7 +292,7 @@ export default function HomePage() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <PhoneFrame
-                src="/marketing/screenshots/PickPageScreenshot1.png"
+                src="/marketing/screenshots/LocationGuidePhoneScreenshot.png"
                 alt="A client viewing a Location Guide on their phone"
                 caption="What your client sees"
               />

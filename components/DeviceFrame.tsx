@@ -107,12 +107,16 @@ export function PhoneFrame({ src, alt, caption }: FrameProps) {
           '0 30px 60px -12px rgba(26,22,18,0.35), ' +
           '0 18px 32px -18px rgba(26,22,18,0.30)',
       }}>
-        {/* Screen — cream background so the letterbox space below
-            shorter-than-iPhone-tall screenshots (~9:16 to 9:18)
-            blends with the Pick page's typical cream backdrop
-            instead of showing a white seam. */}
+        {/* Screen — top half white, bottom half dark. The current Pick
+            page screenshot has a white "Browse locations" sticky bar
+            at its very top and a dark "Send my choice" confirm bar at
+            its very bottom; pairing them with matching letterbox fills
+            hides the contain-letterbox seam on both ends. The image
+            is opaque, so the 50% gradient hard stop disappears behind
+            it — only the small letterbox strips above and below are
+            visible. */}
         <div style={{
-          background: '#f9f6f1',
+          background: 'linear-gradient(to bottom, #ffffff 50%, #1a1612 50%)',
           borderRadius: 28,
           aspectRatio: '9 / 19.5',
           overflow: 'hidden',
@@ -143,12 +147,14 @@ export function PhoneFrame({ src, alt, caption }: FrameProps) {
               display: 'block',
             }}
           />
-          {/* Home indicator pill at the bottom */}
+          {/* Home indicator pill at the bottom — light/translucent
+              white so it reads on the dark bottom letterbox (the dark
+              fill matches the screenshot's bottom action bar). */}
           <div style={{
             position: 'absolute',
             bottom: 6, left: '50%', transform: 'translateX(-50%)',
             width: '32%', height: 4, borderRadius: 999,
-            background: 'rgba(10,10,11,0.6)',
+            background: 'rgba(245,240,232,0.55)',
             zIndex: 2,
           }} />
         </div>
