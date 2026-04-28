@@ -5,6 +5,13 @@ const PUBLIC_PATHS = [
   '/coming-soon',
   '/api/preview',
   '/not-available',
+  // Email-confirmation handler. The link in Supabase's confirmation
+  // email opens in whatever browser the user taps from (often their
+  // phone's default, which doesn't have the preview cookie set on
+  // their desktop). Letting it through the gate lets the callback
+  // exchange the code, set the session, AND set the preview cookie
+  // before redirecting them on to /dashboard.
+  '/auth/callback',
 ]
 
 // PWA installability requires the browser to fetch these without cookies. If the
