@@ -59,7 +59,6 @@ export default function SavedTemplatesPanel({ userId, isPro, logoUrl, onLogoChan
       .eq('user_id', userId)
       .order('is_default', { ascending: false })
       .order('updated_at', { ascending: false })
-    setLoading(false)
     if (error) {
       // Most likely the migration 20260426_pick_templates hasn't been
       // applied yet — Supabase returns a 42P01-class "relation does
@@ -67,13 +66,37 @@ export default function SavedTemplatesPanel({ userId, isPro, logoUrl, onLogoChan
       // the picker UI.
       if (/relation .* does not exist|pick_templates/.test(error.message)) {
         setMigrationMissing(true)
-        return
+      } else {
+        setError(error.message)
       }
-      setError(error.message)
+      setLoading(false)
       return
     }
-    setTemplates((data ?? []) as SavedTemplate[])
-    if (data && data.length > 0 && !activeId) setActiveId(data[0].id)
+
+    let rows = (data ?? []) as SavedTemplate[]
+
+    // Auto-provision a starting template for new Pro users. Empty
+    // config renders as DEFAULT_TEMPLATE (the cream + gold classic
+    // look), so a brand-new account can send a Location Guide without
+    // ever touching the template editor — and the Create Location
+    // Guide modal's template dropdown has at least one option from
+    // day one. Existing users with templates skip this branch.
+    if (rows.length === 0) {
+      const ins = await supabase
+        .from('pick_templates')
+        .insert({ user_id: userId, name: 'Studio template', config: {}, is_default: true })
+        .select('id,user_id,name,config,is_default,created_at,updated_at')
+        .single()
+      if (ins.error) {
+        setError(ins.error.message)
+      } else if (ins.data) {
+        rows = [ins.data as SavedTemplate]
+      }
+    }
+
+    setTemplates(rows)
+    if (rows.length > 0 && !activeId) setActiveId(rows[0].id)
+    setLoading(false)
   }, [userId, isPro, activeId])
 
   useEffect(() => { load() }, [load])
@@ -274,14 +297,13 @@ export default function SavedTemplatesPanel({ userId, isPro, logoUrl, onLogoChan
       )}
 
       {/* Template list — each row is clickable to switch the editor
-          below to that template. The active one is highlighted. */}
+          below to that template. The active one is highlighted. New
+          Pro users always have at least one template (auto-provisioned
+          on first load), so the "no templates yet" empty state from
+          before is unreachable in practice; the only zero-template
+          state now is during the brief loading window. */}
       {loading ? (
         <div style={{ padding: '1rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)' }}>Loading templates…</div>
-      ) : templates.length === 0 && !showGallery ? (
-        <div style={{ padding: '1.25rem', textAlign: 'center', background: 'var(--cream)', border: '1px dashed var(--cream-dark)', borderRadius: 8 }}>
-          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 8 }}>No templates yet — pick a starting style to customize your Location Guide pages.</div>
-          <button onClick={() => setShowGallery(true)} style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Browse starting templates →</button>
-        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: '1.25rem' }}>
           {templates.map(t => {
