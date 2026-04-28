@@ -793,6 +793,7 @@ export default function ClientPickerPage() {
                     const isChosen   = chosenSet.has(String(loc.id))
                     const isActive   = String(activeId) === String(loc.id)
                     const isDisabled = !isChosen && disabledSet.has(String(loc.id))
+                    const isFavorited = favoritedSet.has(String(loc.id))
                     return (
                       <PickListItem
                         key={String(loc.id)}
@@ -803,6 +804,7 @@ export default function ClientPickerPage() {
                         isChosen={isChosen}
                         isActive={isActive}
                         isDisabled={isDisabled}
+                        isFavorited={isFavorited}
                         onSelect={() => { setDetailLoc(loc); setActiveId(loc.id) }}
                         onToggleChoice={() => toggleChoice(loc.id)}
                       />
@@ -1510,6 +1512,14 @@ export default function ClientPickerPage() {
         .pick-body[data-layout="editorial"] .pick-map-col.pick-map-visible {
           display: block !important; flex: 1 1 auto !important; min-height: 0 !important;
         }
+        .pick-body[data-layout="editorial"] ~ .pick-mobile-toggle.has-favorites-strip,
+        .pick-body[data-layout="editorial"] + .pick-mobile-toggle.has-favorites-strip {
+          /* Editorial layout shows the View Map toggle on tablet/desktop
+             too, so the same favorites-strip clearance bump must apply
+             here — otherwise the pill sits on top of the strip on the
+             editorial layout regardless of viewport. */
+          bottom: calc(env(safe-area-inset-bottom, 0) + 145px) !important;
+        }
         .pick-body[data-layout="editorial"] ~ .pick-mobile-toggle,
         .pick-body[data-layout="editorial"] + .pick-mobile-toggle {
           /* The toggle button lives outside .pick-body — bring it back
@@ -1601,6 +1611,7 @@ function PickListItem({
   isChosen,
   isActive,
   isDisabled,
+  isFavorited,
   onSelect,
   onToggleChoice,
 }: {
@@ -1613,6 +1624,10 @@ function PickListItem({
   isChosen:       boolean
   isActive:       boolean
   isDisabled:     boolean
+  // True when the client has heart-favorited this location. Surfaces
+  // a small 💜 badge so they can scan the list and immediately see
+  // which spots they've marked.
+  isFavorited:    boolean
   onSelect:       () => void
   onToggleChoice: () => void
 }) {
@@ -1730,6 +1745,28 @@ function PickListItem({
             ★ Recommended
           </span>
         )}
+        {/* Favorited indicator — small 💜 pill so the client can scan
+            the list and instantly see which spots they've marked.
+            Stacks below the Recommended badge when both apply. */}
+        {isFavorited && (
+          <span
+            aria-label="Favorited"
+            style={{
+              position: 'absolute', right: 8, zIndex: 2,
+              top: loc.highlighted ? 38 : 8,
+              padding: '3px 9px', borderRadius: 999,
+              background: 'rgba(255,255,255,.95)',
+              color: 'var(--rust)',
+              fontSize: 11, fontWeight: 700,
+              letterSpacing: '.02em',
+              boxShadow: '0 1px 4px rgba(0,0,0,.18)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(181,75,42,.3)',
+            }}
+          >
+            💜 Favorited
+          </span>
+        )}
         {!compact && photos.length > 1 && (
           <span className="pick-loc-photo-counter">{photoIdx + 1} / {photos.length}</span>
         )}
@@ -1744,6 +1781,11 @@ function PickListItem({
         <div className="pick-loc-name">
           {loc.highlighted && (
             <span className="pick-loc-rec-inline" title="Recommended by your photographer" style={{ display: 'none', marginRight: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--gold)', verticalAlign: '2px' }}>★ REC</span>
+          )}
+          {/* Inline favorited indicator for compact layouts (list /
+              minimal) where the photo overlay version is hidden. */}
+          {isFavorited && (
+            <span title="You favorited this" style={{ marginRight: 6, fontSize: 12, verticalAlign: '1px' }}>💜</span>
           )}
           {loc.name}
         </div>
