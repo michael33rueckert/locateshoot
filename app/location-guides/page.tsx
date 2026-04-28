@@ -5,6 +5,7 @@ import Link from 'next/link'
 import AppNav from '@/components/AppNav'
 import CreateLocationGuideModal, { type GuideLinkLite, type PortfolioLocationLite } from '@/components/CreateLocationGuideModal'
 import LocationGuideCard from '@/components/LocationGuideCard'
+import GuidePreviewModal from '@/components/GuidePreviewModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import UpgradePrompt from '@/components/UpgradePrompt'
 import { supabase } from '@/lib/supabase'
@@ -45,6 +46,7 @@ export default function LocationGuidesPage() {
   const [deleteId,     setDeleteId]     = useState<string | null>(null)
   const [copiedId,     setCopiedId]     = useState<string | null>(null)
   const [toast,        setToast]        = useState<string | null>(null)
+  const [previewUrl,   setPreviewUrl]   = useState<string | null>(null)
   const [preselectIds, setPreselectIds] = useState<string[]>([])
   const [showAdd,      setShowAdd]      = useState(false)
   // Toggled when a Free user clicks "+ New guide". Free plan only
@@ -170,18 +172,16 @@ export default function LocationGuidesPage() {
   }
   function previewGuide(slug: string) {
     const url = buildShareUrl(slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
-    window.open(url, '_blank', 'noopener,noreferrer')
+    setPreviewUrl(url)
   }
   // Static portfolio-share card may not have a materialized share_link
-  // yet. Open about:blank synchronously (so popup blockers don't fire),
-  // lazy-create, then redirect the new tab to the real URL.
-  function previewFullPortfolio() {
-    const win = window.open('about:blank', '_blank')
-    if (!win) { setToast('⚠ Popup blocked — allow popups for this site to use Preview.'); return }
-    ensureFullPortfolioGuide().then(g => {
-      if (!g) { win.close(); return }
-      win.location.href = buildShareUrl(g.slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
-    })
+  // yet. Lazy-create and then point the in-app preview modal at the
+  // resulting URL — no popup window needed since the modal is in-page.
+  async function previewFullPortfolio() {
+    const g = await ensureFullPortfolioGuide()
+    if (!g) return
+    const url = buildShareUrl(g.slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
+    setPreviewUrl(url)
   }
 
   // The "Your portfolio share" card is rendered up top regardless of
@@ -388,6 +388,11 @@ export default function LocationGuidesPage() {
           onCreated={() => { setShowAdd(false); load(); setToast('✓ Added to your portfolio') }}
         />
       )}
+
+      {/* Guide preview modal — opened from the 👁 Preview button on
+          any guide card. Loads /pick/[slug] in an iframe with a
+          desktop / mobile viewport toggle. */}
+      {previewUrl && <GuidePreviewModal url={previewUrl} onClose={() => setPreviewUrl(null)} />}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', background: 'var(--ink)', color: 'var(--cream)', padding: '10px 18px', borderRadius: 10, fontSize: 13, border: '1px solid rgba(255,255,255,.1)', zIndex: 9999, boxShadow: '0 8px 32px rgba(0,0,0,.3)' }}>

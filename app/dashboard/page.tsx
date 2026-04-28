@@ -8,6 +8,7 @@ import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import CreateLocationGuideModal from '@/components/CreateLocationGuideModal'
 import LocationGuideCard from '@/components/LocationGuideCard'
+import GuidePreviewModal from '@/components/GuidePreviewModal'
 import UpgradePrompt from '@/components/UpgradePrompt'
 import { hasStarter, hasPro, normalizePlan, freePortfolioLocationCap } from '@/lib/plan'
 import { buildShareUrl } from '@/lib/custom-domain'
@@ -56,6 +57,9 @@ export default function DashboardPage() {
   const [loading,             setLoading]              = useState(true)
   const [toast,               setToast]                = useState<string | null>(null)
   const [showCreatePermanent,   setShowCreatePermanent]   = useState(false)
+  // URL of the guide currently being previewed in the in-app modal
+  // (with desktop / mobile viewport toggle). Null = no preview open.
+  const [previewUrl,            setPreviewUrl]            = useState<string | null>(null)
   const [preselectAllPortfolio, setPreselectAllPortfolio] = useState(false)
   // Toggled when a free user clicks "+ New guide" while already at the
   // 1-custom-link cap — shows an inline upgrade prompt instead of the
@@ -340,17 +344,16 @@ export default function DashboardPage() {
   }
   function previewGuide(slug: string) {
     const url = buildShareUrl(slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
-    window.open(url, '_blank', 'noopener,noreferrer')
+    setPreviewUrl(url)
   }
-  function previewFullPortfolio() {
-    // Open synchronously so popup blockers don't fire, then redirect to
-    // the materialized share URL once the row exists.
-    const win = window.open('about:blank', '_blank')
-    if (!win) { setToast('⚠ Popup blocked — allow popups for this site to use Preview.'); return }
-    ensureFullPortfolioPermLink().then(g => {
-      if (!g) { win.close(); return }
-      win.location.href = buildShareUrl(g.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
-    })
+  async function previewFullPortfolio() {
+    // Materialize the share row first if it doesn't exist yet, then
+    // open the in-app preview modal pointed at the resulting URL. No
+    // popup window needed (the modal is in-app, no popup blocker risk).
+    const g = await ensureFullPortfolioPermLink()
+    if (!g) return
+    const url = buildShareUrl(g.slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
+    setPreviewUrl(url)
   }
 
   async function deleteGuide(id: string) {
@@ -927,6 +930,12 @@ export default function DashboardPage() {
           }}
         />
       )}
+
+      {/* GUIDE PREVIEW MODAL — opened from the 👁 Preview button on
+          any Location Guide card (custom or full-portfolio). Loads the
+          actual /pick/[slug] page in an iframe with a desktop / mobile
+          viewport toggle. */}
+      {previewUrl && <GuidePreviewModal url={previewUrl} onClose={() => setPreviewUrl(null)} />}
 
       {/* PORTFOLIO EDIT MODAL */}
       {editingPortfolioId && (
