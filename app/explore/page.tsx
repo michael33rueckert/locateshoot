@@ -266,6 +266,13 @@ export default function ExplorePage() {
   const [manualPortfolioLocs, setManualPortfolioLocs] = useState<any[]>([])
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
+  // The location the user just clicked on the map or in the sidebar.
+  // When set, the sidebar list re-anchors around this point (showing
+  // other locations within the near-radius), making it easy to explore
+  // an area by clicking around. A small banner above the list offers a
+  // Reset button that clears this anchor and reverts to the underlying
+  // home / Near-me / no-anchor state.
+  const [clickedNearLoc, setClickedNearLoc] = useState<{lat:number;lng:number;name:string}|null>(null)
   const [showPinSearch,    setShowPinSearch]    = useState(false)
   const [lightboxSrc,      setLightboxSrc]      = useState<string | string[] | null>(null)
   const [lightboxStart,    setLightboxStart]    = useState(0)
@@ -559,7 +566,14 @@ export default function ExplorePage() {
     // "manual:") live in manualPortfolioLocs, public ones in locations.
     const loc = locations.find((l:any) => String(l.id) === String(id))
               ?? manualPortfolioLocs.find((l:any) => String(l.id) === String(id))
-    if(loc){setDetailLoc(loc);setActiveId(id);setMobileMapVisible(false)}
+    if(loc){
+      setDetailLoc(loc); setActiveId(id); setMobileMapVisible(false)
+      // Re-anchor the sidebar around this location — shows other spots
+      // in the same area, making the map a click-to-explore tool. The
+      // banner above the list lets the user reset to their previous
+      // (home / Near me / none) anchor.
+      setClickedNearLoc({ lat: loc.lat, lng: loc.lng, name: loc.name })
+    }
   },[locations, manualPortfolioLocs])
 
   async function addToPortfolio(locId:any) {
@@ -698,7 +712,13 @@ export default function ExplorePage() {
   //   • homeLocation — quiet personalization from profile prefs. Used only
   //     for *sort priority*; we don't drop far locations from either the
   //     map or the list, so a user in KC zooming out can still see Denver.
-  const strictNearRef = searchPin
+  // Click-to-explore takes precedence — the user just tapped a marker
+  // or list item and the sidebar should re-center around there. Reset
+  // button clears clickedNearLoc and the underlying searchPin / Near-me
+  // anchor takes over again.
+  const strictNearRef = clickedNearLoc
+    ? { lat: clickedNearLoc.lat, lng: clickedNearLoc.lng }
+    : searchPin
     ? { lat: searchPin.lat, lng: searchPin.lng }
     : (locGranted && userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null)
 
@@ -875,6 +895,24 @@ export default function ExplorePage() {
             <div style={{fontSize:11,color:'var(--ink-soft)'}}>{SORT_OPTIONS.find(s=>s.value===sortBy)?.label}</div>
           </div>
 
+          {/* Click-anchor banner — visible whenever the user has clicked
+              a location (map marker or sidebar item) and the list is
+              re-centered around that spot. Reset clears the anchor and
+              reverts to the underlying home / Near-me / no-anchor view. */}
+          {clickedNearLoc && (
+            <div style={{ background: 'rgba(196,146,42,.08)', borderBottom: '1px solid rgba(196,146,42,.2)', padding: '8px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexShrink: 0 }}>
+              <div style={{ fontSize: 12, color: 'var(--ink)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ color: 'var(--gold)' }}>📍</span> Showing locations near <strong style={{ fontWeight: 600 }}>{clickedNearLoc.name}</strong>
+              </div>
+              <button
+                onClick={() => setClickedNearLoc(null)}
+                style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(196,146,42,.4)', background: 'white', color: 'var(--gold)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Reset
+              </button>
+            </div>
+          )}
+
           {/* Location list — scroll wrapper keeps search/count pinned at top */}
           <div style={{flex:1,minHeight:0,overflowY:'auto'}}>
           {dbLoading?(
@@ -894,7 +932,7 @@ export default function ExplorePage() {
             const thumb=photoMap[loc.id]
             return(
               <div key={String(loc.id)}
-                onClick={()=>{ setDetailLoc(loc); setActiveId(loc.id) }}
+                onClick={()=>{ setDetailLoc(loc); setActiveId(loc.id); setClickedNearLoc({ lat: loc.lat, lng: loc.lng, name: loc.name }) }}
                 style={{display:'flex',gap:10,padding:'10px 1.25rem',borderBottom:'1px solid var(--cream-dark)',cursor:'pointer',background:isActive?'rgba(196,146,42,.06)':'white',borderLeft:`3px solid ${isActive?'var(--gold)':'transparent'}`,transition:'background .12s'}}>
                 <div
                   className={thumb ? loc.bg : undefined}
