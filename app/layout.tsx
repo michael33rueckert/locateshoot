@@ -20,8 +20,8 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'LocateShoot — Find Your Perfect Photoshoot Location',
-  description: 'A community-powered map of stunning photoshoot locations across the US. Discover hidden gems, save favorites, and send clients a link to choose their spot.',
+  title: 'LocateShoot — Location Guides photographers send to clients',
+  description: 'Curate your favorite photoshoot spots into a branded Location Guide, drop one link in your workflow, and your clients pick the perfect location for their session in 30 seconds. Built for photographers.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
