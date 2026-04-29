@@ -33,3 +33,10 @@ export function optimizedImage(
 export const thumbUrl  = (url: string | null | undefined) => optimizedImage(url, { width: 480,  height: 360 })
 export const tileUrl   = (url: string | null | undefined) => optimizedImage(url, { width: 120,  height: 120 })
 export const mediumUrl = (url: string | null | undefined) => optimizedImage(url, { width: 1200, height: 900 })
+// Aspect-preserving variant for the Pick page detail panel hero.
+// Specifying ONLY width tells Supabase's render endpoint to scale
+// to that width while preserving the photo's natural aspect — no
+// server-side crop, so portrait shots arrive in the browser tall
+// instead of pre-cropped to 4:3 (which made objectFit:contain
+// pointless on the client side).
+export const heroUrl   = (url: string | null | undefined) => optimizedImage(url, { width: 1200 })

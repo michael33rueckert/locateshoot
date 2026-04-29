@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import ImageLightbox from '@/components/ImageLightbox'
 import { useServerPlacePhotos } from '@/hooks/useServerPlacePhotos'
-import { thumbUrl, mediumUrl } from '@/lib/image'
+import { thumbUrl, mediumUrl, heroUrl } from '@/lib/image'
 import type { ClientLocation } from '@/components/ClientMap'
 import { resolveTemplate, googleFontHref, LOGO_SIZE_PX, type PickTemplate, type LayoutKind } from '@/lib/pick-template'
 
@@ -2064,7 +2064,7 @@ function DetailPhotoGallery({
                 // Photographer photos run through the medium-resize helper so
                 // the hero renders a ~1200px JPEG instead of a 5–8 MB original.
                 // Google URLs already come in resized and the helper no-ops.
-                src={mediumUrl(src) ?? src}
+                src={heroUrl(src) ?? src}
                 alt=""
                 decoding="async"
                 loading={i === 0 ? 'eager' : 'lazy'}
