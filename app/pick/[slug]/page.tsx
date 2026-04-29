@@ -1574,7 +1574,7 @@ export default function ClientPickerPage() {
              can pop the map open. */
           display: flex !important;
           position: fixed !important;
-          bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 115px) !important;
+          bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 100px) !important;
           left: 50% !important;
           transform: translateX(-50%) !important;
           z-index: 400 !important;
@@ -1618,7 +1618,7 @@ export default function ClientPickerPage() {
                clearance the iPhone home-indicator would have provided.
                Without this floor, the pill collides with the confirm
                bar in the desktop preview's Mobile mode. */
-            bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 115px) !important;
+            bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 100px) !important;
             left: 50% !important;
             transform: translateX(-50%) !important;
             z-index: 400 !important;

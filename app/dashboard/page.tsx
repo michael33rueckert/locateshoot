@@ -92,6 +92,10 @@ export default function DashboardPage() {
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
   const [copiedGuideId,       setCopiedGuideId]        = useState<string | null>(null)
   const [deleteGuideId,       setDeleteGuideId]        = useState<string | null>(null)
+  // Two-step confirmation for the Client Favorites Dismiss button —
+  // first click arms the row (button label flips to "Click again to
+  // confirm"), second click actually deletes. Mirrors deleteGuide.
+  const [dismissFavoriteId,   setDismissFavoriteId]    = useState<string | null>(null)
 
   useEffect(() => {
     if (!toast) return
@@ -420,6 +424,25 @@ export default function DashboardPage() {
     if (error) { setToast('⚠ Could not delete — please try again'); return }
     setPermanentLinks(prev => prev.filter(l => l.id !== id))
     setDeleteGuideId(null); setToast('Guide deleted')
+  }
+
+  // Remove a client-favorite-list row from the dashboard. The original
+  // submission email is still in the photographer's inbox, so this is
+  // a "I've handled this — clear it from my queue" action rather than
+  // destroying information. RLS DELETE policy lives in migration
+  // 20260429_client_favorite_lists_delete.sql; without it this is a
+  // silent no-op, so we restore state if the delete fails.
+  async function dismissFavoriteList(id: string) {
+    if (dismissFavoriteId !== id) { setDismissFavoriteId(id); return }
+    const previous = clientFavoriteLists
+    setClientFavoriteLists(prev => prev.filter(f => f.id !== id))
+    const { error } = await supabase.from('client_favorite_lists').delete().eq('id', id)
+    if (error) {
+      setClientFavoriteLists(previous)
+      setToast('⚠ Could not dismiss — please try again')
+      return
+    }
+    setDismissFavoriteId(null); setToast('Dismissed')
   }
 
   // Full-portfolio share — pinned at the top of the Location Guides section
@@ -886,13 +909,31 @@ export default function DashboardPage() {
                             {f.comment}
                           </div>
                         )}
-                        {f.client_email && (
-                          <div style={{ marginTop: 8 }}>
-                            <a href={`mailto:${f.client_email}`} style={{ fontSize: 12, color: 'var(--gold)', textDecoration: 'none', fontWeight: 500 }}>
-                              Reply to {fullName || f.client_email} →
-                            </a>
-                          </div>
-                        )}
+                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                          {f.client_email
+                            ? <a href={`mailto:${f.client_email}`} style={{ fontSize: 12, color: 'var(--gold)', textDecoration: 'none', fontWeight: 500 }}>
+                                Reply to {fullName || f.client_email} →
+                              </a>
+                            : <span />}
+                          <button
+                            onClick={() => dismissFavoriteList(f.id)}
+                            onBlur={() => { if (dismissFavoriteId === f.id) setDismissFavoriteId(null) }}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 500,
+                              fontFamily: 'inherit',
+                              color: dismissFavoriteId === f.id ? 'var(--rust)' : 'var(--ink-soft)',
+                              background: dismissFavoriteId === f.id ? 'rgba(181,75,42,.08)' : 'transparent',
+                              border: `1px solid ${dismissFavoriteId === f.id ? 'rgba(181,75,42,.35)' : 'var(--cream-dark)'}`,
+                              borderRadius: 4,
+                              padding: '4px 10px',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {dismissFavoriteId === f.id ? 'Click again to confirm' : '✕ Dismiss'}
+                          </button>
+                        </div>
                       </li>
                     )
                   })}
