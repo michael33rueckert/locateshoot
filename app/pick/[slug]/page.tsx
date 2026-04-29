@@ -2054,19 +2054,24 @@ function DetailPhotoGallery({
                 alt=""
                 decoding="async"
                 loading={i === 0 ? 'eager' : 'lazy'}
-                data-hero-build="2026-04-28-c"
                 onClick={() => onOpenLightbox(activePhotos, i)}
                 onError={e => { if (e.currentTarget.src !== src) e.currentTarget.src = src }}
                 style={{
                   width: '100%', height: '100%',
                   flexShrink: 0,
-                  // contain (vs cover) keeps the photo whole — when
-                  // the container's aspect matches this photo's, no
-                  // letterbox; when it doesn't (mid-swipe between
-                  // photos with different aspect ratios) the photo
-                  // sits letterboxed against the dark hero bg rather
-                  // than getting cropped at the top/sides.
-                  objectFit: 'contain',
+                  // cover + objectPosition top fills the 4:3 hero with
+                  // the top of the photo. Portraits show the head and
+                  // upper body, lose only the bottom (legs/feet) —
+                  // matches what wedding/portrait photographers
+                  // usually want, since the subject's face is in the
+                  // top half of a portrait frame. Landscapes are
+                  // unaffected (their natural aspect is close to or
+                  // equals 4:3, so almost nothing crops). Requires
+                  // heroUrl to skip the Supabase render transform —
+                  // otherwise the server already center-cropped to
+                  // 4:3 before the CSS could re-position the focus.
+                  objectFit: 'cover',
+                  objectPosition: 'center top',
                   cursor: 'zoom-in',
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
