@@ -33,42 +33,26 @@ interface AdminMetrics {
   portfolio:    { total_rows: number; active_users: number }
 }
 
-interface ScanResult {
-  success: boolean; inserted: number; errors: number; scans: number
-  locations: string[]; errorList: string[]
+// Audit results returned by /api/admin/audit-locations.
+interface AuditLocation {
+  id: string; name: string
+  city: string | null; state: string | null
+  latitude: number | null; longitude: number | null
+  description: string | null; category: string | null
 }
-
-const ALL_CATEGORIES = [
-  { name: 'Parks & Nature',                icon: '🌳' },
-  { name: 'Urban & Architecture',          icon: '🏙' },
-  { name: 'Historic & Cultural',           icon: '🏛' },
-  { name: 'Waterfront & Water Features',   icon: '💧' },
-  { name: 'Fields, Meadows & Open Spaces', icon: '🌾' },
-  { name: 'Private Venues & Hidden Gems',  icon: '✨' },
-  { name: 'Golden Hour & Sunrise Spots',   icon: '🌅' },
-  { name: 'Neighborhoods & Street Life',   icon: '🏘' },
-]
-
-const POPULAR_CITIES = [
-  'New York, New York', 'Los Angeles, California', 'Chicago, Illinois',
-  'Houston, Texas', 'Phoenix, Arizona', 'Philadelphia, Pennsylvania',
-  'San Antonio, Texas', 'San Diego, California', 'Dallas, Texas',
-  'Austin, Texas', 'Nashville, Tennessee', 'Denver, Colorado',
-  'Seattle, Washington', 'Portland, Oregon', 'Atlanta, Georgia',
-  'Miami, Florida', 'Tampa, Florida', 'Charlotte, North Carolina',
-  'Raleigh, North Carolina', 'Minneapolis, Minnesota', 'St. Louis, Missouri',
-  'Louisville, Kentucky', 'Indianapolis, Indiana', 'Columbus, Ohio',
-  'Cleveland, Ohio', 'Pittsburgh, Pennsylvania', 'Detroit, Michigan',
-  'Milwaukee, Wisconsin', 'Oklahoma City, Oklahoma', 'Tulsa, Oklahoma',
-  'Albuquerque, New Mexico', 'Tucson, Arizona', 'Las Vegas, Nevada',
-  'Salt Lake City, Utah', 'Boise, Idaho', 'Sacramento, California',
-  'San Francisco, California', 'San Jose, California', 'New Orleans, Louisiana',
-  'Memphis, Tennessee', 'Richmond, Virginia', 'Virginia Beach, Virginia',
-  'Baltimore, Maryland', 'Washington, DC', 'Boston, Massachusetts',
-  'Providence, Rhode Island', 'Hartford, Connecticut', 'Buffalo, New York',
-  'Kansas City, Missouri', 'Kansas City, Kansas', 'Overland Park, Kansas',
-  'Parkville, Missouri', "Lee's Summit, Missouri", 'Independence, Missouri',
-]
+interface DuplicateFlag {
+  type: 'duplicate'; reason: string
+  primary: AuditLocation; duplicate: AuditLocation
+  distanceMiles: number
+}
+interface IncorrectFlag {
+  type: 'incorrect'; reason: string; location: AuditLocation
+}
+interface AuditBatchResult {
+  batchIndex: number; totalBatches: number
+  totalLocations: number; batchSize: number
+  duplicates: DuplicateFlag[]; incorrect: IncorrectFlag[]
+}
 
 function timeAgo(d: string) {
   const diff = Date.now() - new Date(d).getTime()
@@ -98,14 +82,16 @@ export default function AdminPage() {
   const [editingLoc,     setEditingLoc]     = useState<ManagedLocation | null>(null)
   const [deletingLocId,  setDeletingLocId]  = useState<string | null>(null)
 
-  const [scanRunning,     setScanRunning]     = useState(false)
-  const [scanResult,      setScanResult]      = useState<ScanResult | null>(null)
-  const [scanProgress,    setScanProgress]    = useState<{ done: number; total: number; current: string } | null>(null)
-  const [scanCities,      setScanCities]      = useState<string[]>([])
-  const [scanCategories,  setScanCategories]  = useState<string[]>(ALL_CATEGORIES.map(c => c.name))
-  const [customCityInput, setCustomCityInput] = useState('')
-  const [citySearchQuery, setCitySearchQuery] = useState('')
-  const [showPopular,     setShowPopular]     = useState(false)
+  // ── Quality audit state ──
+  // The audit runs in 50-row AI batches so each backend call stays
+  // under Vercel's 60s function timeout. Duplicate detection is local
+  // and arrives once on batch 0; AI flags accumulate batch-by-batch.
+  const [auditRunning,     setAuditRunning]     = useState(false)
+  const [auditDone,        setAuditDone]        = useState(false)
+  const [auditProgress,    setAuditProgress]    = useState<{ done: number; total: number } | null>(null)
+  const [auditDuplicates,  setAuditDuplicates]  = useState<DuplicateFlag[]>([])
+  const [auditIncorrect,   setAuditIncorrect]   = useState<IncorrectFlag[]>([])
+  const [auditDismissed,   setAuditDismissed]   = useState<Set<string>>(new Set())
 
   const loadAll = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -135,57 +121,54 @@ export default function AdminPage() {
     return () => clearTimeout(t)
   }, [toast])
 
-  const estLocations = scanCities.length * scanCategories.length * 20
-  const estMinutes   = Math.ceil(scanCities.length * scanCategories.length * 0.7)
-  const filteredPopular = POPULAR_CITIES.filter(c => citySearchQuery === '' || c.toLowerCase().includes(citySearchQuery.toLowerCase()))
-
-  async function runScanner() {
-    if (!userId || scanCities.length === 0 || scanCategories.length === 0) return
-    setScanRunning(true); setScanResult(null)
-    // Break the scan into one (city × category) call at a time — keeps each
-    // request under Vercel Hobby's 60s cap and lets us show progress.
-    const pairs: { city: string; category: string }[] = []
-    for (const city of scanCities) for (const category of scanCategories) pairs.push({ city, category })
-    setScanProgress({ done: 0, total: pairs.length, current: '' })
-
-    const merged: ScanResult = { success: true, inserted: 0, errors: 0, scans: 0, locations: [], errorList: [] }
-    let failedCount = 0
-    // Grab the current Supabase session token — the scan endpoint
-    // verifies bearer auth + admin email before doing any work.
+  async function runAudit() {
+    if (!userId || auditRunning) return
+    setAuditRunning(true)
+    setAuditDone(false)
+    setAuditDuplicates([])
+    setAuditIncorrect([])
+    setAuditDismissed(new Set())
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
-    if (!token) { setScanRunning(false); return }
-    for (let i = 0; i < pairs.length; i++) {
-      const { city, category } = pairs[i]
-      setScanProgress({ done: i, total: pairs.length, current: `${category} in ${city.split(',')[0]}` })
+    if (!token) { setAuditRunning(false); return }
+    let batchIndex = 0
+    let totalBatches = 1
+    let failedCount = 0
+    setAuditProgress({ done: 0, total: 1 })
+    while (batchIndex < totalBatches) {
       try {
-        const res = await fetch('/api/scan-locations', {
+        const res = await fetch(`/api/admin/audit-locations?batch=${batchIndex}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ cities: [city], categories: [category] }),
+          headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) {
           failedCount++
-          merged.errorList.push(`${category} / ${city.split(',')[0]} — HTTP ${res.status}`)
-          continue
+          break
         }
-        const data: ScanResult = await res.json()
-        merged.inserted  += data.inserted ?? 0
-        merged.errors    += data.errors   ?? 0
-        merged.scans     += data.scans    ?? 0
-        merged.locations.push(...(data.locations ?? []))
-        merged.errorList.push(...(data.errorList ?? []))
-      } catch (e: any) {
+        const data: AuditBatchResult = await res.json()
+        totalBatches = Math.max(1, data.totalBatches)
+        if (batchIndex === 0 && data.duplicates.length > 0) setAuditDuplicates(data.duplicates)
+        if (data.incorrect.length > 0) setAuditIncorrect(prev => [...prev, ...data.incorrect])
+        batchIndex++
+        setAuditProgress({ done: batchIndex, total: totalBatches })
+      } catch {
         failedCount++
-        merged.errorList.push(`${category} / ${city.split(',')[0]} — ${e?.message ?? 'request failed'}`)
+        break
       }
-      setScanResult({ ...merged })
     }
-    setScanProgress(null)
-    setScanRunning(false)
-    if (merged.inserted > 0) { setLocationCount(prev => prev + merged.inserted); setToast(`✓ Added ${merged.inserted} locations${failedCount > 0 ? ` · ${failedCount} chunk(s) failed` : ''}`) }
-    else if (failedCount > 0) setToast(`⚠ Scan had ${failedCount} failed chunk(s) — see results below`)
-    else setToast('Scan complete — no new locations')
+    setAuditProgress(null)
+    setAuditRunning(false)
+    setAuditDone(true)
+    if (failedCount > 0) setToast('⚠ Audit hit an error — partial results shown')
+    else setToast('✓ Audit complete')
+  }
+
+  function dismissAuditFlag(key: string) {
+    setAuditDismissed(prev => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
   }
 
   async function setUserPlan(userId: string, plan: 'pro' | 'starter' | 'free') {
@@ -263,16 +246,6 @@ export default function AdminPage() {
     setDeletingLocId(null)
     setToast('Deleted')
   }
-
-  function addCustomCity() {
-    const city = customCityInput.trim(); if (!city) return
-    const formatted = city.replace(/\b\w/g, c => c.toUpperCase())
-    if (!scanCities.includes(formatted)) setScanCities(p => [...p, formatted])
-    setCustomCityInput('')
-  }
-  function removeCity(c: string) { setScanCities(p => p.filter(x => x !== c)) }
-  function togglePopularCity(c: string) { setScanCities(p => p.includes(c) ? p.filter(x => x !== c) : [...p, c]) }
-  function toggleCategory(n: string) { setScanCategories(p => p.includes(n) ? p.filter(x => x !== n) : [...p, n]) }
 
   if (!ready) {
     return (
@@ -541,132 +514,130 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* AI SCANNER */}
+        {/* QUALITY AUDIT — replaces the old AI scanner. Runs Claude
+            against all published locations to surface suspected
+            duplicates and entries with bad data. Each flag carries
+            enough info to render the row + its concern; Edit /
+            Delete reuse the existing /api/admin/locations handlers
+            so a fix here updates the main Locations table inline. */}
         <div style={{ background: 'var(--ink)', borderRadius: 10, border: '1px solid rgba(255,255,255,.08)', overflow: 'hidden' }}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              🤖 AI Location Scanner
+              🔎 Quality Audit
               <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(196,146,42,.2)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.3)' }}>{locationCount.toLocaleString()} in DB</span>
             </div>
-            <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', fontWeight: 300 }}>Multi-pass scan by category — finds locations in any US city.</div>
+            <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', fontWeight: 300 }}>Find suspected duplicates + entries with incorrect data.</div>
           </div>
 
           <div style={{ padding: '1.25rem' }}>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)' }}>Add a city to scan</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input type="text" value={customCityInput} onChange={e => setCustomCityInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addCustomCity() }} placeholder="e.g. Springfield, Missouri" style={{ flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-                <button onClick={addCustomCity} disabled={!customCityInput.trim()} style={{ padding: '9px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: !customCityInput.trim() ? 0.5 : 1 }}>+ Add</button>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Popular US cities</label>
-                <button onClick={() => setShowPopular(p => !p)} style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>{showPopular ? 'Hide ▲' : 'Show ▼'}</button>
-              </div>
-              {showPopular && (
-                <>
-                  <input type="text" value={citySearchQuery} onChange={e => setCitySearchQuery(e.target.value)} placeholder="Filter cities…" style={{ width: '100%', padding: '7px 12px', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 4, color: 'var(--cream)', fontFamily: 'inherit', fontSize: 12, outline: 'none', marginBottom: 8 }} />
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 160, overflowY: 'auto' }}>
-                    {filteredPopular.map(c => (
-                      <button key={c} onClick={() => togglePopularCity(c)} style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${scanCities.includes(c) ? 'var(--gold)' : 'rgba(255,255,255,.15)'}`, background: scanCities.includes(c) ? 'rgba(196,146,42,.2)' : 'transparent', color: scanCities.includes(c) ? 'var(--gold)' : 'rgba(245,240,232,.5)' }}>
-                        {scanCities.includes(c) ? '✓ ' : ''}{c.split(',')[0]}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Queued ({scanCities.length})</label>
-                {scanCities.length > 0 && <button onClick={() => setScanCities([])} style={{ fontSize: 11, color: 'rgba(181,75,42,.7)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Clear</button>}
-              </div>
-              {scanCities.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'rgba(245,240,232,.2)', fontStyle: 'italic' }}>No cities added yet</div>
-              ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {scanCities.map(c => (
-                    <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 10px', borderRadius: 20, background: 'rgba(196,146,42,.15)', border: '1px solid rgba(196,146,42,.25)' }}>
-                      <span style={{ fontSize: 11, color: 'var(--gold)' }}>{c}</span>
-                      <button onClick={() => removeCity(c)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(196,146,42,.5)', fontSize: 13, padding: '0 2px' }}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <label style={{ ...labelStyle, color: 'rgba(245,240,232,.5)', marginBottom: 0 }}>Categories ({scanCategories.length}/{ALL_CATEGORIES.length})</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setScanCategories(ALL_CATEGORIES.map(c => c.name))} style={{ fontSize: 11, color: 'var(--gold)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>All</button>
-                  <span style={{ color: 'rgba(255,255,255,.15)' }}>·</span>
-                  <button onClick={() => setScanCategories([])} style={{ fontSize: 11, color: 'rgba(245,240,232,.3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>None</button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {ALL_CATEGORIES.map(cat => {
-                  const sel = scanCategories.includes(cat.name)
-                  return (
-                    <div key={cat.name} onClick={() => toggleCategory(cat.name)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: sel ? 'rgba(196,146,42,.1)' : 'rgba(255,255,255,.04)', border: `1px solid ${sel ? 'rgba(196,146,42,.3)' : 'rgba(255,255,255,.08)'}` }}>
-                      <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${sel ? 'var(--gold)' : 'rgba(255,255,255,.2)'}`, background: sel ? 'var(--gold)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--ink)' }}>{sel ? '✓' : ''}</div>
-                      <span style={{ fontSize: 14 }}>{cat.icon}</span>
-                      <span style={{ fontSize: 12, color: sel ? 'var(--gold)' : 'rgba(245,240,232,.5)', fontWeight: sel ? 500 : 300 }}>{cat.name}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {scanCities.length > 0 && scanCategories.length > 0 && (
-              <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8, marginBottom: '1.25rem', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, textAlign: 'center' }}>
-                <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>{scanCities.length}</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>cities</div></div>
-                <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>~{estLocations.toLocaleString()}</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>est.</div></div>
-                <div><div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: estMinutes > 10 ? 'var(--rust)' : 'var(--sage)' }}>~{estMinutes}m</div><div style={{ fontSize: 10, color: 'rgba(245,240,232,.3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>time</div></div>
-              </div>
-            )}
-
-            <button onClick={runScanner} disabled={scanRunning || scanCities.length === 0 || scanCategories.length === 0} style={{ width: '100%', padding: '13px', borderRadius: 4, background: scanRunning ? 'rgba(196,146,42,.3)' : 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 500, cursor: scanRunning || scanCities.length === 0 || scanCategories.length === 0 ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: scanCities.length === 0 || scanCategories.length === 0 ? 0.4 : 1 }}>
-              {scanRunning ? (<><div style={{ width: 16, height: 16, border: '2px solid rgba(26,22,18,.3)', borderTop: '2px solid var(--ink)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />{scanProgress ? `Scanning ${scanProgress.done + 1} / ${scanProgress.total}…` : 'Scanning…'}</>) :
-                scanCities.length === 0 ? '← Add a city' :
-                scanCategories.length === 0 ? '← Select a category' :
-                `🤖 Run — ${scanCities.length} × ${scanCategories.length}`}
+            <button
+              onClick={runAudit}
+              disabled={auditRunning}
+              style={{
+                width: '100%', padding: '13px', borderRadius: 4,
+                background: auditRunning ? 'rgba(196,146,42,.3)' : 'var(--gold)',
+                color: 'var(--ink)', border: 'none',
+                fontSize: 14, fontWeight: 500,
+                cursor: auditRunning ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {auditRunning
+                ? (<><div style={{ width: 16, height: 16, border: '2px solid rgba(26,22,18,.3)', borderTop: '2px solid var(--ink)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Auditing {auditProgress?.done ?? 0} / {auditProgress?.total ?? '…'}</>)
+                : (auditDone ? '🔄 Run audit again' : '🔎 Run quality audit')}
             </button>
-            {scanRunning && scanProgress && (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,.08)', overflow: 'hidden', marginBottom: 6 }}>
-                  <div style={{ height: '100%', width: `${Math.round((scanProgress.done / Math.max(1, scanProgress.total)) * 100)}%`, background: 'var(--gold)', transition: 'width .3s ease' }} />
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(245,240,232,.4)' }}>Now: {scanProgress.current}</div>
+
+            {auditRunning && auditProgress && auditProgress.total > 0 && (
+              <div style={{ marginTop: 10, height: 4, borderRadius: 2, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.round((auditProgress.done / auditProgress.total) * 100)}%`, background: 'var(--gold)', transition: 'width .3s ease' }} />
               </div>
             )}
 
-            {scanResult && (
-              <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,.05)', borderRadius: 8, border: '1px solid rgba(255,255,255,.1)' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--cream)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  ✓ Scan complete
-                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(74,103,65,.3)', color: '#c8e8c4', fontWeight: 500 }}>{scanResult.inserted} added</span>
-                  {scanResult.errors > 0 && <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, background: 'rgba(255,255,255,.05)', color: 'rgba(245,240,232,.35)' }}>{scanResult.errors} skipped</span>}
-                  <span style={{ fontSize: 11, color: 'rgba(245,240,232,.3)' }}>({scanResult.scans} scans run)</span>
+            {/* Empty-state when the audit has completed and found
+                nothing — explicit "no problems" reads better than a
+                blank panel. */}
+            {auditDone && auditDuplicates.length === 0 && auditIncorrect.length === 0 && (
+              <div style={{ marginTop: '1rem', padding: '14px', background: 'rgba(74,103,65,.1)', border: '1px solid rgba(74,103,65,.3)', borderRadius: 8, fontSize: 13, color: '#c8e8c4', textAlign: 'center' }}>
+                ✓ No suspected duplicates or incorrect entries found.
+              </div>
+            )}
+
+            {/* DUPLICATES */}
+            {auditDuplicates.length > 0 && (
+              <div style={{ marginTop: '1.25rem' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--cream)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+                  Suspected duplicates ({auditDuplicates.filter(d => !auditDismissed.has(`d:${d.duplicate.id}:${d.primary.id}`)).length})
                 </div>
-                {scanResult.locations.length > 0 && (
-                  <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: scanResult.errorList.length > 0 ? 8 : 0 }}>
-                    {scanResult.locations.map((loc, i) => <div key={i} style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', padding: '2px 0', display: 'flex', alignItems: 'flex-start', gap: 6 }}><span style={{ color: 'var(--sage)', fontSize: 10, marginTop: 2 }}>✓</span><span>{loc}</span></div>)}
-                  </div>
-                )}
-                {scanResult.errorList.length > 0 && (
-                  <details>
-                    <summary style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', cursor: 'pointer', padding: '6px 0', fontWeight: 500 }}>
-                      Show skipped ({scanResult.errorList.length}) — tap to expand
-                    </summary>
-                    <div style={{ marginTop: 6, maxHeight: 220, overflowY: 'auto', background: 'rgba(0,0,0,.15)', borderRadius: 6, padding: '8px 10px' }}>
-                      {scanResult.errorList.map((e, i) => <div key={i} style={{ fontSize: 10, color: 'rgba(245,240,232,.5)', padding: '3px 0', borderBottom: i < scanResult.errorList.length - 1 ? '1px solid rgba(255,255,255,.04)' : 'none', lineHeight: 1.5, wordBreak: 'break-word' }}>• {e}</div>)}
-                    </div>
-                  </details>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {auditDuplicates.map(d => {
+                    const key = `d:${d.duplicate.id}:${d.primary.id}`
+                    if (auditDismissed.has(key)) return null
+                    return (
+                      <div key={key} style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 11, color: 'var(--gold)', marginBottom: 8, fontStyle: 'italic' }}>{d.reason}</div>
+                        {([d.primary, d.duplicate] as const).map((row, idx) => {
+                          const isDup = idx === 1
+                          const managed = allLocs.find(l => l.id === row.id) ?? null
+                          return (
+                            <div key={row.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderTop: idx === 1 ? '1px solid rgba(255,255,255,.06)' : 'none' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--cream)' }}>
+                                  {row.name}
+                                  <span style={{ marginLeft: 8, fontSize: 10, color: isDup ? 'var(--rust)' : 'var(--sage)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                                    {isDup ? 'newer · likely duplicate' : 'older · keep'}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 11, color: 'rgba(245,240,232,.5)' }}>{[row.city, row.state].filter(Boolean).join(', ') || '—'}</div>
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                {managed && (
+                                  <button onClick={() => setEditingLoc(managed)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(255,255,255,.15)', background: 'transparent', color: 'rgba(245,240,232,.7)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                                )}
+                                <button onClick={() => { deleteLocation(row.id); dismissAuditFlag(key) }} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(181,75,42,.4)', background: 'rgba(181,75,42,.15)', color: '#ffd0c0', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                          <button onClick={() => dismissAuditFlag(key)} style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Not a duplicate — dismiss</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* INCORRECT INFO */}
+            {auditIncorrect.length > 0 && (
+              <div style={{ marginTop: '1.25rem' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--cream)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+                  Suspected incorrect data ({auditIncorrect.filter(f => !auditDismissed.has(`i:${f.location.id}`)).length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {auditIncorrect.map(f => {
+                    const key = `i:${f.location.id}`
+                    if (auditDismissed.has(key)) return null
+                    const managed = allLocs.find(l => l.id === f.location.id) ?? null
+                    return (
+                      <div key={key} style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 8, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--cream)' }}>{f.location.name}</div>
+                          <div style={{ fontSize: 11, color: 'rgba(245,240,232,.5)', marginBottom: 4 }}>{[f.location.city, f.location.state].filter(Boolean).join(', ') || '—'}</div>
+                          <div style={{ fontSize: 12, color: 'var(--gold)', fontStyle: 'italic', lineHeight: 1.5 }}>{f.reason}</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          {managed && (
+                            <button onClick={() => setEditingLoc(managed)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(255,255,255,.15)', background: 'transparent', color: 'rgba(245,240,232,.7)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                          )}
+                          <button onClick={() => { deleteLocation(f.location.id); dismissAuditFlag(key) }} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(181,75,42,.4)', background: 'rgba(181,75,42,.15)', color: '#ffd0c0', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                          <button onClick={() => dismissAuditFlag(key)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(255,255,255,.1)', background: 'transparent', color: 'rgba(245,240,232,.4)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Dismiss</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
