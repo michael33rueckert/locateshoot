@@ -150,27 +150,38 @@ export async function GET(request: Request, context: any) {
     const baseCols = 'id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,hide_google_photos'
     let portfolioRows: any[] | null = null
     {
+      // Try the newest column set first (includes show_seasons from
+      // 20260428_seasonal_photos). Each fallback drops one migration
+      // worth of columns so the page still renders on older schemas.
       const { data, error } = await admin
         .from('portfolio_locations')
-        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links`)
+        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
         .in('id', portfolioIds)
       if (error) {
-        // Stepwise fallback: drop session_links first (newest column),
-        // then drop the older link/permit cols if those are also missing.
-        const noSession = await admin
+        const noSeasons = await admin
           .from('portfolio_locations')
-          .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website`)
+          .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links`)
           .in('id', portfolioIds)
-        if (noSession.error) {
-          console.warn('portfolio query w/ link cols failed (likely pre-migration):', noSession.error.message)
-          const fb = await admin
+        if (noSeasons.error) {
+          // Stepwise fallback: drop session_links next, then drop the
+          // older link/permit cols if those are also missing.
+          const noSession = await admin
             .from('portfolio_locations')
-            .select(baseCols)
+            .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website`)
             .in('id', portfolioIds)
-          if (fb.error) console.error('portfolio query error:', fb.error)
-          portfolioRows = fb.data ?? []
+          if (noSession.error) {
+            console.warn('portfolio query w/ link cols failed (likely pre-migration):', noSession.error.message)
+            const fb = await admin
+              .from('portfolio_locations')
+              .select(baseCols)
+              .in('id', portfolioIds)
+            if (fb.error) console.error('portfolio query error:', fb.error)
+            portfolioRows = fb.data ?? []
+          } else {
+            portfolioRows = noSession.data ?? []
+          }
         } else {
-          portfolioRows = noSession.data ?? []
+          portfolioRows = noSeasons.data ?? []
         }
       } else {
         portfolioRows = data ?? []
@@ -182,14 +193,32 @@ export async function GET(request: Request, context: any) {
       .filter((x): x is string => !!x)
 
     // Photos attached directly to the portfolio copy — honor photographer's
-    // custom ordering (sort_order), fall back to created_at.
-    const { data: portfolioPhotos } = await admin
-      .from('location_photos')
-      .select('portfolio_location_id,url,created_at,sort_order')
-      .in('portfolio_location_id', portfolioIds)
-      .eq('is_private', false)
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true })
+    // custom ordering (sort_order), fall back to created_at. Pull
+    // season too (migration 20260428_seasonal_photos) so the Pick
+    // page can render per-season tabs; falls back without it on
+    // older schemas.
+    let portfolioPhotos: any[] = []
+    {
+      const r1 = await admin
+        .from('location_photos')
+        .select('portfolio_location_id,url,created_at,sort_order,season')
+        .in('portfolio_location_id', portfolioIds)
+        .eq('is_private', false)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+      if (r1.error) {
+        const r2 = await admin
+          .from('location_photos')
+          .select('portfolio_location_id,url,created_at,sort_order')
+          .in('portfolio_location_id', portfolioIds)
+          .eq('is_private', false)
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true })
+        portfolioPhotos = r2.data ?? []
+      } else {
+        portfolioPhotos = r1.data ?? []
+      }
+    }
 
     // Fallback: photos + real rating/permit data on the source public location
     // (portfolio copies only store a subset of the fields, so we merge anything
@@ -212,8 +241,15 @@ export async function GET(request: Request, context: any) {
     }
 
     const ownMap: Record<string, string[]> = {}
+    // Per-photo season tags, parallel to ownMap by index. Only set
+    // when the row carried a `season` column from the query above
+    // (older schemas without the column produce undefined here, which
+    // we coerce to null below so the client always sees an array of
+    // the same length as photo_urls).
+    const ownSeasons: Record<string, (string | null)[]> = {}
     ;(portfolioPhotos ?? []).forEach((p: any) => {
       (ownMap[p.portfolio_location_id] ??= []).push(p.url)
+      ;(ownSeasons[p.portfolio_location_id] ??= []).push(p.season ?? null)
     })
     const sourceMap: Record<string, string[]> = {}
     ;(sourcePhotos ?? []).forEach((p: any) => {
@@ -234,7 +270,15 @@ export async function GET(request: Request, context: any) {
       .filter((r): r is any => !!r)
 
     locations = orderedRows.map((p: any) => {
-      const urls = ownMap[p.id] ?? (p.source_location_id ? sourceMap[p.source_location_id] : null) ?? []
+      const ownUrls    = ownMap[p.id]
+      const urls       = ownUrls ?? (p.source_location_id ? sourceMap[p.source_location_id] : null) ?? []
+      // Per-photo season tags only apply when the photos came from
+      // the photographer's portfolio copy (ownMap). Source-location
+      // photos are public and have no season tag — null-fill so the
+      // array length matches photo_urls regardless.
+      const photoSeasons: (string | null)[] = ownUrls
+        ? (ownSeasons[p.id] ?? new Array(ownUrls.length).fill(null))
+        : new Array(urls.length).fill(null)
       const src  = p.source_location_id ? sourceLookup[p.source_location_id] : null
       // Prefer the portfolio row's value when the photographer set it; fall back
       // to the public source location's value otherwise.
@@ -274,6 +318,14 @@ export async function GET(request: Request, context: any) {
         save_count:         src?.save_count       ?? 0,
         photo_url:          urls[0] ?? null,
         photo_urls:         urls,
+        // Per-photo season tags, aligned by index with photo_urls.
+        // Pick page filters this to render per-season tabs. Always
+        // an array of the same length as photo_urls.
+        photo_seasons:      photoSeasons,
+        // Per-location opt-in toggle from migration 20260428_seasonal_photos.
+        // When true the Pick page renders Spring/Summer/Fall/Winter
+        // tabs above the gallery; false keeps the existing flat grid.
+        show_seasons:       !!p.show_seasons,
         hide_google_photos: !!p.hide_google_photos,
       }
     })

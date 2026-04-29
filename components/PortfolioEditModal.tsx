@@ -25,7 +25,15 @@ interface PortfolioRow {
   is_secret: boolean; source_location_id: string | null
 }
 
-interface PhotoRow { id: string; url: string; storage_path: string; caption: string | null; sort_order?: number | null }
+interface PhotoRow { id: string; url: string; storage_path: string; caption: string | null; sort_order?: number | null; season?: 'spring' | 'summer' | 'fall' | 'winter' | null }
+
+type Season = 'spring' | 'summer' | 'fall' | 'winter'
+const SEASONS: { value: Season; label: string; emoji: string }[] = [
+  { value: 'spring', label: 'Spring', emoji: '🌸' },
+  { value: 'summer', label: 'Summer', emoji: '☀️' },
+  { value: 'fall',   label: 'Fall',   emoji: '🍂' },
+  { value: 'winter', label: 'Winter', emoji: '❄️' },
+]
 
 export default function PortfolioEditModal({
   portfolioId, userId, onClose, onSaved, onDeleted,
@@ -69,6 +77,11 @@ export default function PortfolioEditModal({
       .filter(l => l.label && l.url)
   }
   const [hideGooglePhotos, setHideGooglePhotos] = useState(false)
+  // Seasonal organization opt-in. When on, the photo uploader splits
+  // into 4 sections (Spring/Summer/Fall/Winter) and the Pick page
+  // renders a tab strip above the gallery so clients can browse by
+  // season. Off keeps the existing flat uploader + gallery.
+  const [showSeasons, setShowSeasons] = useState(false)
   const [lat,     setLat]     = useState<number | null>(null)
   const [lng,     setLng]     = useState<number | null>(null)
   const [pinLabel,setPinLabel]= useState<string>('')
@@ -79,13 +92,22 @@ export default function PortfolioEditModal({
   const [uploading, setUploading] = useState(false)
   const [err,     setErr]     = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  // Tracks which season (if any) the next file-picker dialog should
+  // tag uploads with. Set by triggerUpload() right before the hidden
+  // <input type="file"> is clicked, then read in the onChange handler.
+  // `undefined` means "showSeasons is off — don't tag at all".
+  const [pendingSeason, setPendingSeason] = useState<Season | null | undefined>(undefined)
+  function triggerUpload(season: Season | null | undefined) {
+    setPendingSeason(season)
+    fileRef.current?.click()
+  }
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       const [rowRes, photosRes] = await Promise.all([
-        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,permit_fee,permit_website,best_time,parking_info,pinterest_url,blog_url,session_links,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
-        supabase.from('location_photos').select('id,url,storage_path,caption,sort_order').eq('portfolio_location_id', portfolioId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,permit_fee,permit_website,best_time,parking_info,pinterest_url,blog_url,session_links,show_seasons,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
+        supabase.from('location_photos').select('id,url,storage_path,caption,sort_order,season').eq('portfolio_location_id', portfolioId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       ])
       if (cancelled) return
       if (rowRes.data) {
@@ -136,10 +158,11 @@ export default function PortfolioEditModal({
           })))
         }
         setHideGooglePhotos(!!rowRes.data.hide_google_photos)
+        setShowSeasons(!!(rowRes.data as any).show_seasons)
         setLat(rowRes.data.latitude ?? null)
         setLng(rowRes.data.longitude ?? null)
       }
-      if (photosRes.data) setPhotos(photosRes.data)
+      if (photosRes.data) setPhotos(photosRes.data as PhotoRow[])
       setLoading(false)
     }
     load()
@@ -190,7 +213,21 @@ export default function PortfolioEditModal({
       permit_fee:     permitFee.trim() || null,
       permit_website: permitWebsite.trim() || null,
       session_links:  sessionLinksJson,
+      show_seasons:   showSeasons,
     }).eq('id', portfolioId)
+    if (error && /show_seasons/.test(error.message ?? '')) {
+      // show_seasons column missing (migration 20260428_seasonal_photos
+      // hasn't run) — drop it and retry with the rest intact.
+      const retry = await supabase.from('portfolio_locations').update({
+        ...baseUpdate,
+        pinterest_url:  pinterestUrl.trim() || null,
+        blog_url:       blogUrl.trim() || null,
+        permit_fee:     permitFee.trim() || null,
+        permit_website: permitWebsite.trim() || null,
+        session_links:  sessionLinksJson,
+      }).eq('id', portfolioId)
+      error = retry.error
+    }
     if (error && /session_links/.test(error.message ?? '')) {
       // session_links column missing (migration 20260428_session_links
       // hasn't run) — drop it and retry with the rest intact.
@@ -271,7 +308,7 @@ export default function PortfolioEditModal({
     setPhotos(prev => prev.filter(p => p.id !== photo.id))
   }
 
-  async function handleUpload(files: File[]) {
+  async function handleUpload(files: File[], season: Season | null | undefined) {
     if (!files.length) return
     setUploading(true); setErr('')
     const { data: p } = await supabase.from('profiles').select('full_name').eq('id', userId).single()
@@ -302,7 +339,12 @@ export default function PortfolioEditModal({
           continue
         }
         const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
-        const { data: inserted, error: ie } = await supabase.from('location_photos').insert({
+        // season is undefined when seasonal organization is off — we
+        // omit the column entirely so the DB default applies. season
+        // === null is an explicit "year-round" tag that we DO want to
+        // write (in case the photographer uploads year-round photos
+        // alongside seasonal ones).
+        const insertPayload: Record<string, unknown> = {
           portfolio_location_id: portfolioId,
           user_id: userId,
           url: pub.publicUrl,
@@ -310,16 +352,24 @@ export default function PortfolioEditModal({
           is_private: false,
           photographer_name: p?.full_name ?? null,
           sort_order: nextOrder++,
-        }).select('id,url,storage_path,caption,sort_order').single()
-        if (ie) {
-          console.error('location_photos insert failed', ie, { path })
-          if (!firstError) firstError = `Saved to storage but database insert failed: ${ie.message}`
+        }
+        if (season !== undefined) insertPayload.season = season
+        let insertResp = await supabase.from('location_photos').insert(insertPayload).select('id,url,storage_path,caption,sort_order,season').single()
+        if (insertResp.error && season !== undefined && /season/.test(insertResp.error.message ?? '')) {
+          // Migration 20260428_seasonal_photos hasn't run yet — drop
+          // the season tag and retry so the photo still gets saved.
+          delete insertPayload.season
+          insertResp = await supabase.from('location_photos').insert(insertPayload).select('id,url,storage_path,caption,sort_order,season').single()
+        }
+        if (insertResp.error) {
+          console.error('location_photos insert failed', insertResp.error, { path })
+          if (!firstError) firstError = `Saved to storage but database insert failed: ${insertResp.error.message}`
           // Try to clean up the orphaned storage object so we don't
           // leave dangling files when the DB row insert keeps failing.
           await supabase.storage.from('location-photos').remove([path]).catch(() => {})
           continue
         }
-        if (inserted) uploaded.push(inserted)
+        if (insertResp.data) uploaded.push(insertResp.data as PhotoRow)
       } catch (e: any) {
         console.error('upload threw', e, { name: raw.name })
         if (!firstError) firstError = e?.message ?? 'Upload threw an unexpected error.'
@@ -327,6 +377,7 @@ export default function PortfolioEditModal({
     }
     setPhotos(prev => [...prev, ...uploaded])
     setUploading(false)
+    setPendingSeason(undefined)
     if (fileRef.current) fileRef.current.value = ''
     if (uploaded.length === 0 && firstError) {
       setErr(firstError)
@@ -335,9 +386,79 @@ export default function PortfolioEditModal({
     }
   }
 
+  // Move an already-uploaded photo to a different season. Used by the
+  // small dropdown on each photo card when seasonal organization is on,
+  // so photographers can shuffle photos between Spring/Summer/Fall/
+  // Winter (or back to year-round) without re-uploading.
+  async function updatePhotoSeason(photoId: string, season: Season | null) {
+    const previous = photos
+    setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, season } : p))
+    const { error } = await supabase.from('location_photos').update({ season }).eq('id', photoId)
+    if (error) {
+      setPhotos(previous)
+      setErr(`Could not change season: ${error.message}`)
+    }
+  }
+
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--ink-soft)', marginBottom: 5 }
   const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'var(--font-dm-sans),sans-serif', fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none' }
   const cityLine = row ? [row.city, row.state].filter(Boolean).join(', ') : ''
+
+  // Single photo tile. Reused across the flat grid (showSeasons off)
+  // and each per-season section (showSeasons on). The optional badge
+  // is the "#N" position chip — only shown in the flat grid where
+  // global sort_order maps to a meaningful position.
+  function renderPhotoCard(p: PhotoRow, indexBadge?: string) {
+    const isDragging = photoReorder.draggingId === p.id
+    const isOver     = photoReorder.overId === p.id && photoReorder.draggingId && photoReorder.draggingId !== p.id
+    const bind       = photoReorder.bindItem(p.id)
+    return (
+      <div
+        key={p.id}
+        {...bind}
+        style={{
+          position: 'relative',
+          aspectRatio: '1',
+          borderRadius: 6,
+          overflow: 'hidden',
+          border: `1px solid ${isOver ? 'var(--gold)' : 'var(--cream-dark)'}`,
+          cursor: 'grab',
+          opacity: isDragging ? 0.4 : 1,
+          touchAction: 'pan-y',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+        }}
+      >
+        <img
+          src={thumbUrl(p.url) ?? p.url}
+          alt=""
+          decoding="async"
+          onClick={() => setLightboxSrc(p.url)}
+          onError={e => { if (e.currentTarget.src !== p.url) e.currentTarget.src = p.url }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
+        />
+        {indexBadge && (
+          <div style={{ position: 'absolute', top: 4, left: 4, padding: '1px 6px', borderRadius: 10, background: 'rgba(26,22,18,.75)', color: 'white', fontSize: 10, fontWeight: 600 }}>{indexBadge}</div>
+        )}
+        <button onClick={e => { e.stopPropagation(); deletePhoto(p) }} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+        {showSeasons && (
+          <select
+            value={p.season ?? ''}
+            onClick={e => e.stopPropagation()}
+            onChange={e => updatePhotoSeason(p.id, (e.target.value || null) as Season | null)}
+            style={{ position: 'absolute', bottom: 4, left: 4, right: 4, fontSize: 10, padding: '2px 4px', borderRadius: 4, background: 'rgba(26,22,18,.85)', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit', appearance: 'none', WebkitAppearance: 'none', textAlign: 'center' }}
+          >
+            <option value="">🌐 Year-round</option>
+            <option value="spring">🌸 Spring</option>
+            <option value="summer">☀️ Summer</option>
+            <option value="fall">🍂 Fall</option>
+            <option value="winter">❄️ Winter</option>
+          </select>
+        )}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -519,64 +640,73 @@ export default function PortfolioEditModal({
                 </div>
               </div>
 
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <label style={{ ...labelStyle, marginBottom: 0 }}>Your photos <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({photos.length})</span></label>
-                  <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ padding: '5px 12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {uploading ? 'Uploading…' : '+ Upload photos'}
-                  </button>
-                  <input ref={fileRef} type="file" accept="image/*" multiple onChange={e => { handleUpload(Array.from(e.target.files ?? [])) }} style={{ display: 'none' }} />
+              {/* Seasonal organization opt-in. Off by default — when
+                  on, the photo uploader below splits into per-season
+                  sections and the Pick page shows season tabs above
+                  the gallery for clients. */}
+              <div onClick={() => setShowSeasons(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: '0.75rem', cursor: 'pointer', background: showSeasons ? 'rgba(196,146,42,.06)' : 'var(--cream)', border: `1px solid ${showSeasons ? 'rgba(196,146,42,.3)' : 'var(--cream-dark)'}` }}>
+                <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${showSeasons ? 'var(--gold)' : 'var(--sand)'}`, background: showSeasons ? 'var(--gold)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white' }}>{showSeasons ? '✓' : ''}</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>🍂 Photos from different seasons</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Tag uploads by season — clients see Spring/Summer/Fall/Winter tabs above the photo gallery.</div>
                 </div>
-                {photos.length === 0 ? (
-                  <div style={{ padding: '1.25rem', textAlign: 'center', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)' }}>
-                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 4, fontWeight: 500 }}>⚠ No photos yet</div>
-                    <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Clients will see Google Photos until you add your own.</div>
-                  </div>
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <input ref={fileRef} type="file" accept="image/*" multiple onChange={e => { handleUpload(Array.from(e.target.files ?? []), pendingSeason) }} style={{ display: 'none' }} />
+                {!showSeasons ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>Your photos <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({photos.length})</span></label>
+                      <button onClick={() => triggerUpload(undefined)} disabled={uploading} style={{ padding: '5px 12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {uploading ? 'Uploading…' : '+ Upload photos'}
+                      </button>
+                    </div>
+                    {photos.length === 0 ? (
+                      <div style={{ padding: '1.25rem', textAlign: 'center', background: 'var(--cream)', borderRadius: 8, border: '1px dashed var(--cream-dark)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 4, fontWeight: 500 }}>⚠ No photos yet</div>
+                        <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>Clients will see Google Photos until you add your own.</div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 6 }}>
+                          Press and hold any photo, then drag to reorder. Photo #1 is the thumbnail everywhere.
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 8 }}>
+                          {photos.map((p, i) => renderPhotoCard(p, String(i + 1)))}
+                        </div>
+                      </>
+                    )}
+                  </>
                 ) : (
                   <>
-                    <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 6 }}>
-                      Press and hold any photo, then drag to reorder. Photo #1 is the thumbnail everywhere.
+                    <label style={{ ...labelStyle, marginBottom: 8 }}>Your photos <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--ink-soft)' }}>({photos.length})</span></label>
+                    <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 10 }}>
+                      Upload to a specific season, or use the dropdown on any photo to retag it.
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 8 }}>
-                      {photos.map((p, i) => {
-                        const isDragging = photoReorder.draggingId === p.id
-                        const isOver     = photoReorder.overId === p.id && photoReorder.draggingId && photoReorder.draggingId !== p.id
-                        const bind       = photoReorder.bindItem(p.id)
-                        return (
-                          <div
-                            key={p.id}
-                            {...bind}
-                            style={{
-                              position: 'relative',
-                              aspectRatio: '1',
-                              borderRadius: 6,
-                              overflow: 'hidden',
-                              border: `1px solid ${isOver ? 'var(--gold)' : 'var(--cream-dark)'}`,
-                              cursor: 'grab',
-                              opacity: isDragging ? 0.4 : 1,
-                              touchAction: 'pan-y',
-                              userSelect: 'none',
-                              WebkitUserSelect: 'none',
-                              WebkitTouchCallout: 'none',
-                            }}
-                          >
-                            <img
-                              src={thumbUrl(p.url) ?? p.url}
-                              alt=""
-                              decoding="async"
-                              onClick={() => setLightboxSrc(p.url)}
-                              // Fall back to original URL when /render/image/
-                              // fails — modal grid would otherwise show a
-                              // blank box where the photo should be.
-                              onError={e => { if (e.currentTarget.src !== p.url) e.currentTarget.src = p.url }}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
-                            />
-                            <div style={{ position: 'absolute', top: 4, left: 4, padding: '1px 6px', borderRadius: 10, background: 'rgba(26,22,18,.75)', color: 'white', fontSize: 10, fontWeight: 600 }}>{i + 1}</div>
-                            <button onClick={e => { e.stopPropagation(); deletePhoto(p) }} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(26,22,18,.75)', border: 'none', cursor: 'pointer', fontSize: 11, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                    {([...SEASONS, { value: null as Season | null, label: 'Year-round', emoji: '🌐' }]).map(section => {
+                      const items = photos.filter(p => (p.season ?? null) === section.value)
+                      return (
+                        <div key={section.label} style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
+                              {section.emoji} {section.label}
+                              <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-soft)', marginLeft: 6 }}>({items.length})</span>
+                            </div>
+                            <button onClick={() => triggerUpload(section.value)} disabled={uploading} style={{ padding: '4px 10px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                              {uploading && pendingSeason === section.value ? 'Uploading…' : `+ Add ${section.label.toLowerCase()}`}
+                            </button>
                           </div>
-                        )
-                      })}
-                    </div>
+                          {items.length === 0 ? (
+                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, fontStyle: 'italic' }}>No {section.label.toLowerCase()} photos yet.</div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 8 }}>
+                              {items.map(p => renderPhotoCard(p))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </>
                 )}
               </div>

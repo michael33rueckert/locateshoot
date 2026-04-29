@@ -84,6 +84,14 @@ type FullLocation = ClientLocation & {
   saves: number
   photoUrl: string | null
   photoUrls: string[]
+  // Per-photo season tag, parallel to photoUrls by index. null = year-round
+  // / untagged. Only populated when the location's `showSeasons` is true
+  // — flat-grid locations get an array of nulls (or an empty array).
+  photoSeasons: (string | null)[]
+  // Per-location opt-in: when true the detail panel shows a Spring/Summer/
+  // Fall/Winter tab strip above the photo gallery and filters by tag.
+  // Off keeps the existing flat gallery untouched.
+  showSeasons: boolean
   hideGooglePhotos: boolean
   // True when the photographer marked this location as a recommended
   // pick for this guide. Surfaces a "⭐ Recommended" badge + sorts the
@@ -324,6 +332,12 @@ export default function ClientPickerPage() {
             saves:  loc.save_count ?? 0,
             photoUrl: loc.photo_url ?? null,
             photoUrls: loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : []),
+            // Aligned by index with photoUrls. API guarantees same length;
+            // null-fill on the off chance the older API path is hit.
+            photoSeasons: Array.isArray(loc.photo_seasons)
+              ? loc.photo_seasons
+              : new Array((loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : [])).length).fill(null),
+            showSeasons: !!loc.show_seasons,
             hideGooglePhotos: !!loc.hide_google_photos,
             highlighted: highlightSet.has(String(loc.id)),
           })
@@ -346,6 +360,8 @@ export default function ClientPickerPage() {
             highlighted: false,
             photoUrl: null,
             photoUrls: [],
+            photoSeasons: [],
+            showSeasons: false,
           })
         })
 
@@ -923,10 +939,13 @@ export default function ClientPickerPage() {
                 {/* Surface the favorites flow even before the client has
                     favorited anything — without this hint a first-time
                     visitor never sees the option. Hidden once they
-                    have favorites (the strip above takes over). */}
+                    have favorites (the strip above takes over). Kept
+                    short so it doesn't wrap to a third line on narrow
+                    viewports — extra wrapping pushes the bar tall
+                    enough to collide with the View Map pill above. */}
                 {favoritedLocs.length === 0 && (
                   <div style={{ fontSize: 11, color: 'rgba(245,240,232,.35)', fontWeight: 300, marginTop: 3, lineHeight: 1.4 }}>
-                    Not sure yet? Tap 🤍 inside any location to favorite + send a list to discuss.
+                    Not sure yet? Tap 🤍 to favorite + discuss.
                   </div>
                 )}
               </>
@@ -1541,8 +1560,12 @@ export default function ClientPickerPage() {
           /* Editorial layout shows the View Map toggle on tablet/desktop
              too, so the same favorites-strip clearance bump must apply
              here — otherwise the pill sits on top of the strip on the
-             editorial layout regardless of viewport. */
-          bottom: calc(env(safe-area-inset-bottom, 0) + 138px) !important;
+             editorial layout regardless of viewport. The max() floors
+             the safe-area inset at 25px so devices without a notch
+             (Android, iframes in the desktop preview modal) still get
+             the clearance the iPhone home-indicator would have
+             provided — otherwise the pill collides with the bar. */
+          bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 138px) !important;
         }
         .pick-body[data-layout="editorial"] ~ .pick-mobile-toggle,
         .pick-body[data-layout="editorial"] + .pick-mobile-toggle {
@@ -1551,7 +1574,7 @@ export default function ClientPickerPage() {
              can pop the map open. */
           display: flex !important;
           position: fixed !important;
-          bottom: calc(env(safe-area-inset-bottom, 0) + 115px) !important;
+          bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 115px) !important;
           left: 50% !important;
           transform: translateX(-50%) !important;
           z-index: 400 !important;
@@ -1590,7 +1613,12 @@ export default function ClientPickerPage() {
           .pick-mobile-toggle {
             display: flex !important;
             position: fixed !important;
-            bottom: calc(env(safe-area-inset-bottom, 0) + 115px) !important;
+            /* max() floors the safe-area inset so non-notched devices
+               (Android, iframes in the preview modal) still get the
+               clearance the iPhone home-indicator would have provided.
+               Without this floor, the pill collides with the confirm
+               bar in the desktop preview's Mobile mode. */
+            bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 115px) !important;
             left: 50% !important;
             transform: translateX(-50%) !important;
             z-index: 400 !important;
@@ -1612,9 +1640,11 @@ export default function ClientPickerPage() {
              confirm bar — without this the View Map pill ends up
              stacked on top of the strip on mobile. The strip is now
              single-row ~46px tall plus the confirm bar's ~78px,
-             so 145px clears both with a small gap. */
+             so 138px clears both with a small gap. Same max() floor
+             on the safe-area inset as above so iframes / non-notched
+             devices behave like notched phones. */
           .pick-mobile-toggle.has-favorites-strip {
-            bottom: calc(env(safe-area-inset-bottom, 0) + 138px) !important;
+            bottom: calc(max(env(safe-area-inset-bottom, 0px), 25px) + 138px) !important;
           }
         }
       `}</style>
@@ -1865,9 +1895,60 @@ function DetailPhotoGallery({
   onOpenLightbox: (imgs: string[], start: number) => void
 }) {
   // Photographer-uploaded photos (already ordered by sort_order on the server).
-  const photographerPhotos = loc.photoUrls.length > 0
+  const photographerPhotosAll = loc.photoUrls.length > 0
     ? loc.photoUrls
     : (loc.photoUrl ? [loc.photoUrl] : [])
+  // Per-photo season tags, aligned with photographerPhotosAll by index.
+  // Null-filled when API didn't carry the column or when the photoUrl
+  // fallback path was used.
+  const photoSeasonsAll: (string | null)[] = loc.photoUrls.length > 0
+    ? loc.photoSeasons
+    : new Array(photographerPhotosAll.length).fill(null)
+
+  // Which seasons (incl. null = year-round) actually have photos. Used
+  // to suppress empty tabs — no point showing a "Winter" tab when the
+  // photographer hasn't tagged any winter photos for this location.
+  type SeasonKey = 'spring' | 'summer' | 'fall' | 'winter' | 'year-round'
+  const SEASON_ORDER: SeasonKey[] = ['spring', 'summer', 'fall', 'winter', 'year-round']
+  const SEASON_LABEL: Record<SeasonKey, { emoji: string; label: string }> = {
+    spring:      { emoji: '🌸', label: 'Spring' },
+    summer:      { emoji: '☀️', label: 'Summer' },
+    fall:        { emoji: '🍂', label: 'Fall' },
+    winter:      { emoji: '❄️', label: 'Winter' },
+    'year-round':{ emoji: '🌐', label: 'Year-round' },
+  }
+  const seasonOf = (i: number): SeasonKey => {
+    const s = photoSeasonsAll[i]
+    return s === 'spring' || s === 'summer' || s === 'fall' || s === 'winter' ? s : 'year-round'
+  }
+  const seasonCounts: Record<SeasonKey, number> = { spring: 0, summer: 0, fall: 0, winter: 0, 'year-round': 0 }
+  photographerPhotosAll.forEach((_, i) => { seasonCounts[seasonOf(i)]++ })
+  const availableSeasons = SEASON_ORDER.filter(s => seasonCounts[s] > 0)
+
+  // Default the active season tab to the photographer's "current"
+  // real-world season when they have photos for it — otherwise the
+  // first season with any photos. Mirrors what most photographers
+  // would expect a client to see when opening a location in April:
+  // spring photos first, not whatever happens to be alphabetically
+  // earliest.
+  const computeDefaultSeason = (): SeasonKey => {
+    const m = new Date().getMonth()
+    const cur: SeasonKey = m >= 2 && m <= 4 ? 'spring'
+      : m >= 5 && m <= 7 ? 'summer'
+      : m >= 8 && m <= 10 ? 'fall'
+      : 'winter'
+    if (seasonCounts[cur] > 0) return cur
+    return availableSeasons[0] ?? 'year-round'
+  }
+  const [activeSeason, setActiveSeason] = useState<SeasonKey>(computeDefaultSeason)
+
+  // When seasonal organization is on, only show photos tagged for the
+  // active season. When it's off, show everything (the season array is
+  // typically all-null in that case anyway, but defensively we don't
+  // filter at all).
+  const photographerPhotos = loc.showSeasons
+    ? photographerPhotosAll.filter((_, i) => seasonOf(i) === activeSeason)
+    : photographerPhotosAll
 
   // Only fetch Google photos when the photographer hasn't opted out per location.
   const { photos: googleFetch, loading: googleLoading } = useServerPlacePhotos(
@@ -1878,15 +1959,24 @@ function DetailPhotoGallery({
   )
   const googlePhotos = loc.hideGooglePhotos ? [] : googleFetch.map(p => p.url)
 
-  const hasPhotographer = photographerPhotos.length > 0
+  const hasPhotographer = photographerPhotosAll.length > 0
   const hasGoogle       = !loc.hideGooglePhotos && googlePhotos.length > 0
 
   type Tab = 'photographer' | 'google'
   const [tab, setTab] = useState<Tab>(hasPhotographer ? 'photographer' : 'google')
   const [idx, setIdx] = useState(0)
 
-  // Re-seed the default tab + active index whenever the location changes.
-  useEffect(() => { setIdx(0); setTab(hasPhotographer ? 'photographer' : 'google') }, [loc.id, hasPhotographer])
+  // Re-seed the default tab + active index + season whenever the
+  // location changes. Recomputing the default season here matters
+  // because availableSeasons is location-specific.
+  useEffect(() => {
+    setIdx(0)
+    setTab(hasPhotographer ? 'photographer' : 'google')
+    setActiveSeason(computeDefaultSeason())
+    // computeDefaultSeason / seasonCounts are derived from loc fields
+    // so loc.id covers it; eslint will moan but this is intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loc.id, hasPhotographer])
 
   // If the photographer-tab is selected but no photographer photos exist and
   // Google photos arrive, auto-flip so we show something.
@@ -1986,7 +2076,44 @@ function DetailPhotoGallery({
         )}
       </div>
 
-      {/* Tab row — only shown when both sources have photos available. */}
+      {/* Season tab strip — shown when the photographer opted into
+          seasonal organization for this location AND the photographer
+          tab is active (Google photos aren't season-tagged). Only the
+          seasons that actually have photos are shown, so a location
+          with just spring + fall photos doesn't render empty Summer
+          and Winter tabs. */}
+      {loc.showSeasons && tab === 'photographer' && availableSeasons.length > 1 && (
+        <div style={{ display: 'flex', gap: 4, padding: '8px 1.25rem', overflowX: 'auto', borderBottom: '1px solid var(--cream-dark)', scrollbarWidth: 'none' }}>
+          <style>{`.pick-season-strip::-webkit-scrollbar { display: none; }`}</style>
+          {availableSeasons.map(s => {
+            const meta = SEASON_LABEL[s]
+            const isActive = activeSeason === s
+            return (
+              <button
+                key={s}
+                onClick={() => { setActiveSeason(s); setIdx(0); stripRef.current?.scrollTo({ left: 0, behavior: 'instant' as ScrollBehavior }) }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  fontFamily: 'inherit',
+                  border: `1px solid ${isActive ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                  background: isActive ? 'rgba(196,146,42,.08)' : 'white',
+                  color: isActive ? 'var(--ink)' : 'var(--ink-soft)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {meta.emoji} {meta.label} <span style={{ opacity: .6, fontWeight: 400 }}>({seasonCounts[s]})</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Source tab row — only shown when both sources have photos available. */}
       {(hasPhotographer || hasGoogle) && (hasPhotographer && hasGoogle) && (
         <div style={{ display: 'flex', borderBottom: '1px solid var(--cream-dark)' }}>
           {([
