@@ -1518,7 +1518,7 @@ export default function ClientPickerPage() {
              too, so the same favorites-strip clearance bump must apply
              here — otherwise the pill sits on top of the strip on the
              editorial layout regardless of viewport. */
-          bottom: calc(env(safe-area-inset-bottom, 0) + 145px) !important;
+          bottom: calc(env(safe-area-inset-bottom, 0) + 138px) !important;
         }
         .pick-body[data-layout="editorial"] ~ .pick-mobile-toggle,
         .pick-body[data-layout="editorial"] + .pick-mobile-toggle {
@@ -1527,7 +1527,7 @@ export default function ClientPickerPage() {
              can pop the map open. */
           display: flex !important;
           position: fixed !important;
-          bottom: calc(env(safe-area-inset-bottom, 0) + 82px) !important;
+          bottom: calc(env(safe-area-inset-bottom, 0) + 92px) !important;
           left: 50% !important;
           transform: translateX(-50%) !important;
           z-index: 400 !important;
@@ -1566,7 +1566,7 @@ export default function ClientPickerPage() {
           .pick-mobile-toggle {
             display: flex !important;
             position: fixed !important;
-            bottom: calc(env(safe-area-inset-bottom, 0) + 82px) !important;
+            bottom: calc(env(safe-area-inset-bottom, 0) + 92px) !important;
             left: 50% !important;
             transform: translateX(-50%) !important;
             z-index: 400 !important;
@@ -1590,7 +1590,7 @@ export default function ClientPickerPage() {
              single-row ~46px tall plus the confirm bar's ~78px,
              so 145px clears both with a small gap. */
           .pick-mobile-toggle.has-favorites-strip {
-            bottom: calc(env(safe-area-inset-bottom, 0) + 145px) !important;
+            bottom: calc(env(safe-area-inset-bottom, 0) + 138px) !important;
           }
         }
       `}</style>
