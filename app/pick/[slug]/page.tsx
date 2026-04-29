@@ -362,6 +362,30 @@ export default function ClientPickerPage() {
     if (showEmailPrompt) setTimeout(() => firstNameRef.current?.focus(), 100)
   }, [showEmailPrompt])
 
+  // Lock <html> + <body> scrolling while the Pick page is mounted.
+  // The wrapper is already position:fixed inset:0, but iOS Safari still
+  // lets the body scroll-bounce when the user touches and drags inside
+  // the wrapper — which dragged the confirm bar visibly off-screen on
+  // mobile + tablet. Pinning the document itself stops the rubber-band
+  // entirely. Cleanup restores the original styles so navigating away
+  // doesn't leave the rest of the app's scroll permanently broken.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const html = document.documentElement
+    const body = document.body
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    const prevBodyOverscroll = body.style.overscrollBehavior
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      body.style.overflow = prevBodyOverflow
+      body.style.overscrollBehavior = prevBodyOverscroll
+    }
+  }, [])
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') { setDetailLoc(null); setShowEmailPrompt(false) }
@@ -1527,7 +1551,7 @@ export default function ClientPickerPage() {
              can pop the map open. */
           display: flex !important;
           position: fixed !important;
-          bottom: calc(env(safe-area-inset-bottom, 0) + 92px) !important;
+          bottom: calc(env(safe-area-inset-bottom, 0) + 102px) !important;
           left: 50% !important;
           transform: translateX(-50%) !important;
           z-index: 400 !important;
@@ -1566,7 +1590,7 @@ export default function ClientPickerPage() {
           .pick-mobile-toggle {
             display: flex !important;
             position: fixed !important;
-            bottom: calc(env(safe-area-inset-bottom, 0) + 92px) !important;
+            bottom: calc(env(safe-area-inset-bottom, 0) + 102px) !important;
             left: 50% !important;
             transform: translateX(-50%) !important;
             z-index: 400 !important;
