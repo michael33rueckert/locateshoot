@@ -36,13 +36,14 @@ export function optimizedImage(
   }
 }
 
-// Preset sizes tuned for the surfaces that use them. width-only
-// presets preserve the photo's natural aspect — callers that need
-// a specific aspect (e.g. 4:3 list-card thumbnails) constrain
-// visually with CSS aspect-ratio + object-fit: cover.
-export const thumbUrl  = (url: string | null | undefined) => optimizedImage(url, { width: 480 })
-export const tileUrl   = (url: string | null | undefined) => optimizedImage(url, { width: 240 })
-export const mediumUrl = (url: string | null | undefined) => optimizedImage(url, { width: 1200 })
+// Preset sizes tuned for the surfaces that use them. The W×H+cover
+// presets are intentional — list-card and dashboard tiles want a
+// crisp 4:3 / 1:1 thumbnail with the server doing the crop, so the
+// bytes shipped match the displayed shape and the photo's "centered"
+// composition fills the tile. The hero (below) is the exception.
+export const thumbUrl  = (url: string | null | undefined) => optimizedImage(url, { width: 480,  height: 360 })
+export const tileUrl   = (url: string | null | undefined) => optimizedImage(url, { width: 120,  height: 120 })
+export const mediumUrl = (url: string | null | undefined) => optimizedImage(url, { width: 1200, height: 900 })
 // Pick page detail panel hero: serve the ORIGINAL upload, not a
 // /render/image/ transform. Empirically Supabase's render endpoint
 // was still arriving 4:3-cropped at the browser even when called
