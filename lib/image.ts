@@ -40,10 +40,12 @@ export function optimizedImage(
 export const thumbUrl  = (url: string | null | undefined) => optimizedImage(url, { width: 480,  height: 360 })
 export const tileUrl   = (url: string | null | undefined) => optimizedImage(url, { width: 120,  height: 120 })
 export const mediumUrl = (url: string | null | undefined) => optimizedImage(url, { width: 1200, height: 900 })
-// Aspect-preserving variant for the Pick page detail panel hero.
-// Specifying ONLY width tells Supabase's render endpoint to scale
-// to that width while preserving the photo's natural aspect — no
-// server-side crop, so portrait shots arrive in the browser tall
-// instead of pre-cropped to 4:3 (which made objectFit:contain
-// pointless on the client side).
-export const heroUrl   = (url: string | null | undefined) => optimizedImage(url, { width: 1200 })
+// Pick page detail panel hero: serve the ORIGINAL upload, not a
+// /render/image/ transform. Empirically Supabase's render endpoint
+// was still arriving 4:3-cropped at the browser even when called
+// with width-only and no resize parameter — the only reliable way
+// to make portraits NOT crop is to skip the transform pipeline.
+// Acceptable here because the hero shows one photo at a time and
+// the others are lazy-loaded; we already cap upload size at ~10MB
+// in the photographer's edit modal so this isn't unbounded.
+export const heroUrl = (url: string | null | undefined) => url ?? null
