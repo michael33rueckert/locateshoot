@@ -2054,6 +2054,7 @@ function DetailPhotoGallery({
                 alt=""
                 decoding="async"
                 loading={i === 0 ? 'eager' : 'lazy'}
+                data-hero-build="2026-04-28-c"
                 onClick={() => onOpenLightbox(activePhotos, i)}
                 onError={e => { if (e.currentTarget.src !== src) e.currentTarget.src = src }}
                 style={{
