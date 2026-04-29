@@ -1383,7 +1383,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="list"] .pick-loc-cta   { align-self: center; flex-shrink: 0; margin: 0; padding: 8px 14px; font-size: 12px; }
         .pick-loc-list[data-layout="list"] .pick-loc-rec-badge { display: none; }
         .pick-loc-list[data-layout="list"] .pick-loc-fav-badge { display: none; }
-        .pick-loc-list[data-layout="list"] .pick-loc-num-button { display: none; }
+        .pick-loc-list[data-layout="list"] .pick-loc-num-button { display: none !important; }
         .pick-loc-list[data-layout="list"] .pick-loc-rec-inline { display: inline !important; }
         .pick-loc-list[data-layout="list"] .pick-loc-num-inline { display: inline !important; }
 
@@ -1435,7 +1435,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="minimal"] .pick-loc-cta   { align-self: center; flex-shrink: 0; font-size: 12px; padding: 6px 12px; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-badge { display: none; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-fav-badge { display: none; }
-        .pick-loc-list[data-layout="minimal"] .pick-loc-num-button { display: none; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-num-button { display: none !important; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-num-inline { display: inline !important; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-inline { display: inline !important; }
 
