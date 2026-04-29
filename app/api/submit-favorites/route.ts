@@ -88,15 +88,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'could_not_save', message: 'Could not save favorites — please try again.' }, { status: 500 })
   }
 
-  // Pull photographer name + email for the email templates.
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('full_name')
-    .eq('id', link.user_id)
-    .single()
-  const { data: photographerAuth } = await admin.auth.admin.getUserById(link.user_id)
-  const photographerEmail = photographerAuth?.user?.email ?? null
-  const photographerName  = profile?.full_name ?? 'Your photographer'
+  // Pull photographer name + email for the email templates. Both
+  // calls wrapped: the row is already saved, so a transient profile
+  // / auth read failure shouldn't make the client see a "couldn't
+  // send your favorites" error after we've actually persisted them.
+  let photographerEmail: string | null = null
+  let photographerName  = 'Your photographer'
+  try {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('full_name')
+      .eq('id', link.user_id)
+      .single()
+    if (profile?.full_name) photographerName = profile.full_name
+  } catch (e) { console.warn('favorites: profile lookup failed', e) }
+  try {
+    const { data: photographerAuth } = await admin.auth.admin.getUserById(link.user_id)
+    photographerEmail = photographerAuth?.user?.email ?? null
+  } catch (e) { console.warn('favorites: auth lookup failed', e) }
 
   const clientName  = [firstName, lastName].filter(Boolean).join(' ') || 'A client'
   const sessionName = link.session_name ?? 'your Location Guide'
@@ -105,6 +114,7 @@ export async function POST(request: Request) {
   // 1. Email the photographer — reply-to set to the client so a single
   //    reply opens a real conversation.
   if (photographerEmail) {
+    try {
     await sendEmail({
       to:      photographerEmail,
       replyTo: email,
@@ -128,10 +138,12 @@ export async function POST(request: Request) {
         </div>
       `,
     })
+    } catch (e) { console.warn('favorites: photographer email failed', e) }
   }
 
   // 2. Email the client — confirmation of what they sent + a hint that
   //    replies reach the photographer.
+  try {
   await sendEmail({
     to:      email,
     replyTo: photographerEmail ?? undefined,
@@ -153,6 +165,7 @@ export async function POST(request: Request) {
       </div>
     `,
   })
+  } catch (e) { console.warn('favorites: client email failed', e) }
 
   // 3. Push notification to the photographer (best-effort).
   try {
