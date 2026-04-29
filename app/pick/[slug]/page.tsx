@@ -2059,19 +2059,16 @@ function DetailPhotoGallery({
                 style={{
                   width: '100%', height: '100%',
                   flexShrink: 0,
-                  // cover + objectPosition top fills the 4:3 hero with
-                  // the top of the photo. Portraits show the head and
-                  // upper body, lose only the bottom (legs/feet) —
-                  // matches what wedding/portrait photographers
-                  // usually want, since the subject's face is in the
-                  // top half of a portrait frame. Landscapes are
-                  // unaffected (their natural aspect is close to or
-                  // equals 4:3, so almost nothing crops). Requires
-                  // heroUrl to skip the Supabase render transform —
-                  // otherwise the server already center-cropped to
-                  // 4:3 before the CSS could re-position the focus.
-                  objectFit: 'cover',
-                  objectPosition: 'center top',
+                  // Letterbox portraits in the fixed 4:3 hero rather
+                  // than cropping. The dark hero bg (#1a1612) shows
+                  // through on the sides, reading as cinematic black
+                  // bars. Landscapes (close to 4:3 already) fill the
+                  // hero with nearly no visible bars. Relies on
+                  // heroUrl returning the original Supabase URL so
+                  // the photo arrives in its natural aspect — if it
+                  // were server-cropped to 4:3 first, contain would
+                  // have nothing to letterbox.
+                  objectFit: 'contain',
                   cursor: 'zoom-in',
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
