@@ -92,10 +92,20 @@ export default function DashboardPage() {
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
   const [copiedGuideId,       setCopiedGuideId]        = useState<string | null>(null)
   const [deleteGuideId,       setDeleteGuideId]        = useState<string | null>(null)
-  // Two-step confirmation for the Client Favorites Dismiss button —
-  // first click arms the row (button label flips to "Click again to
-  // confirm"), second click actually deletes. Mirrors deleteGuide.
+  // Two-step confirmation for the Client Favorites + Client Selections
+  // Dismiss buttons — first click arms the row (button label flips to
+  // "Click again to confirm"), second click actually deletes. Mirrors
+  // deleteGuide. Each list has its own armed-row state so arming a
+  // pick row doesn't visually arm a favorite row at the same id.
   const [dismissFavoriteId,   setDismissFavoriteId]    = useState<string | null>(null)
+  const [dismissPickId,       setDismissPickId]        = useState<string | null>(null)
+  // Pagination — both Client Selections and Client Favorites cap at
+  // 5 items per page so the dashboard column doesn't tower when the
+  // photographer has a busy week. Numbered pages + arrow buttons
+  // appear at the bottom of each list when totalPages > 1.
+  const [picksPage,           setPicksPage]            = useState(1)
+  const [favoritesPage,       setFavoritesPage]        = useState(1)
+  const DASHBOARD_PAGE_SIZE = 5
 
   useEffect(() => {
     if (!toast) return
@@ -443,6 +453,53 @@ export default function DashboardPage() {
       return
     }
     setDismissFavoriteId(null); setToast('Dismissed')
+  }
+
+  // Same pattern for client_picks rows. RLS policy lives in
+  // 20260429_client_picks_delete.sql — derived via the share_link
+  // since client_picks doesn't carry a denormalized user_id.
+  async function dismissPick(id: string) {
+    if (dismissPickId !== id) { setDismissPickId(id); return }
+    const previous = recentPicks
+    setRecentPicks(prev => prev.filter(p => p.id !== id))
+    const { error } = await supabase.from('client_picks').delete().eq('id', id)
+    if (error) {
+      setRecentPicks(previous)
+      setToast('⚠ Could not dismiss — please try again')
+      return
+    }
+    setDismissPickId(null); setToast('Dismissed')
+  }
+
+  // Tiny pagination strip. Returns null when totalPages <= 1 so the
+  // bar disappears for short lists. Renders inside the existing <ul>
+  // as an <li> so it slots into both Client Selections and Client
+  // Favorites without a layout fork.
+  function renderDashboardPagination(totalPages: number, page: number, setPage: (p: number) => void) {
+    if (totalPages <= 1) return null
+    const btn = (label: string, target: number, disabled: boolean, isActive = false): React.ReactNode => (
+      <button
+        key={label}
+        onClick={() => setPage(target)}
+        disabled={disabled}
+        style={{
+          minWidth: 28, padding: '4px 8px', borderRadius: 4,
+          fontFamily: 'inherit', fontSize: 12, fontWeight: isActive ? 600 : 400,
+          color: disabled ? 'var(--ink-soft)' : isActive ? 'var(--ink)' : 'var(--ink-mid)',
+          background: isActive ? 'var(--cream)' : 'transparent',
+          border: `1px solid ${isActive ? 'var(--cream-dark)' : 'transparent'}`,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.4 : 1,
+        }}
+      >{label}</button>
+    )
+    return (
+      <li style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, borderTop: '1px solid var(--cream-dark)', listStyle: 'none' }}>
+        {btn('←', Math.max(1, page - 1), page === 1)}
+        {Array.from({ length: totalPages }, (_, i) => btn(String(i + 1), i + 1, false, page === i + 1))}
+        {btn('→', Math.min(totalPages, page + 1), page === totalPages)}
+      </li>
+    )
   }
 
   // Full-portfolio share — pinned at the top of the Location Guides section
@@ -815,48 +872,73 @@ export default function DashboardPage() {
                     When a client opens one of your Location Guides and submits a pick, it&apos;ll show up here. You&apos;ll also get an email and (if enabled) a push notification.
                   </div>
                 </div>
-              ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {recentPicks.slice(0, 12).map(p => {
-                    const fullName = [p.client_first_name, p.client_last_name].filter(Boolean).join(' ').trim()
-                    const display  = fullName || p.client_email || 'Anonymous client'
-                    const locText  = (p.location_names && p.location_names.length > 0)
-                      ? p.location_names.join(' · ')
-                      : (p.location_name ?? '—')
-                    const guideLabel = p.is_full_portfolio ? 'Portfolio guide' : (p.session_name ?? 'Custom guide')
-                    const created    = new Date(p.created_at)
-                    const dateText   = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
-                    const timeText   = created.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-                    return (
-                      <li key={p.id} style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
-                            {display}
-                            {fullName && p.client_email && (
-                              <span style={{ fontWeight: 400, color: 'var(--ink-soft)', fontSize: 12, marginLeft: 6 }}>· {p.client_email}</span>
-                            )}
+              ) : (() => {
+                // 5 per page — paginate when the list grows beyond
+                // that. Clamp the active page if the user dismisses
+                // the last item on a now-empty trailing page.
+                const totalPages = Math.max(1, Math.ceil(recentPicks.length / DASHBOARD_PAGE_SIZE))
+                const activePage = Math.min(picksPage, totalPages)
+                const start = (activePage - 1) * DASHBOARD_PAGE_SIZE
+                const visible = recentPicks.slice(start, start + DASHBOARD_PAGE_SIZE)
+                return (
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    {visible.map(p => {
+                      const fullName = [p.client_first_name, p.client_last_name].filter(Boolean).join(' ').trim()
+                      const display  = fullName || p.client_email || 'Anonymous client'
+                      const locText  = (p.location_names && p.location_names.length > 0)
+                        ? p.location_names.join(' · ')
+                        : (p.location_name ?? '—')
+                      const guideLabel = p.is_full_portfolio ? 'Portfolio guide' : (p.session_name ?? 'Custom guide')
+                      const created    = new Date(p.created_at)
+                      const dateText   = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+                      const timeText   = created.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                      const isArmed    = dismissPickId === p.id
+                      return (
+                        <li key={p.id} style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
+                              {display}
+                              {fullName && p.client_email && (
+                                <span style={{ fontWeight: 400, color: 'var(--ink-soft)', fontSize: 12, marginLeft: 6 }}>· {p.client_email}</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
+                              <span style={{ color: 'var(--ink-soft)' }}>📍</span> {locText}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
+                              from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
+                            </div>
                           </div>
-                          <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
-                            <span style={{ color: 'var(--ink-soft)' }}>📍</span> {locText}
+                          <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                            <div>
+                              {dateText}<br />
+                              <span style={{ fontSize: 11 }}>{timeText}</span>
+                            </div>
+                            <button
+                              onClick={() => dismissPick(p.id)}
+                              onBlur={() => { if (dismissPickId === p.id) setDismissPickId(null) }}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 500,
+                                fontFamily: 'inherit',
+                                color: isArmed ? 'var(--rust)' : 'var(--ink-soft)',
+                                background: isArmed ? 'rgba(181,75,42,.08)' : 'transparent',
+                                border: `1px solid ${isArmed ? 'rgba(181,75,42,.35)' : 'var(--cream-dark)'}`,
+                                borderRadius: 4,
+                                padding: '4px 10px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {isArmed ? 'Click again to confirm' : '✕ Dismiss'}
+                            </button>
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>
-                            from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
-                          </div>
-                        </div>
-                        <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                          {dateText}<br />
-                          <span style={{ fontSize: 11 }}>{timeText}</span>
-                        </div>
-                      </li>
-                    )
-                  })}
-                  {recentPicks.length > 12 && (
-                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                      Showing 12 of {recentPicks.length} most recent picks
-                    </li>
-                  )}
-                </ul>
-              )}
+                        </li>
+                      )
+                    })}
+                    {renderDashboardPagination(totalPages, activePage, setPicksPage)}
+                  </ul>
+                )
+              })()}
             </div>
 
             {/* Client Favorite Lists — soft "let's discuss these" signals
@@ -874,8 +956,15 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Lists clients sent for discussion — they aren&apos;t ready to commit yet. Reply to talk through their options.</div>
                 </div>
+                {(() => {
+                  // Same 5-per-page rule as Client Selections.
+                  const totalPages = Math.max(1, Math.ceil(clientFavoriteLists.length / DASHBOARD_PAGE_SIZE))
+                  const activePage = Math.min(favoritesPage, totalPages)
+                  const start = (activePage - 1) * DASHBOARD_PAGE_SIZE
+                  const visibleFavorites = clientFavoriteLists.slice(start, start + DASHBOARD_PAGE_SIZE)
+                  return (
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {clientFavoriteLists.slice(0, 12).map(f => {
+                  {visibleFavorites.map(f => {
                     const fullName = [f.client_first_name, f.client_last_name].filter(Boolean).join(' ').trim()
                     const display  = fullName || f.client_email || 'Anonymous client'
                     const guideLabel = f.session_name ?? 'Custom guide'
@@ -937,12 +1026,10 @@ export default function DashboardPage() {
                       </li>
                     )
                   })}
-                  {clientFavoriteLists.length > 12 && (
-                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                      Showing 12 of {clientFavoriteLists.length} most recent
-                    </li>
-                  )}
+                  {renderDashboardPagination(totalPages, activePage, setFavoritesPage)}
                 </ul>
+                  )
+                })()}
               </div>
             )}
 
