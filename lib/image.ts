@@ -21,7 +21,14 @@ export function optimizedImage(
     u.pathname = u.pathname.slice(0, idx) + RENDER_PREFIX + u.pathname.slice(idx + PUBLIC_MARKER.length)
     if (opts.width)  u.searchParams.set('width',  String(opts.width))
     if (opts.height) u.searchParams.set('height', String(opts.height))
-    u.searchParams.set('resize', opts.resize ?? 'cover')
+    // resize only governs how the image fills a W×H box. With a single
+    // dimension Supabase already preserves the natural aspect ratio,
+    // and passing resize=cover anyway can confuse the render endpoint
+    // into cropping to a default aspect (which was making heroUrl
+    // arrive 4:3-cropped despite asking for width-only).
+    if (opts.width != null && opts.height != null) {
+      u.searchParams.set('resize', opts.resize ?? 'cover')
+    }
     u.searchParams.set('quality', String(opts.quality ?? 75))
     return u.toString()
   } catch {
