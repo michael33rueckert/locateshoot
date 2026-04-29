@@ -1991,28 +1991,14 @@ function DetailPhotoGallery({
   const activePhotos = tab === 'photographer' ? photographerPhotos : googlePhotos
   const hasPhotos    = activePhotos.length > 0
   const hasMultiple  = activePhotos.length > 1
-
-  // Per-image natural aspect ratio (width / height) — captured on
-  // image onLoad. Used to size the hero container to match the
-  // currently-viewed photo, so portrait shots aren't cropped at the
-  // top by a fixed 4:3 frame. Fallback 4/3 while a photo's metadata
-  // hasn't arrived yet (or for the empty state where there are no
-  // photos and we render the bg color tile).
-  const [photoAspects, setPhotoAspects] = useState<Record<string, number>>({})
-  function recordAspect(url: string, w: number, h: number) {
-    if (w <= 0 || h <= 0) return
-    setPhotoAspects(prev => prev[url] != null ? prev : { ...prev, [url]: w / h })
-  }
-  const currentSrc    = activePhotos[idx]
-  const currentRatio  = currentSrc ? photoAspects[currentSrc] : undefined
-  // Clamp between 9:16 (very portrait) and 16:9 (very landscape) so
-  // an extreme aspect ratio doesn't push the hero past the screen
-  // (a 9:16 portrait at 580px wide would be ~1030px tall otherwise).
-  const heroAspectNum = currentRatio != null
-    ? Math.max(9 / 16, Math.min(16 / 9, currentRatio))
-    : 4 / 3
-  const heroAspect    = String(heroAspectNum)
-  const stripRef      = useRef<HTMLDivElement>(null)
+  // Fixed 4:3 hero — predictable size, doesn't tower over the rest
+  // of the detail panel. Portraits no longer crop at the top because
+  // the <img> uses objectFit: contain (below) and the heroUrl helper
+  // requests a natural-aspect rendition from Supabase. Together that
+  // letterboxes portrait shots against the dark hero bg instead of
+  // either chopping them or stretching the hero to 1:2 proportions.
+  const heroAspect   = '4 / 3'
+  const stripRef     = useRef<HTMLDivElement>(null)
 
   // Keep the idx counter + thumbnail-row highlight in sync with the hero's
   // scroll position. Division by clientWidth works because every image is
@@ -2042,7 +2028,7 @@ function DetailPhotoGallery({
 
   return (
     <>
-      <div className={hasPhotos ? undefined : loc.bg} style={{ width: '100%', aspectRatio: heroAspect, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined, transition: 'aspect-ratio .2s ease' }}>
+      <div className={hasPhotos ? undefined : loc.bg} style={{ width: '100%', aspectRatio: heroAspect, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
         {hasPhotos ? (
           <div
             ref={stripRef}
@@ -2069,7 +2055,6 @@ function DetailPhotoGallery({
                 decoding="async"
                 loading={i === 0 ? 'eager' : 'lazy'}
                 onClick={() => onOpenLightbox(activePhotos, i)}
-                onLoad={e => recordAspect(src, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)}
                 onError={e => { if (e.currentTarget.src !== src) e.currentTarget.src = src }}
                 style={{
                   width: '100%', height: '100%',
