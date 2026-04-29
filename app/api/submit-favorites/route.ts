@@ -122,19 +122,19 @@ export async function POST(request: Request) {
       html: `
         <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;padding:24px 20px;color:#1a1612;background:#ffffff;">
           <div style="font-size:15px;font-weight:700;color:#c4922a;margin-bottom:6px;">★ Favorites to discuss</div>
-          <h2 style="font-family:Georgia,serif;font-size:22px;margin:0 0 10px;">${escapeHtml(clientName)} marked a few spots they're considering</h2>
-          <p style="font-size:14px;line-height:1.6;color:#3a3229;margin:0 0 16px;">From your <strong>${escapeHtml(sessionName)}</strong> guide. They aren't ready to commit to a final pick yet and would like to talk through their options.</p>
-          <div style="margin:0 0 14px;font-size:13px;color:#6b5f52;">Their favorites:</div>
+          <h2 style="font-family:Georgia,serif;font-size:22px;margin:0 0 10px;">${escapeHtml(clientName)} marked a few spots to consider</h2>
+          <p style="font-size:14px;line-height:1.6;color:#3a3229;margin:0 0 16px;">From your <strong>${escapeHtml(sessionName)}</strong> guide. Not ready to commit to a final pick yet — would like to talk through the options.</p>
+          <div style="margin:0 0 14px;font-size:13px;color:#6b5f52;">Favorites:</div>
           <ul style="margin:0 0 18px 0;padding-left:22px;font-size:14px;line-height:1.5;">
             ${namesHtml}
           </ul>
           ${comment ? `
             <div style="background:#f9f6f1;padding:14px 16px;border-radius:8px;margin-bottom:18px;border:1px solid #ece5d8;">
-              <div style="font-size:12px;color:#6b5f52;margin-bottom:6px;font-weight:500;">Their question / comment:</div>
+              <div style="font-size:12px;color:#6b5f52;margin-bottom:6px;font-weight:500;">Question / comment:</div>
               <div style="white-space:pre-wrap;font-size:14px;line-height:1.55;">${escapeHtml(comment)}</div>
             </div>
           ` : ''}
-          <p style="font-size:13px;line-height:1.6;color:#6b5f52;margin:0;">Reply to this email to chat with ${escapeHtml(firstName || 'them')} directly — replies go to <a href="mailto:${escapeHtml(email)}" style="color:#c4922a;">${escapeHtml(email)}</a>.</p>
+          <p style="font-size:13px;line-height:1.6;color:#6b5f52;margin:0;">Reply to this email to start the conversation — replies go to <a href="mailto:${escapeHtml(email)}" style="color:#c4922a;">${escapeHtml(email)}</a>.</p>
         </div>
       `,
     })
