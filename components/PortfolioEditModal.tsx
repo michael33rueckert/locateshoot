@@ -389,8 +389,9 @@ export default function PortfolioEditModal({
   // Move an already-uploaded photo to a different season. Used by the
   // small dropdown on each photo card when seasonal organization is on,
   // so photographers can shuffle photos between Spring/Summer/Fall/
-  // Winter (or back to year-round) without re-uploading.
-  async function updatePhotoSeason(photoId: string, season: Season | null) {
+  // Winter without re-uploading. Only the four named seasons are
+  // valid targets — null tags are an inherited state, not a choice.
+  async function updatePhotoSeason(photoId: string, season: Season) {
     const previous = photos
     setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, season } : p))
     const { error } = await supabase.from('location_photos').update({ season }).eq('id', photoId)
@@ -446,10 +447,16 @@ export default function PortfolioEditModal({
           <select
             value={p.season ?? ''}
             onClick={e => e.stopPropagation()}
-            onChange={e => updatePhotoSeason(p.id, (e.target.value || null) as Season | null)}
+            onChange={e => {
+              const v = e.target.value
+              if (v === 'spring' || v === 'summer' || v === 'fall' || v === 'winter') updatePhotoSeason(p.id, v)
+            }}
             style={{ position: 'absolute', bottom: 4, left: 4, right: 4, fontSize: 10, padding: '2px 4px', borderRadius: 4, background: 'rgba(26,22,18,.85)', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit', appearance: 'none', WebkitAppearance: 'none', textAlign: 'center' }}
           >
-            <option value="">🌐 Year-round</option>
+            {/* Placeholder shown when the photo has no season tag yet
+                — disabled so the photographer must pick one of the
+                four real seasons rather than reset back to untagged. */}
+            <option value="" disabled hidden>Pick season</option>
             <option value="spring">🌸 Spring</option>
             <option value="summer">☀️ Summer</option>
             <option value="fall">🍂 Fall</option>
@@ -684,8 +691,33 @@ export default function PortfolioEditModal({
                     <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontStyle: 'italic', marginBottom: 10 }}>
                       Upload to a specific season, or use the dropdown on any photo to retag it.
                     </div>
-                    {([...SEASONS, { value: null as Season | null, label: 'Year-round', emoji: '🌐' }]).map(section => {
-                      const items = photos.filter(p => (p.season ?? null) === section.value)
+                    {/* Rescue section for photos that exist on this
+                        location with no season tag — usually photos
+                        uploaded BEFORE the photographer flipped on
+                        seasonal organization. They're hidden from
+                        clients (who only see the four season tabs),
+                        so we surface them here with a clear "pick a
+                        season" prompt instead of letting them silently
+                        disappear from the UI. */}
+                    {(() => {
+                      const untagged = photos.filter(p => !p.season)
+                      if (untagged.length === 0) return null
+                      return (
+                        <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 8, background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.35)' }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
+                            ⚠ Without a season tag <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-soft)', marginLeft: 6 }}>({untagged.length})</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 8, fontWeight: 300 }}>
+                            Pick a season for each below — clients won&apos;t see these until they&apos;re tagged.
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 8 }}>
+                            {untagged.map(p => renderPhotoCard(p))}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                    {SEASONS.map(section => {
+                      const items = photos.filter(p => p.season === section.value)
                       return (
                         <div key={section.label} style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>

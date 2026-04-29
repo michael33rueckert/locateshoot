@@ -1905,24 +1905,29 @@ function DetailPhotoGallery({
     ? loc.photoSeasons
     : new Array(photographerPhotosAll.length).fill(null)
 
-  // Which seasons (incl. null = year-round) actually have photos. Used
-  // to suppress empty tabs — no point showing a "Winter" tab when the
-  // photographer hasn't tagged any winter photos for this location.
-  type SeasonKey = 'spring' | 'summer' | 'fall' | 'winter' | 'year-round'
-  const SEASON_ORDER: SeasonKey[] = ['spring', 'summer', 'fall', 'winter', 'year-round']
+  // Which seasons actually have photos. Used to suppress empty tabs —
+  // no point showing a "Winter" tab when the photographer hasn't
+  // tagged any winter photos for this location. Photos with no
+  // season tag (legacy or in-progress) are filtered out entirely on
+  // the client side; the photographer's edit modal surfaces them
+  // separately so they don't disappear silently.
+  type SeasonKey = 'spring' | 'summer' | 'fall' | 'winter'
+  const SEASON_ORDER: SeasonKey[] = ['spring', 'summer', 'fall', 'winter']
   const SEASON_LABEL: Record<SeasonKey, { emoji: string; label: string }> = {
-    spring:      { emoji: '🌸', label: 'Spring' },
-    summer:      { emoji: '☀️', label: 'Summer' },
-    fall:        { emoji: '🍂', label: 'Fall' },
-    winter:      { emoji: '❄️', label: 'Winter' },
-    'year-round':{ emoji: '🌐', label: 'Year-round' },
+    spring: { emoji: '🌸', label: 'Spring' },
+    summer: { emoji: '☀️', label: 'Summer' },
+    fall:   { emoji: '🍂', label: 'Fall' },
+    winter: { emoji: '❄️', label: 'Winter' },
   }
-  const seasonOf = (i: number): SeasonKey => {
+  const seasonOf = (i: number): SeasonKey | null => {
     const s = photoSeasonsAll[i]
-    return s === 'spring' || s === 'summer' || s === 'fall' || s === 'winter' ? s : 'year-round'
+    return s === 'spring' || s === 'summer' || s === 'fall' || s === 'winter' ? s : null
   }
-  const seasonCounts: Record<SeasonKey, number> = { spring: 0, summer: 0, fall: 0, winter: 0, 'year-round': 0 }
-  photographerPhotosAll.forEach((_, i) => { seasonCounts[seasonOf(i)]++ })
+  const seasonCounts: Record<SeasonKey, number> = { spring: 0, summer: 0, fall: 0, winter: 0 }
+  photographerPhotosAll.forEach((_, i) => {
+    const s = seasonOf(i)
+    if (s) seasonCounts[s]++
+  })
   const availableSeasons = SEASON_ORDER.filter(s => seasonCounts[s] > 0)
 
   // Default the active season tab to the photographer's "current"
@@ -1930,23 +1935,22 @@ function DetailPhotoGallery({
   // first season with any photos. Mirrors what most photographers
   // would expect a client to see when opening a location in April:
   // spring photos first, not whatever happens to be alphabetically
-  // earliest.
-  const computeDefaultSeason = (): SeasonKey => {
+  // earliest. Returns null only when no tagged photos exist at all.
+  const computeDefaultSeason = (): SeasonKey | null => {
     const m = new Date().getMonth()
     const cur: SeasonKey = m >= 2 && m <= 4 ? 'spring'
       : m >= 5 && m <= 7 ? 'summer'
       : m >= 8 && m <= 10 ? 'fall'
       : 'winter'
     if (seasonCounts[cur] > 0) return cur
-    return availableSeasons[0] ?? 'year-round'
+    return availableSeasons[0] ?? null
   }
-  const [activeSeason, setActiveSeason] = useState<SeasonKey>(computeDefaultSeason)
+  const [activeSeason, setActiveSeason] = useState<SeasonKey | null>(computeDefaultSeason)
 
-  // When seasonal organization is on, only show photos tagged for the
-  // active season. When it's off, show everything (the season array is
-  // typically all-null in that case anyway, but defensively we don't
-  // filter at all).
-  const photographerPhotos = loc.showSeasons
+  // When seasonal organization is on AND we have an active season,
+  // only show photos tagged for that season. Off / no active season
+  // shows everything (defensive — typically all-null in off mode).
+  const photographerPhotos = loc.showSeasons && activeSeason
     ? photographerPhotosAll.filter((_, i) => seasonOf(i) === activeSeason)
     : photographerPhotosAll
 
@@ -1987,12 +1991,28 @@ function DetailPhotoGallery({
   const activePhotos = tab === 'photographer' ? photographerPhotos : googlePhotos
   const hasPhotos    = activePhotos.length > 0
   const hasMultiple  = activePhotos.length > 1
-  // 4:3 aspect ratio matches the list-card thumbs and a typical
-  // landscape photo, so neither the top of someone's head nor the
-  // foreground gets cropped. Width follows the panel (max 580px), so
-  // the rendered hero is ~280-435px tall depending on viewport.
-  const heroAspect   = '4 / 3'
-  const stripRef     = useRef<HTMLDivElement>(null)
+
+  // Per-image natural aspect ratio (width / height) — captured on
+  // image onLoad. Used to size the hero container to match the
+  // currently-viewed photo, so portrait shots aren't cropped at the
+  // top by a fixed 4:3 frame. Fallback 4/3 while a photo's metadata
+  // hasn't arrived yet (or for the empty state where there are no
+  // photos and we render the bg color tile).
+  const [photoAspects, setPhotoAspects] = useState<Record<string, number>>({})
+  function recordAspect(url: string, w: number, h: number) {
+    if (w <= 0 || h <= 0) return
+    setPhotoAspects(prev => prev[url] != null ? prev : { ...prev, [url]: w / h })
+  }
+  const currentSrc    = activePhotos[idx]
+  const currentRatio  = currentSrc ? photoAspects[currentSrc] : undefined
+  // Clamp between 9:16 (very portrait) and 16:9 (very landscape) so
+  // an extreme aspect ratio doesn't push the hero past the screen
+  // (a 9:16 portrait at 580px wide would be ~1030px tall otherwise).
+  const heroAspectNum = currentRatio != null
+    ? Math.max(9 / 16, Math.min(16 / 9, currentRatio))
+    : 4 / 3
+  const heroAspect    = String(heroAspectNum)
+  const stripRef      = useRef<HTMLDivElement>(null)
 
   // Keep the idx counter + thumbnail-row highlight in sync with the hero's
   // scroll position. Division by clientWidth works because every image is
@@ -2022,7 +2042,7 @@ function DetailPhotoGallery({
 
   return (
     <>
-      <div className={hasPhotos ? undefined : loc.bg} style={{ width: '100%', aspectRatio: heroAspect, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined }}>
+      <div className={hasPhotos ? undefined : loc.bg} style={{ width: '100%', aspectRatio: heroAspect, position: 'relative', overflow: 'hidden', background: hasPhotos ? '#1a1612' : undefined, transition: 'aspect-ratio .2s ease' }}>
         {hasPhotos ? (
           <div
             ref={stripRef}
@@ -2049,11 +2069,18 @@ function DetailPhotoGallery({
                 decoding="async"
                 loading={i === 0 ? 'eager' : 'lazy'}
                 onClick={() => onOpenLightbox(activePhotos, i)}
+                onLoad={e => recordAspect(src, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)}
                 onError={e => { if (e.currentTarget.src !== src) e.currentTarget.src = src }}
                 style={{
                   width: '100%', height: '100%',
                   flexShrink: 0,
-                  objectFit: 'cover',
+                  // contain (vs cover) keeps the photo whole — when
+                  // the container's aspect matches this photo's, no
+                  // letterbox; when it doesn't (mid-swipe between
+                  // photos with different aspect ratios) the photo
+                  // sits letterboxed against the dark hero bg rather
+                  // than getting cropped at the top/sides.
+                  objectFit: 'contain',
                   cursor: 'zoom-in',
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
