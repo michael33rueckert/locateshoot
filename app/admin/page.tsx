@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import PaginationButtons from '@/components/PaginationButtons'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin'
@@ -421,36 +422,16 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
-            {totalUserPages > 1 && (() => {
-              const btn = (label: string, target: number, disabled: boolean, isActive = false): React.ReactNode => (
-                <button
-                  key={label}
-                  onClick={() => setUsersPage(target)}
-                  disabled={disabled}
-                  style={{
-                    minWidth: 28, padding: '4px 8px', borderRadius: 4,
-                    fontFamily: 'inherit', fontSize: 12, fontWeight: isActive ? 600 : 400,
-                    color: disabled ? 'var(--ink-soft)' : isActive ? 'var(--ink)' : 'var(--ink-mid)',
-                    background: isActive ? 'var(--cream)' : 'transparent',
-                    border: `1px solid ${isActive ? 'var(--cream-dark)' : 'transparent'}`,
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    opacity: disabled ? 0.4 : 1,
-                  }}
-                >{label}</button>
-              )
-              return (
-                <div style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
-                    Showing {userStart + 1}–{userStart + visibleUsers.length} of {filteredUsers.length}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {btn('←', Math.max(1, activeUserPage - 1), activeUserPage === 1)}
-                    {Array.from({ length: totalUserPages }, (_, i) => btn(String(i + 1), i + 1, false, activeUserPage === i + 1))}
-                    {btn('→', Math.min(totalUserPages, activeUserPage + 1), activeUserPage === totalUserPages)}
-                  </div>
+            {totalUserPages > 1 && (
+              <div style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+                  Showing {userStart + 1}–{userStart + visibleUsers.length} of {filteredUsers.length}
                 </div>
-              )
-            })()}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <PaginationButtons totalPages={totalUserPages} currentPage={activeUserPage} onPageChange={setUsersPage} />
+                </div>
+              </div>
+            )}
             </>
             )
           })()}
@@ -564,36 +545,16 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
-                {totalPages > 1 && (() => {
-                  const btn = (label: string, target: number, disabled: boolean, isActive = false): React.ReactNode => (
-                    <button
-                      key={label}
-                      onClick={() => setLocsPage(target)}
-                      disabled={disabled}
-                      style={{
-                        minWidth: 28, padding: '4px 8px', borderRadius: 4,
-                        fontFamily: 'inherit', fontSize: 12, fontWeight: isActive ? 600 : 400,
-                        color: disabled ? 'var(--ink-soft)' : isActive ? 'var(--ink)' : 'var(--ink-mid)',
-                        background: isActive ? 'var(--cream)' : 'transparent',
-                        border: `1px solid ${isActive ? 'var(--cream-dark)' : 'transparent'}`,
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                        opacity: disabled ? 0.4 : 1,
-                      }}
-                    >{label}</button>
-                  )
-                  return (
-                    <div style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
-                        Showing {start + 1}–{start + visible.length} of {filteredAllLocs.length}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        {btn('←', Math.max(1, activePage - 1), activePage === 1)}
-                        {Array.from({ length: totalPages }, (_, i) => btn(String(i + 1), i + 1, false, activePage === i + 1))}
-                        {btn('→', Math.min(totalPages, activePage + 1), activePage === totalPages)}
-                      </div>
+                {totalPages > 1 && (
+                  <div style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+                      Showing {start + 1}–{start + visible.length} of {filteredAllLocs.length}
                     </div>
-                  )
-                })()}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <PaginationButtons totalPages={totalPages} currentPage={activePage} onPageChange={setLocsPage} />
+                    </div>
+                  </div>
+                )}
               </>
             )
           })()}

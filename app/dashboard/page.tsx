@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import PaginationButtons from '@/components/PaginationButtons'
 import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
@@ -502,33 +503,15 @@ export default function DashboardPage() {
     setRemoveMyFavoriteId(null); setToast('Removed from favorites')
   }
 
-  // Tiny pagination strip. Returns null when totalPages <= 1 so the
-  // bar disappears for short lists. Renders inside the existing <ul>
-  // as an <li> so it slots into both Client Selections and Client
-  // Favorites without a layout fork.
+  // Wraps the shared <PaginationButtons /> in an <li> so it slots
+  // into the Client Selections / Client Favorites / ★ Favorites
+  // <ul>s without a layout fork. Returns null when totalPages <= 1
+  // so the bar disappears for short lists.
   function renderDashboardPagination(totalPages: number, page: number, setPage: (p: number) => void) {
     if (totalPages <= 1) return null
-    const btn = (label: string, target: number, disabled: boolean, isActive = false): React.ReactNode => (
-      <button
-        key={label}
-        onClick={() => setPage(target)}
-        disabled={disabled}
-        style={{
-          minWidth: 28, padding: '4px 8px', borderRadius: 4,
-          fontFamily: 'inherit', fontSize: 12, fontWeight: isActive ? 600 : 400,
-          color: disabled ? 'var(--ink-soft)' : isActive ? 'var(--ink)' : 'var(--ink-mid)',
-          background: isActive ? 'var(--cream)' : 'transparent',
-          border: `1px solid ${isActive ? 'var(--cream-dark)' : 'transparent'}`,
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.4 : 1,
-        }}
-      >{label}</button>
-    )
     return (
       <li style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, borderTop: '1px solid var(--cream-dark)', listStyle: 'none' }}>
-        {btn('←', Math.max(1, page - 1), page === 1)}
-        {Array.from({ length: totalPages }, (_, i) => btn(String(i + 1), i + 1, false, page === i + 1))}
-        {btn('→', Math.min(totalPages, page + 1), page === totalPages)}
+        <PaginationButtons totalPages={totalPages} currentPage={page} onPageChange={setPage} />
       </li>
     )
   }
