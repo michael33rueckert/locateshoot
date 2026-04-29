@@ -1,5 +1,237 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+
+// Three demo locations the preview falls back to when the
+// photographer's portfolio is empty. hide_google_photos:true so the
+// preview doesn't hit the Places API for fake spots, and the
+// description tells the photographer this is a placeholder.
+const DEMO_LOCATIONS = [
+  {
+    id: 'demo-1',
+    name: 'Loose Park Rose Garden',
+    description: 'Demo location — formal rose garden with white pergolas and brick walkways. Add real locations to your portfolio to see them here instead.',
+    city: 'Kansas City', state: 'MO',
+    latitude: 39.0339, longitude: -94.5896,
+    access_type: 'public', tags: ['gardens', 'romantic', 'spring'],
+    permit_required: false, permit_notes: null, permit_fee: null, permit_website: null, permit_certainty: 'unknown',
+    pinterest_url: null, blog_url: null, session_links: [],
+    rating: 4.7, quality_score: 85, save_count: 12,
+    photo_url: null, photo_urls: [], photo_seasons: [], show_seasons: false,
+    hide_google_photos: true,
+  },
+  {
+    id: 'demo-2',
+    name: 'Liberty Memorial',
+    description: 'Demo location — towering WWI memorial with sweeping skyline views. Add real locations to your portfolio to see them here instead.',
+    city: 'Kansas City', state: 'MO',
+    latitude: 39.0792, longitude: -94.5856,
+    access_type: 'public', tags: ['monument', 'urban', 'sunset'],
+    permit_required: false, permit_notes: null, permit_fee: null, permit_website: null, permit_certainty: 'unknown',
+    pinterest_url: null, blog_url: null, session_links: [],
+    rating: 4.8, quality_score: 88, save_count: 18,
+    photo_url: null, photo_urls: [], photo_seasons: [], show_seasons: false,
+    hide_google_photos: true,
+  },
+  {
+    id: 'demo-3',
+    name: 'Penn Valley Park',
+    description: 'Demo location — rolling hills, mature trees, perfect for golden hour. Add real locations to your portfolio to see them here instead.',
+    city: 'Kansas City', state: 'MO',
+    latitude: 39.0814, longitude: -94.5895,
+    access_type: 'public', tags: ['park', 'golden hour', 'fields'],
+    permit_required: false, permit_notes: null, permit_fee: null, permit_website: null, permit_certainty: 'unknown',
+    pinterest_url: null, blog_url: null, session_links: [],
+    rating: 4.5, quality_score: 80, save_count: 9,
+    photo_url: null, photo_urls: [], photo_seasons: [], show_seasons: false,
+    hide_google_photos: true,
+  },
+]
+
+// Preview mode — photographer previewing their own template against
+// their own portfolio from the Branding tab. Distinct from the share-
+// link flow: requires Bearer auth (so we know whose data to load),
+// synthesizes a share-link-shaped response from the photographer's
+// current profile + portfolio + template, and falls back to
+// DEMO_LOCATIONS when their portfolio is empty so the preview never
+// reads as broken.
+async function handlePreview(request: Request, admin: SupabaseClient): Promise<NextResponse> {
+  const auth = request.headers.get('authorization') ?? ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const { data: u } = await admin.auth.getUser(token)
+  const user = u?.user
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  // Profile drives photographer name + branding + plan-gated fields.
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id,full_name,plan,preferences')
+    .eq('id', user.id)
+    .single()
+  const photographerPlan  = profile?.plan ?? null
+  const isProPhotographer = photographerPlan === 'starter' || photographerPlan === 'pro' || photographerPlan === 'Pro'
+  const isProTemplate     = photographerPlan === 'pro' || photographerPlan === 'Pro'
+  const branding          = profile?.preferences ?? null
+
+  // Pick template — same waterfall the share-link flow uses, scoped
+  // to this user's default template (no per-guide override exists in
+  // preview mode).
+  let pickTemplate: any = null
+  if (isProTemplate) {
+    const { data: defRow } = await admin
+      .from('pick_templates').select('config')
+      .eq('user_id', user.id).eq('is_default', true).maybeSingle()
+    if (defRow?.config) pickTemplate = defRow.config
+    if (!pickTemplate) {
+      const { data: legacy } = await admin
+        .from('profiles').select('pick_template').eq('id', user.id).maybeSingle()
+      if ((legacy as any)?.pick_template) pickTemplate = (legacy as any).pick_template
+    }
+  }
+
+  // Portfolio. Try the full select first; fall back stepwise on
+  // missing-column errors so an unmigrated Supabase doesn't break
+  // the preview entirely.
+  const baseCols = 'id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,hide_google_photos'
+  let portfolioRows: any[] = []
+  {
+    const r = await admin
+      .from('portfolio_locations')
+      .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    if (r.error) {
+      const r2 = await admin
+        .from('portfolio_locations')
+        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links`)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      if (r2.error) {
+        const r3 = await admin
+          .from('portfolio_locations')
+          .select(baseCols)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+        portfolioRows = r3.data ?? []
+      } else {
+        portfolioRows = r2.data ?? []
+      }
+    } else {
+      portfolioRows = r.data ?? []
+    }
+  }
+
+  let locations: any[] = []
+  if (portfolioRows.length > 0) {
+    const portfolioIds = portfolioRows.map((r: any) => r.id)
+    const sourceIds = portfolioRows.map((r: any) => r.source_location_id).filter((x: any): x is string => !!x)
+
+    // Photos — same fallback pattern as the share-link flow.
+    let portfolioPhotos: any[] = []
+    {
+      const r1 = await admin
+        .from('location_photos')
+        .select('portfolio_location_id,url,created_at,sort_order,season')
+        .in('portfolio_location_id', portfolioIds)
+        .eq('is_private', false)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+      if (r1.error) {
+        const r2 = await admin
+          .from('location_photos')
+          .select('portfolio_location_id,url,created_at,sort_order')
+          .in('portfolio_location_id', portfolioIds)
+          .eq('is_private', false)
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true })
+        portfolioPhotos = r2.data ?? []
+      } else {
+        portfolioPhotos = r1.data ?? []
+      }
+    }
+
+    // Source-location stats (rating, save_count, etc.) for portfolio
+    // copies that have a source_location_id.
+    let sourceLookup: Record<string, any> = {}
+    if (sourceIds.length > 0) {
+      const { data: sourceRows } = await admin
+        .from('locations')
+        .select('id,access_type,rating,quality_score,save_count,permit_required,permit_notes,permit_fee,permit_website,permit_certainty')
+        .in('id', sourceIds)
+      ;(sourceRows ?? []).forEach((s: any) => { sourceLookup[s.id] = s })
+    }
+
+    const ownMap: Record<string, string[]> = {}
+    const ownSeasons: Record<string, (string | null)[]> = {}
+    portfolioPhotos.forEach((p: any) => {
+      (ownMap[p.portfolio_location_id] ??= []).push(p.url)
+      ;(ownSeasons[p.portfolio_location_id] ??= []).push(p.season ?? null)
+    })
+
+    locations = portfolioRows.map((p: any) => {
+      const ownUrls = ownMap[p.id]
+      const urls = ownUrls ?? []
+      const photoSeasons = ownUrls
+        ? (ownSeasons[p.id] ?? new Array(ownUrls.length).fill(null))
+        : []
+      const src = p.source_location_id ? sourceLookup[p.source_location_id] : null
+      const preferOwn = <K extends keyof typeof p>(k: K) => (p[k] != null ? p[k] : src?.[k as string] ?? null)
+      return {
+        id:               p.id,
+        name:             p.name,
+        description:      p.description,
+        city:             p.city,
+        state:            p.state,
+        latitude:         p.latitude,
+        longitude:        p.longitude,
+        access_type:      preferOwn('access_type'),
+        tags:             p.tags,
+        permit_required:  isProPhotographer ? preferOwn('permit_required') : null,
+        permit_notes:     isProPhotographer ? preferOwn('permit_notes')    : null,
+        permit_fee:       isProPhotographer ? preferOwn('permit_fee')      : null,
+        permit_website:   isProPhotographer ? preferOwn('permit_website')  : null,
+        permit_certainty: isProPhotographer ? (src?.permit_certainty ?? 'unknown') : null,
+        pinterest_url:    isProPhotographer ? (p.pinterest_url ?? null) : null,
+        blog_url:         isProPhotographer ? (p.blog_url      ?? null) : null,
+        session_links:    isProPhotographer ? (Array.isArray(p.session_links) ? p.session_links : []) : [],
+        rating:             src?.rating        ?? null,
+        quality_score:      src?.quality_score ?? null,
+        save_count:         src?.save_count    ?? 0,
+        photo_url:          urls[0] ?? null,
+        photo_urls:         urls,
+        photo_seasons:      photoSeasons,
+        show_seasons:       !!p.show_seasons,
+        hide_google_photos: !!p.hide_google_photos,
+      }
+    })
+  } else {
+    locations = DEMO_LOCATIONS
+  }
+
+  // Synthesize a share-link-shaped response so the Pick page can
+  // render the preview without any new code paths on its end.
+  const share = {
+    id: 'preview',
+    user_id: user.id,
+    session_name: 'Preview',
+    message: null,
+    photographer_name: profile?.full_name ?? null,
+    my_photos_only: false,
+    expires_at: null,
+    portfolio_location_ids: [],
+    location_ids: [],
+    secret_ids: [],
+    is_permanent: true,
+    is_full_portfolio: true,
+    max_picks: 1,
+    max_pick_distance_miles: null,
+    expire_on_submit: false,
+    highlighted_location_ids: [],
+    pick_template_id: null,
+  }
+
+  return NextResponse.json({ share, branding, locations, secrets: [], pickTemplate })
+}
 
 export async function GET(request: Request, context: any) {
   const { slug } = await context.params
@@ -8,6 +240,11 @@ export async function GET(request: Request, context: any) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+
+  // Reserved slug — never hit share_links for "preview". Photographer
+  // is rendering their own data via the Branding-tab "Full preview"
+  // button.
+  if (slug === 'preview') return handlePreview(request, admin)
 
   // Try with all the optional columns from later migrations
   // (highlighted_location_ids + pick_template_id). Each falls back

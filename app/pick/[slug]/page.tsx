@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import ImageLightbox from '@/components/ImageLightbox'
 import { useServerPlacePhotos } from '@/hooks/useServerPlacePhotos'
 import { thumbUrl, mediumUrl, heroUrl } from '@/lib/image'
@@ -272,7 +273,20 @@ export default function ClientPickerPage() {
 
   useEffect(() => {
     if (!slug) return
-    fetch(`/api/pick-data/${slug}`)
+    // Preview mode (Branding-tab "Full preview" button) needs the
+    // photographer's own session token so the API knows whose
+    // template/portfolio to load. Same-origin iframe shares the
+    // parent's localStorage, so supabase.auth.getSession() works
+    // here even though the iframe document is technically a fresh
+    // load.
+    const buildRequest = async (): Promise<RequestInit> => {
+      if (slug !== 'preview') return {}
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      return token ? { headers: { Authorization: `Bearer ${token}` } } : {}
+    }
+    buildRequest()
+      .then(init => fetch(`/api/pick-data/${slug}`, init))
       .then(async res => {
         const json = await res.json()
         if (!res.ok) {

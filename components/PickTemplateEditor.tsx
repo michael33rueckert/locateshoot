@@ -11,6 +11,7 @@ import {
   googleFontHref,
 } from '@/lib/pick-template'
 import TemplatePreview from '@/components/TemplatePreview'
+import GuidePreviewModal from '@/components/GuidePreviewModal'
 import { validateImageUpload } from '@/lib/upload-validate'
 import { compressImageIfNeeded } from '@/lib/image-compress'
 
@@ -88,6 +89,12 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  // "Full preview" button toggles the same iframe modal the dashboard
+  // uses for share-link previews. Loads /pick/preview, which the
+  // pick-data API recognizes and serves the photographer's own
+  // template + portfolio against (with a demo-locations fallback for
+  // empty portfolios).
+  const [fullPreviewOpen, setFullPreviewOpen] = useState(false)
   // Color text-input drafts so the user can type a hex value freely
   // without each keystroke triggering validation feedback. Validate on
   // blur or when they hit a valid hex.
@@ -641,14 +648,28 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
       {/* Live preview — full-width mock of how the Pick page will
           render with the current settings. Updates on every keystroke
           so the photographer sees changes immediately without having
-          to open a real share link in another tab. */}
+          to open a real share link in another tab. The "Full preview"
+          button beside the label opens an iframe of the actual Pick
+          page (with desktop/mobile toggle) loaded against the
+          photographer's saved template + portfolio. */}
       <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--cream-dark)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
           <label style={labelStyle}>Live preview</label>
-          <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontStyle: 'italic' }}>How clients will see it</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontStyle: 'italic' }}>How clients will see it</span>
+            <button
+              type="button"
+              onClick={() => setFullPreviewOpen(true)}
+              style={{ padding: '5px 12px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+            >👁 Full preview</button>
+          </div>
         </div>
         <TemplatePreview template={livePreview} variant="panel" />
       </div>
+
+      {fullPreviewOpen && (
+        <GuidePreviewModal url="/pick/preview" onClose={() => setFullPreviewOpen(false)} />
+      )}
 
       {error && (
         <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.2)', borderRadius: 6, fontSize: 12, color: 'var(--rust)' }}>{error}</div>
