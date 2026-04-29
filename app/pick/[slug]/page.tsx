@@ -1551,7 +1551,7 @@ export default function ClientPickerPage() {
              can pop the map open. */
           display: flex !important;
           position: fixed !important;
-          bottom: calc(env(safe-area-inset-bottom, 0) + 102px) !important;
+          bottom: calc(env(safe-area-inset-bottom, 0) + 115px) !important;
           left: 50% !important;
           transform: translateX(-50%) !important;
           z-index: 400 !important;
@@ -1590,7 +1590,7 @@ export default function ClientPickerPage() {
           .pick-mobile-toggle {
             display: flex !important;
             position: fixed !important;
-            bottom: calc(env(safe-area-inset-bottom, 0) + 102px) !important;
+            bottom: calc(env(safe-area-inset-bottom, 0) + 115px) !important;
             left: 50% !important;
             transform: translateX(-50%) !important;
             z-index: 400 !important;
