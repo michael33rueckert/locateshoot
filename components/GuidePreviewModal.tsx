@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 // Photographer-side preview of a Location Guide. Loads the actual
 // /pick/[slug] URL in an iframe so the photographer sees their real
@@ -32,6 +32,31 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // Mobile preview: render the iframe at fixed iPhone Pro Max
+  // dimensions (430 × 932) and visually scale it down to fit the
+  // modal — instead of letting the iframe shrink with the modal,
+  // which made the iframe content think it was on a 320-330px phone
+  // and wrap text aggressively. Scale is recomputed on resize so a
+  // window drag updates it live.
+  const PHONE_W = 430
+  const PHONE_H = 932
+  const phoneFrameRef = useRef<HTMLDivElement | null>(null)
+  const [phoneScale, setPhoneScale] = useState(1)
+  useEffect(() => {
+    if (mode !== 'mobile') return
+    const el = phoneFrameRef.current
+    if (!el) return
+    const update = () => {
+      const h = el.getBoundingClientRect().height
+      if (h > 0) setPhoneScale(h / PHONE_H)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => { ro.disconnect(); window.removeEventListener('resize', update) }
+  }, [mode])
 
   return (
     <>
@@ -129,26 +154,44 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
               style={{ width: '100%', height: '100%', border: 'none', background: 'white' }}
             />
           ) : (
-            <div style={{
-              // 430x932 — iPhone 14/15 Pro Max proportions. Drive
-              // sizing by height + aspect-ratio so on tablets (where
-              // viewport height clamps below ~932) the width shrinks
-              // proportionally instead of staying 430 and reading
-              // squished. Desktop with a tall viewport still hits the
-              // full 932px size.
-              height: 'min(932px, calc(90dvh - 96px))',
-              aspectRatio: '430 / 932',
-              background: 'white',
-              borderRadius: 24, overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,.12)',
-              boxShadow: '0 12px 40px rgba(0,0,0,.5)',
-              flexShrink: 0,
-            }}>
-              <iframe
-                src={url}
-                title="Location Guide preview (mobile)"
-                style={{ width: '100%', height: '100%', border: 'none' }}
-              />
+            <div
+              ref={phoneFrameRef}
+              style={{
+                // Outer phone frame — drives the *visible* size.
+                // 430x932 = iPhone 14/15 Pro Max proportions.
+                // On shorter viewports (tablets, narrow desktops)
+                // this clamps via 90dvh so the frame never overflows
+                // the modal; the inner iframe is scaled to match.
+                height: 'min(932px, calc(90dvh - 96px))',
+                aspectRatio: '430 / 932',
+                background: 'white',
+                borderRadius: 24, overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,.12)',
+                boxShadow: '0 12px 40px rgba(0,0,0,.5)',
+                flexShrink: 0,
+                position: 'relative',
+              }}
+            >
+              {/* Inner iframe is ALWAYS rendered at native phone
+                  dimensions (430x932) so its viewport-derived layout
+                  (media queries, text wrap, env(safe-area-inset-*))
+                  matches a real phone exactly. The CSS transform
+                  scales the rendered output down to fit the outer
+                  frame — so the photographer sees what their client
+                  on a 430px phone would see, not a squished version. */}
+              <div style={{
+                position: 'absolute',
+                top: 0, left: 0,
+                width: PHONE_W, height: PHONE_H,
+                transformOrigin: 'top left',
+                transform: `scale(${phoneScale})`,
+              }}>
+                <iframe
+                  src={url}
+                  title="Location Guide preview (mobile)"
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                />
+              </div>
             </div>
           )}
         </div>
