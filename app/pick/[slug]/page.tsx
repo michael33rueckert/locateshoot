@@ -1382,6 +1382,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="list"] .pick-loc-city  { font-size: 12px; margin-bottom: 6px; }
         .pick-loc-list[data-layout="list"] .pick-loc-cta   { align-self: center; flex-shrink: 0; margin: 0; padding: 8px 14px; font-size: 12px; }
         .pick-loc-list[data-layout="list"] .pick-loc-rec-badge { display: none; }
+        .pick-loc-list[data-layout="list"] .pick-loc-fav-badge { display: none; }
         .pick-loc-list[data-layout="list"] .pick-loc-rec-inline { display: inline !important; }
 
         /* ── 'grid' layout — 2-column grid of mini cards. Squarer than
@@ -1431,6 +1432,7 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="minimal"] .pick-loc-body > div:last-child { display: none; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-cta   { align-self: center; flex-shrink: 0; font-size: 12px; padding: 6px 12px; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-badge { display: none; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-fav-badge { display: none; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-inline { display: inline !important; }
 
         /* ── 'editorial' layout — long-form story per location with
@@ -1801,10 +1803,15 @@ function PickListItem({
         )}
         {/* Favorited indicator — small 💜 pill so the client can scan
             the list and instantly see which spots they've marked.
-            Stacks below the Recommended badge when both apply. */}
+            Stacks below the Recommended badge when both apply.
+            Hidden in compact (list / minimal) layouts via CSS where
+            the thumbnail is too small to host the pill without
+            covering the photo — those layouts surface the favorite
+            inline next to the name instead. */}
         {isFavorited && (
           <span
             aria-label="Favorited"
+            className="pick-loc-fav-badge"
             style={{
               position: 'absolute', right: 8, zIndex: 2,
               top: loc.highlighted ? 38 : 8,
