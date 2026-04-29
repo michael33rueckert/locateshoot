@@ -81,6 +81,11 @@ export default function AdminPage() {
   const [locsLoading,    setLocsLoading]    = useState(false)
   const [editingLoc,     setEditingLoc]     = useState<ManagedLocation | null>(null)
   const [deletingLocId,  setDeletingLocId]  = useState<string | null>(null)
+  // 10 rows per page on the Locations + Users tables — anything
+  // past that turns the panel into a scrolling wall.
+  const [locsPage,       setLocsPage]       = useState(1)
+  const [usersPage,      setUsersPage]      = useState(1)
+  const ADMIN_PAGE_SIZE = 10
 
   // ── Quality audit state ──
   // The audit runs in 50-row AI batches so each backend call stays
@@ -329,7 +334,13 @@ export default function AdminPage() {
             <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
               {q === '' ? 'No users yet' : `No users match "${userSearch}"`}
             </div>
-          ) : (
+          ) : (() => {
+            const totalUserPages = Math.max(1, Math.ceil(filteredUsers.length / ADMIN_PAGE_SIZE))
+            const activeUserPage = Math.min(usersPage, totalUserPages)
+            const userStart = (activeUserPage - 1) * ADMIN_PAGE_SIZE
+            const visibleUsers = filteredUsers.slice(userStart, userStart + ADMIN_PAGE_SIZE)
+            return (
+            <>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
@@ -343,7 +354,7 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map(u => (
+                  {visibleUsers.map(u => (
                     <tr key={u.id} style={{ borderBottom: '1px solid var(--cream-dark)' }}>
                       <td style={{ padding: '9px 12px', color: 'var(--ink)', whiteSpace: 'nowrap' }}>{u.email}</td>
                       <td style={{ padding: '9px 12px', color: 'var(--ink-soft)' }}>{u.full_name ?? '—'}</td>
@@ -410,7 +421,39 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
-          )}
+            {totalUserPages > 1 && (() => {
+              const btn = (label: string, target: number, disabled: boolean, isActive = false): React.ReactNode => (
+                <button
+                  key={label}
+                  onClick={() => setUsersPage(target)}
+                  disabled={disabled}
+                  style={{
+                    minWidth: 28, padding: '4px 8px', borderRadius: 4,
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: isActive ? 600 : 400,
+                    color: disabled ? 'var(--ink-soft)' : isActive ? 'var(--ink)' : 'var(--ink-mid)',
+                    background: isActive ? 'var(--cream)' : 'transparent',
+                    border: `1px solid ${isActive ? 'var(--cream-dark)' : 'transparent'}`,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.4 : 1,
+                  }}
+                >{label}</button>
+              )
+              return (
+                <div style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+                    Showing {userStart + 1}–{userStart + visibleUsers.length} of {filteredUsers.length}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {btn('←', Math.max(1, activeUserPage - 1), activeUserPage === 1)}
+                    {Array.from({ length: totalUserPages }, (_, i) => btn(String(i + 1), i + 1, false, activeUserPage === i + 1))}
+                    {btn('→', Math.min(totalUserPages, activeUserPage + 1), activeUserPage === totalUserPages)}
+                  </div>
+                </div>
+              )
+            })()}
+            </>
+            )
+          })()}
         </div>
         )
         })()}
@@ -468,50 +511,92 @@ export default function AdminPage() {
             <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>Loading locations…</div>
           ) : filteredAllLocs.length === 0 ? (
             <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>No matches</div>
-          ) : (
-            <div style={{ overflowX: 'auto', maxHeight: 600, overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead style={{ position: 'sticky', top: 0 }}>
-                  <tr style={{ background: 'var(--cream)' }}>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Location</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Access</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>Rating</th>
-                    <th style={thStyle}>Source</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAllLocs.map(l => (
-                    <tr key={l.id} style={{ borderBottom: '1px solid var(--cream-dark)' }}>
-                      <td style={{ padding: '9px 12px', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.name}>
-                        <Link href={`/explore?loc=${l.id}`} style={{ color: 'var(--sky)', textDecoration: 'none', fontWeight: 500 }}>{l.name}</Link>
-                      </td>
-                      <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>{[l.city, l.state].filter(Boolean).join(', ') || '—'}</td>
-                      <td style={{ padding: '9px 12px' }}>
-                        <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: l.status === 'published' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: l.status === 'published' ? 'var(--sage)' : 'var(--rust)' }}>{l.status}</span>
-                      </td>
-                      <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', fontSize: 11 }}>{l.access_type ?? '—'}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{l.rating != null ? `★ ${l.rating}` : '—'}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', fontSize: 11 }}>{l.source ?? '—'}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => setEditingLoc(l)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink)', marginRight: 6 }}>Edit</button>
-                        {deletingLocId === l.id ? (
-                          <>
-                            <button onClick={() => deleteLocation(l.id)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid var(--rust)', background: 'var(--rust)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'white', marginRight: 4 }}>Confirm</button>
-                            <button onClick={() => setDeletingLocId(null)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)' }}>Cancel</button>
-                          </>
-                        ) : (
-                          <button onClick={() => setDeletingLocId(l.id)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(181,75,42,.25)', background: 'rgba(181,75,42,.05)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--rust)' }}>Delete</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : (() => {
+            const totalPages = Math.max(1, Math.ceil(filteredAllLocs.length / ADMIN_PAGE_SIZE))
+            // Clamp the active page so a search that shrinks the
+            // result set doesn't leave us on a now-empty trailing
+            // page; clearing the search restores the original page
+            // since locsPage state isn't actually reset.
+            const activePage = Math.min(locsPage, totalPages)
+            const start = (activePage - 1) * ADMIN_PAGE_SIZE
+            const visible = filteredAllLocs.slice(start, start + ADMIN_PAGE_SIZE)
+            return (
+              <>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--cream)' }}>
+                        <th style={thStyle}>Name</th>
+                        <th style={thStyle}>Location</th>
+                        <th style={thStyle}>Status</th>
+                        <th style={thStyle}>Access</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Rating</th>
+                        <th style={thStyle}>Source</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map(l => (
+                        <tr key={l.id} style={{ borderBottom: '1px solid var(--cream-dark)' }}>
+                          <td style={{ padding: '9px 12px', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.name}>
+                            <Link href={`/explore?loc=${l.id}`} style={{ color: 'var(--sky)', textDecoration: 'none', fontWeight: 500 }}>{l.name}</Link>
+                          </td>
+                          <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>{[l.city, l.state].filter(Boolean).join(', ') || '—'}</td>
+                          <td style={{ padding: '9px 12px' }}>
+                            <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, background: l.status === 'published' ? 'rgba(74,103,65,.1)' : 'rgba(181,75,42,.1)', color: l.status === 'published' ? 'var(--sage)' : 'var(--rust)' }}>{l.status}</span>
+                          </td>
+                          <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', fontSize: 11 }}>{l.access_type ?? '—'}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{l.rating != null ? `★ ${l.rating}` : '—'}</td>
+                          <td style={{ padding: '9px 12px', color: 'var(--ink-soft)', fontSize: 11 }}>{l.source ?? '—'}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button onClick={() => setEditingLoc(l)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink)', marginRight: 6 }}>Edit</button>
+                            {deletingLocId === l.id ? (
+                              <>
+                                <button onClick={() => deleteLocation(l.id)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid var(--rust)', background: 'var(--rust)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'white', marginRight: 4 }}>Confirm</button>
+                                <button onClick={() => setDeletingLocId(null)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink-soft)' }}>Cancel</button>
+                              </>
+                            ) : (
+                              <button onClick={() => setDeletingLocId(l.id)} style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid rgba(181,75,42,.25)', background: 'rgba(181,75,42,.05)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--rust)' }}>Delete</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {totalPages > 1 && (() => {
+                  const btn = (label: string, target: number, disabled: boolean, isActive = false): React.ReactNode => (
+                    <button
+                      key={label}
+                      onClick={() => setLocsPage(target)}
+                      disabled={disabled}
+                      style={{
+                        minWidth: 28, padding: '4px 8px', borderRadius: 4,
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: isActive ? 600 : 400,
+                        color: disabled ? 'var(--ink-soft)' : isActive ? 'var(--ink)' : 'var(--ink-mid)',
+                        background: isActive ? 'var(--cream)' : 'transparent',
+                        border: `1px solid ${isActive ? 'var(--cream-dark)' : 'transparent'}`,
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        opacity: disabled ? 0.4 : 1,
+                      }}
+                    >{label}</button>
+                  )
+                  return (
+                    <div style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+                        Showing {start + 1}–{start + visible.length} of {filteredAllLocs.length}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        {btn('←', Math.max(1, activePage - 1), activePage === 1)}
+                        {Array.from({ length: totalPages }, (_, i) => btn(String(i + 1), i + 1, false, activePage === i + 1))}
+                        {btn('→', Math.min(totalPages, activePage + 1), activePage === totalPages)}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
+            )
+          })()}
         </div>
 
         {/* QUALITY AUDIT — replaces the old AI scanner. Runs Claude
