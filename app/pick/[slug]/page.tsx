@@ -1383,7 +1383,9 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="list"] .pick-loc-cta   { align-self: center; flex-shrink: 0; margin: 0; padding: 8px 14px; font-size: 12px; }
         .pick-loc-list[data-layout="list"] .pick-loc-rec-badge { display: none; }
         .pick-loc-list[data-layout="list"] .pick-loc-fav-badge { display: none; }
+        .pick-loc-list[data-layout="list"] .pick-loc-num-button { display: none; }
         .pick-loc-list[data-layout="list"] .pick-loc-rec-inline { display: inline !important; }
+        .pick-loc-list[data-layout="list"] .pick-loc-num-inline { display: inline !important; }
 
         /* ── 'grid' layout — 2-column grid of mini cards. Squarer than
            the default and shows two locations per row even on mobile. */
@@ -1433,6 +1435,8 @@ export default function ClientPickerPage() {
         .pick-loc-list[data-layout="minimal"] .pick-loc-cta   { align-self: center; flex-shrink: 0; font-size: 12px; padding: 6px 12px; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-badge { display: none; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-fav-badge { display: none; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-num-button { display: none; }
+        .pick-loc-list[data-layout="minimal"] .pick-loc-num-inline { display: inline !important; }
         .pick-loc-list[data-layout="minimal"] .pick-loc-rec-inline { display: inline !important; }
 
         /* ── 'editorial' layout — long-form story per location with
@@ -1775,6 +1779,7 @@ function PickListItem({
         <button
           onClick={e => { e.stopPropagation(); if (!isDisabled || isChosen) onToggleChoice() }}
           aria-label={isChosen ? 'Deselect this location' : 'Select this location'}
+          className="pick-loc-num-button"
           style={{
             position: 'absolute', top: 8, left: 8,
             width: 32, height: 32, borderRadius: '50%',
@@ -1840,6 +1845,12 @@ function PickListItem({
           {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
         </div>
         <div className="pick-loc-name">
+          {/* Inline index prefix for compact layouts (list / minimal)
+              where the on-photo numbered button is hidden. Renders
+              the same number ("1.", "2.", …) but in the body so it
+              doesn't cover the small thumbnail. Hidden by default;
+              CSS flips it to inline in the two compact layouts. */}
+          <span className="pick-loc-num-inline" style={{ display: 'none', marginRight: 6, fontSize: 12, fontWeight: 600, color: 'var(--ink-soft)' }}>{isChosen ? '✓' : `${index + 1}.`}</span>
           {loc.highlighted && (
             <span className="pick-loc-rec-inline" title="Recommended by your photographer" style={{ display: 'none', marginRight: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--gold)', verticalAlign: '2px' }}>★ REC</span>
           )}
