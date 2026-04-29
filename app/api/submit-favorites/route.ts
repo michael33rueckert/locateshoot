@@ -172,7 +172,7 @@ export async function POST(request: Request) {
     await sendPushToUser(admin, link.user_id, {
       title: `${clientName} wants to discuss favorites`,
       body:  `${favorites.length} spot${favorites.length === 1 ? '' : 's'} from ${sessionName}`,
-      url:   '/dashboard#client-picks',
+      url:   '/dashboard#client-favorites',
     })
   } catch { /* non-fatal */ }
 

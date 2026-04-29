@@ -99,12 +99,19 @@ export default function DashboardPage() {
   // pick row doesn't visually arm a favorite row at the same id.
   const [dismissFavoriteId,   setDismissFavoriteId]    = useState<string | null>(null)
   const [dismissPickId,       setDismissPickId]        = useState<string | null>(null)
-  // Pagination — both Client Selections and Client Favorites cap at
-  // 5 items per page so the dashboard column doesn't tower when the
-  // photographer has a busy week. Numbered pages + arrow buttons
-  // appear at the bottom of each list when totalPages > 1.
+  // Same two-step pattern for the photographer's own Favorites list
+  // (★ Favorites — locations bookmarked from Explore). Distinct id
+  // from the dismiss buttons because the underlying table is
+  // location_favorites, not client_favorite_lists / client_picks.
+  const [removeMyFavoriteId,  setRemoveMyFavoriteId]   = useState<string | null>(null)
+  // Pagination — Client Selections, Client Favorites, AND the
+  // photographer's own ★ Favorites all cap at 5 items per page so
+  // the dashboard column doesn't tower when any list grows. Numbered
+  // pages + arrow buttons appear at the bottom of each list when
+  // totalPages > 1.
   const [picksPage,           setPicksPage]            = useState(1)
   const [favoritesPage,       setFavoritesPage]        = useState(1)
+  const [myFavoritesPage,     setMyFavoritesPage]      = useState(1)
   const DASHBOARD_PAGE_SIZE = 5
 
   useEffect(() => {
@@ -469,6 +476,30 @@ export default function DashboardPage() {
       return
     }
     setDismissPickId(null); setToast('Dismissed')
+  }
+
+  // Remove a location from the photographer's own ★ Favorites list.
+  // location_favorites is keyed on (user_id, location_id), so the
+  // delete needs both — favoriteLocs[i].id is the LOCATION id, and
+  // we pull user from profile. Same two-step armed-row pattern as
+  // the dismiss buttons. Existing RLS on location_favorites already
+  // allows the owning user to delete their own rows.
+  async function removeMyFavorite(locationId: string) {
+    if (removeMyFavoriteId !== locationId) { setRemoveMyFavoriteId(locationId); return }
+    if (!profile?.id) { setToast('⚠ Profile not loaded'); return }
+    const previous = favoriteLocs
+    setFavoriteLocs(prev => prev.filter(f => f.id !== locationId))
+    const { error } = await supabase
+      .from('location_favorites')
+      .delete()
+      .eq('user_id', profile.id)
+      .eq('location_id', locationId)
+    if (error) {
+      setFavoriteLocs(previous)
+      setToast('⚠ Could not remove — please try again')
+      return
+    }
+    setRemoveMyFavoriteId(null); setToast('Removed from favorites')
   }
 
   // Tiny pagination strip. Returns null when totalPages <= 1 so the
@@ -948,7 +979,7 @@ export default function DashboardPage() {
                 they marked + their question/comment if they wrote one,
                 with a mailto link to reply directly. */}
             {clientFavoriteLists.length > 0 && (
-              <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem' }}>
+              <div id="client-favorites" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem', scrollMarginTop: 80 }}>
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     💜 Client Favorites
@@ -1061,43 +1092,69 @@ export default function DashboardPage() {
                     Tap ★ on any location in the Explore map to save it for later. They&apos;ll show up here as a running list of spots you want to try.
                   </div>
                 </div>
-              ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {favoriteLocs.slice(0, 12).map(f => {
-                    const cityState = [f.city, f.state].filter(Boolean).join(', ')
-                    const created   = new Date(f.created_at)
-                    const dateText  = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
-                    return (
-                      <li key={f.id} style={{ borderBottom: '1px solid var(--cream-dark)' }}>
-                        <Link
-                          href={`/explore?focus=${f.id}`}
-                          style={{ padding: '12px 1.25rem', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', flexWrap: 'wrap' }}
-                        >
-                          <div style={{ width: 48, height: 48, borderRadius: 6, flexShrink: 0, overflow: 'hidden', background: f.preview_url ? `center/cover no-repeat url(${f.preview_url})` : 'linear-gradient(135deg, #d4c5b0 0%, #a89c8d 100%)' }} />
-                          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {f.name}
-                            </div>
-                            {cityState && (
-                              <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
-                                <span style={{ color: 'var(--ink-soft)' }}>📍</span> {cityState}
+              ) : (() => {
+                const totalPages = Math.max(1, Math.ceil(favoriteLocs.length / DASHBOARD_PAGE_SIZE))
+                const activePage = Math.min(myFavoritesPage, totalPages)
+                const start = (activePage - 1) * DASHBOARD_PAGE_SIZE
+                const visible = favoriteLocs.slice(start, start + DASHBOARD_PAGE_SIZE)
+                return (
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    {visible.map(f => {
+                      const cityState = [f.city, f.state].filter(Boolean).join(', ')
+                      const created   = new Date(f.created_at)
+                      const dateText  = created.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: created.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+                      const isArmed   = removeMyFavoriteId === f.id
+                      return (
+                        // Row is a flex container with Link + Remove
+                        // button as siblings — the button can't live
+                        // inside Link because tapping it would also
+                        // navigate to /explore?focus=…
+                        <li key={f.id} style={{ borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', gap: 8, paddingRight: '1.25rem' }}>
+                          <Link
+                            href={`/explore?focus=${f.id}`}
+                            style={{ flex: 1, minWidth: 0, padding: '12px 1.25rem', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', flexWrap: 'wrap' }}
+                          >
+                            <div style={{ width: 48, height: 48, borderRadius: 6, flexShrink: 0, overflow: 'hidden', background: f.preview_url ? `center/cover no-repeat url(${f.preview_url})` : 'linear-gradient(135deg, #d4c5b0 0%, #a89c8d 100%)' }} />
+                            <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {f.name}
                               </div>
-                            )}
-                          </div>
-                          <div style={{ flexShrink: 0, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                            Saved {dateText}
-                          </div>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                  {favoriteLocs.length > 12 && (
-                    <li style={{ padding: '12px 1.25rem', textAlign: 'center', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-                      Showing 12 of {favoriteLocs.length} favorites
-                    </li>
-                  )}
-                </ul>
-              )}
+                              {cityState && (
+                                <div style={{ fontSize: 13, color: 'var(--ink-mid)', lineHeight: 1.45 }}>
+                                  <span style={{ color: 'var(--ink-soft)' }}>📍</span> {cityState}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ flexShrink: 0, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                              Saved {dateText}
+                            </div>
+                          </Link>
+                          <button
+                            onClick={() => removeMyFavorite(f.id)}
+                            onBlur={() => { if (removeMyFavoriteId === f.id) setRemoveMyFavoriteId(null) }}
+                            aria-label={isArmed ? `Click again to remove ${f.name}` : `Remove ${f.name} from favorites`}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 500,
+                              fontFamily: 'inherit',
+                              color: isArmed ? 'var(--rust)' : 'var(--ink-soft)',
+                              background: isArmed ? 'rgba(181,75,42,.08)' : 'transparent',
+                              border: `1px solid ${isArmed ? 'rgba(181,75,42,.35)' : 'var(--cream-dark)'}`,
+                              borderRadius: 4,
+                              padding: '4px 10px',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {isArmed ? 'Click again to confirm' : '✕ Remove'}
+                          </button>
+                        </li>
+                      )
+                    })}
+                    {renderDashboardPagination(totalPages, activePage, setMyFavoritesPage)}
+                  </ul>
+                )
+              })()}
             </div>
 
           </div>
