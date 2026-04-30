@@ -26,11 +26,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   // Prefer the photographer's CURRENT name over the snapshot stored on
   // share_links — keeps OG/Twitter previews fresh when the photographer
   // updates their profile. Falls back to the snapshot if the live read
-  // fails for any reason.
+  // fails for any reason. Plan + preferences come from the same row so
+  // we can also resolve a Pro-only custom favicon in one query.
   let liveName: string | null = null
+  let plan: string | null = null
+  let prefs: any = null
   if (data.user_id) {
-    const { data: prof } = await admin.from('profiles').select('full_name').eq('id', data.user_id).maybeSingle()
+    const { data: prof } = await admin.from('profiles').select('full_name,plan,preferences').eq('id', data.user_id).maybeSingle()
     liveName = prof?.full_name ?? null
+    plan = (prof?.plan as string | null) ?? null
+    prefs = prof?.preferences ?? null
   }
 
   const title       = data.session_name || 'Location picker'
@@ -44,9 +49,20 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     ? (optimizedImage(data.cover_photo_url, { width: 1200, height: 630 }) ?? data.cover_photo_url)
     : null
 
+  // Pro-only custom favicon. Overrides the LocateShoot default declared
+  // in the root layout when set. Non-Pro photographers (or Pro photogs
+  // who never uploaded one) get the LocateShoot favicon as before.
+  const isPro = plan === 'pro' || plan === 'Pro'
+  const customFaviconUrl: string | null = isPro && typeof prefs?.favicon_url === 'string'
+    ? prefs.favicon_url
+    : null
+
   return {
     title,
     description,
+    icons: customFaviconUrl
+      ? { icon: customFaviconUrl, shortcut: customFaviconUrl, apple: customFaviconUrl }
+      : undefined,
     openGraph: {
       title,
       description,

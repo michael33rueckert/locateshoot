@@ -244,6 +244,58 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
     onLogoChange?.(null)
   }
 
+  // Favicon upload — same shape as the logo upload above, but stored
+  // separately on profiles.preferences.favicon_url and consumed by
+  // the pick page's server layout (app/pick/[slug]/layout.tsx) to
+  // override the LocateShoot default icon on Location Guides.
+  // Hydrates from the shared `preferences` JSONB on first render so
+  // we don't need a new prop chain.
+  const [localFaviconUrl, setLocalFaviconUrl] = useState<string | null>(null)
+  const [faviconBusy, setFaviconBusy]         = useState<'upload' | 'remove' | null>(null)
+  const faviconFileRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('profiles').select('preferences').eq('id', userId).single()
+      if (cancelled) return
+      const url = (data?.preferences as any)?.favicon_url ?? null
+      setLocalFaviconUrl(typeof url === 'string' ? url : null)
+    })()
+    return () => { cancelled = true }
+  }, [userId])
+  async function handleFaviconUpload(rawFile: File) {
+    setError(null)
+    let file = rawFile
+    try { file = await compressImageIfNeeded(rawFile) }
+    catch (e: any) { setError(`Couldn’t process favicon: ${e?.message ?? 'unknown error'}`); return }
+    const v = validateImageUpload(file)
+    if (!v.ok) { setError(v.message); return }
+    setFaviconBusy('upload')
+    const path = `${userId}/favicon.${v.ext}`
+    const { error: ue } = await supabase.storage.from('location-photos').upload(path, file, { upsert: true, contentType: v.contentType })
+    if (ue) { setFaviconBusy(null); setError(`Couldn’t upload favicon: ${ue.message}`); return }
+    const { data: pub } = supabase.storage.from('location-photos').getPublicUrl(path)
+    const versionedUrl = `${pub.publicUrl}?v=${Date.now()}`
+    const { data: latest } = await supabase.from('profiles').select('preferences').eq('id', userId).single()
+    const base = (latest?.preferences as any) ?? {}
+    const updated = { ...base, favicon_url: versionedUrl }
+    const { error: updateErr } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
+    setFaviconBusy(null)
+    if (updateErr) { setError(`Favicon uploaded but couldn’t save to profile: ${updateErr.message}`); return }
+    setLocalFaviconUrl(versionedUrl)
+  }
+  async function handleFaviconRemove() {
+    setError(null)
+    setFaviconBusy('remove')
+    const { data: latest } = await supabase.from('profiles').select('preferences').eq('id', userId).single()
+    const base = (latest?.preferences as any) ?? {}
+    const updated = { ...base, favicon_url: null }
+    const { error: updateErr } = await supabase.from('profiles').update({ preferences: updated }).eq('id', userId)
+    setFaviconBusy(null)
+    if (updateErr) { setError(`Couldn’t remove favicon: ${updateErr.message}`); return }
+    setLocalFaviconUrl(null)
+  }
+
   // Inject a Google Fonts <link> for the chosen font so the preview
   // (and the layout mockups below) actually render in that face. The
   // <link> stays in the document head — when the font changes we
@@ -522,6 +574,36 @@ export default function PickTemplateEditor({ userId, templateId, initial, isPro,
             <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 4, lineHeight: 1.5 }}>PNG or JPG · Square, at least 200×200px</div>
           </div>
         </div>
+
+        {/* Favicon — the small icon that shows in the browser tab on
+            Location Guides. Stored on profiles.preferences.favicon_url
+            and read by the Pick page's server layout, so a guide
+            opened in a new tab shows the photographer's icon instead
+            of LocateShoot's. PNG only; ICO and SVG are blocked
+            upstream by validateImageUpload. */}
+        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ width: 64, height: 64, borderRadius: 12, border: '2px dashed var(--sand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', background: 'var(--cream)' }}>
+            {localFaviconUrl
+              ? <img src={localFaviconUrl} alt="Favicon" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+              : <div style={{ textAlign: 'center' }}><div style={{ fontSize: 18 }}>🔖</div><div style={{ fontSize: 9, color: 'var(--ink-soft)' }}>No icon</div></div>}
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Browser tab icon (favicon)</div>
+            <input ref={faviconFileRef} type="file" accept="image/png,image/jpeg" onChange={e => { const f = e.target.files?.[0]; if (f) handleFaviconUpload(f); if (faviconFileRef.current) faviconFileRef.current.value = '' }} style={{ display: 'none' }} />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => faviconFileRef.current?.click()} disabled={faviconBusy !== null} style={{ padding: '7px 14px', borderRadius: 4, border: '1.5px solid var(--sand)', background: 'white', fontSize: 12, fontWeight: 500, color: 'var(--ink-soft)', cursor: faviconBusy ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: faviconBusy ? 0.6 : 1 }}>
+                {faviconBusy === 'upload' ? 'Uploading…' : localFaviconUrl ? 'Replace icon' : 'Upload icon'}
+              </button>
+              {localFaviconUrl && (
+                <button type="button" onClick={handleFaviconRemove} disabled={faviconBusy !== null} style={{ padding: '7px 12px', borderRadius: 4, border: 'none', background: 'transparent', fontSize: 12, color: 'var(--rust)', cursor: faviconBusy ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: faviconBusy ? 0.6 : 1 }}>
+                  {faviconBusy === 'remove' ? 'Removing…' : 'Remove'}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 4, lineHeight: 1.5 }}>PNG · Square · 32×32px or larger. Shows in the browser tab when a client opens your Location Guide.</div>
+          </div>
+        </div>
+
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)', marginBottom: 5 }}>Logo placement</div>
           <select
