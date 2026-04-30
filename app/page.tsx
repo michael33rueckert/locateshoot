@@ -306,6 +306,63 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── WHAT'S INSIDE A LOCATION GUIDE — 4-bullet expansion of
+             the high-level "send a link" pitch above. Sits right
+             after the device-hero screenshots so the reader has a
+             visual anchor for what these features look like in
+             practice. 2x2 grid on desktop, single column on mobile. */}
+      <section className="section" style={{ background: 'var(--cream)', padding: 'clamp(3rem,7vw,4.5rem) clamp(1.25rem,6vw,4rem)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+            <div className="section-eyebrow" style={{ justifyContent: 'center' }}>What&apos;s inside a Location Guide</div>
+            <h2 className="section-title">More than a list — <em>everything</em> they need to pick.</h2>
+          </div>
+          <div className="feature-bullets-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.75rem 2.5rem' }}>
+            {[
+              {
+                icon: '🔗',
+                title: 'One branded link, sent anywhere you already work',
+                body: 'Drop it into HoneyBook, Dubsado, Calendly, or a text — anywhere a URL fits. Your client opens it and sees your curated locations under your logo, colors, and font.',
+              },
+              {
+                icon: '📸',
+                title: 'A real preview of every spot — not just a name',
+                body: 'Each location shows your own photos, sits on an interactive map, and includes permit requirements, parking info, and the best time to shoot. Your client can confidently pick before the session.',
+              },
+              {
+                icon: '✉️',
+                title: 'You get the email instantly. They get directions.',
+                body: 'The pick lands in your dashboard the moment they tap it. Email + push to you, automatic confirmation email with map directions to the client. No more digging through inbox threads.',
+              },
+              {
+                icon: '🎯',
+                title: 'Multi-stop sessions? Set the rules.',
+                body: "Let clients pick multiple locations for sessions that move between spots, and cap the maximum distance between picks so an engagement shoot doesn't accidentally turn into a road trip.",
+              },
+            ].map((b, i) => (
+              <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <div style={{ flexShrink: 0, width: 44, height: 44, borderRadius: '50%', background: 'rgba(196,146,42,.12)', border: '1px solid rgba(196,146,42,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                  {b.icon}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.3, marginBottom: 6 }}>
+                    {b.title}
+                  </div>
+                  <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, margin: 0 }}>
+                    {b.body}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <style>{`
+            @media (max-width: 768px) {
+              .feature-bullets-grid { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
+            }
+          `}</style>
+        </div>
+      </section>
+
       {/* ── FEATURE STRIPES — two alternating rows, image-left/text-
              right then text-left/image-right. Less card-heavy than the
              previous 3-card grid (which felt redundant against the
