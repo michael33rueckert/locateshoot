@@ -271,7 +271,7 @@ export default function HomePage() {
               The whole flow, <em style={{ color: 'var(--gold)' }}>both sides</em>
             </h2>
             <p style={{ fontSize: 15, color: 'rgba(245,240,232,.65)', fontWeight: 300, lineHeight: 1.6, maxWidth: 540, margin: '0 auto' }}>
-              Manage your portfolio + Location Guides on the left. Drop one link to your client and they get the polished pick experience on the right.
+              You manage your portfolio + Location Guides from the dashboard. Drop one link to your client and they get the polished pick experience on their phone.
             </p>
           </div>
 
