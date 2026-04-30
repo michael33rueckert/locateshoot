@@ -303,6 +303,17 @@ export default function HomePage() {
               .device-hero-grid { grid-template-columns: 1fr !important; }
             }
           `}</style>
+
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: '2.5rem' }}>
+            {user
+              ? <Link href="/dashboard" className="btn btn-gold btn-lg">Go to your dashboard →</Link>
+              : (
+                <>
+                  <button className="btn btn-gold btn-lg"  onClick={() => openModal('signup')}>Set up your free account →</button>
+                  <button className="btn btn-ghost btn-lg" onClick={() => scrollTo('pricing')}>See pricing</button>
+                </>
+              )}
+          </div>
         </div>
       </section>
 
@@ -360,6 +371,13 @@ export default function HomePage() {
               .feature-bullets-grid { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
             }
           `}</style>
+
+          <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
+            {user
+              ? <Link href="/location-guides" className="btn btn-gold btn-lg">📚 Build your first Location Guide →</Link>
+              : <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>Get started — it&apos;s free →</button>
+            }
+          </div>
         </div>
       </section>
 
@@ -503,6 +521,17 @@ export default function HomePage() {
               <p className="how-desc">{s.desc}{s.pro && <span className="how-pro"> Pro feature.</span>}</p>
             </div>
           ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: '2.5rem' }}>
+          {user
+            ? <Link href="/dashboard" className="btn btn-gold btn-lg">Go to your dashboard →</Link>
+            : (
+              <>
+                <button className="btn btn-gold btn-lg"  onClick={() => openModal('signup')}>Create your free account</button>
+                <button className="btn btn-ghost btn-lg" onClick={() => scrollTo('pricing')}>See pricing →</button>
+              </>
+            )}
         </div>
       </section>
 
