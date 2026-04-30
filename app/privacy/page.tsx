@@ -31,7 +31,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <Section title="1. Who we are">
-          <P>LocateShoot is operated by Michael Rueckert (&quot;LocateShoot&quot;, &quot;we&quot;, &quot;us&quot;). This Privacy Policy explains what information we collect when you use locateshoot.com (the &quot;Service&quot;), how we use that information, and the choices you have. By using the Service you agree to this Policy.</P>
+          <P>LocateShoot (&quot;we&quot;, &quot;us&quot;) operates locateshoot.com (the &quot;Service&quot;). This Privacy Policy explains what information we collect when you use the Service, how we use that information, and the choices you have. By using the Service you agree to this Policy.</P>
         </Section>
 
         <Section title="2. Information you give us">

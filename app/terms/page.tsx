@@ -32,7 +32,7 @@ export default function TermsOfUsePage() {
         </P>
 
         <Section title="1. Acceptance">
-          <P>These Terms of Use (&quot;Terms&quot;) govern your access to and use of locateshoot.com and the LocateShoot service (the &quot;Service&quot;), operated by Michael Rueckert (&quot;LocateShoot&quot;, &quot;we&quot;, &quot;us&quot;). By creating an account, accessing, or using the Service, you agree to these Terms and to our <A href="/privacy">Privacy Policy</A>. If you are using the Service on behalf of an organization, you represent that you have authority to bind that organization.</P>
+          <P>These Terms of Use (&quot;Terms&quot;) govern your access to and use of locateshoot.com and the LocateShoot service (the &quot;Service&quot;), operated by LocateShoot (&quot;we&quot;, &quot;us&quot;). By creating an account, accessing, or using the Service, you agree to these Terms and to our <A href="/privacy">Privacy Policy</A>. If you are using the Service on behalf of an organization, you represent that you have authority to bind that organization.</P>
         </Section>
 
         <Section title="2. Eligibility">
