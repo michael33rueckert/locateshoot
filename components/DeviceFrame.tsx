@@ -75,15 +75,17 @@ export function LaptopFrame({ src, alt, caption }: FrameProps) {
         borderRadius: '0 0 8px 8px',
         boxShadow: '0 6px 14px -6px rgba(0,0,0,0.35)',
       }} />
-      {/* Floor shadow — soft radial gradient under the device */}
+      {/* Floor shadow — soft radial gradient under the device.
+          Compact height so the caption underneath reads as attached
+          to the device, not floating in white space. */}
       <div style={{
-        height: 24, marginTop: -2,
+        height: 10, marginTop: -2,
         background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.10) 0%, transparent 70%)',
       }} />
 
       {caption && (
         <figcaption style={{
-          marginTop: 12, fontSize: 17, color: 'var(--cream)',
+          marginTop: 4, fontSize: 17, color: 'var(--cream)',
           textAlign: 'center', fontWeight: 500,
           fontFamily: 'var(--font-playfair),serif',
         }}>
@@ -161,15 +163,16 @@ export function PhoneFrame({ src, alt, caption }: FrameProps) {
         </div>
       </div>
 
-      {/* Floor shadow */}
+      {/* Floor shadow — compacted so the caption underneath reads
+          as attached to the device, not floating in white space. */}
       <div style={{
-        height: 18, marginTop: 4,
+        height: 8, marginTop: 2,
         background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.10) 0%, transparent 70%)',
       }} />
 
       {caption && (
         <figcaption style={{
-          marginTop: 12, fontSize: 17, color: 'var(--cream)',
+          marginTop: 4, fontSize: 17, color: 'var(--cream)',
           textAlign: 'center', fontWeight: 500,
           fontFamily: 'var(--font-playfair),serif',
         }}>
