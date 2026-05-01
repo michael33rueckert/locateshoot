@@ -6,6 +6,7 @@ import MfaGate from '@/components/MfaGate'
 import InstallPrompt from '@/components/InstallPrompt'
 import FeedbackButton from '@/components/FeedbackButton'
 import HelpChatLauncher from '@/components/HelpChatLauncher'
+import { HelpChatProvider } from '@/components/HelpChatProvider'
 import SiteFooter from '@/components/SiteFooter'
 
 const playfair = Playfair_Display({
@@ -53,12 +54,14 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
       </head>
       <body>
-        {children}
-        <SiteFooter />
-        <MfaGate />
-        <InstallPrompt />
-        <HelpChatLauncher />
-        <FeedbackButton />
+        <HelpChatProvider>
+          {children}
+          <SiteFooter />
+          <MfaGate />
+          <InstallPrompt />
+          <HelpChatLauncher />
+          <FeedbackButton />
+        </HelpChatProvider>
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {

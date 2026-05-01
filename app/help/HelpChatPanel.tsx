@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { useHelpChat, type ChatMessage } from '@/components/HelpChatProvider'
 
 // Conversational help interface that sits above the categorized
 // article list on /help. Sends each turn (capped to the last few)
@@ -15,19 +16,11 @@ import { supabase } from '@/lib/supabase'
 // pattern) and stays focused after every answer so a follow-up is
 // one keystroke away. Each new question ships the prior turns as
 // context, capped at MAX_HISTORY_TURNS server-side.
-
-interface Source {
-  slug:     string
-  title:    string
-  category: string
-}
-
-interface Message {
-  id:      number
-  role:    'user' | 'model' | 'error'
-  content: string
-  sources?: Source[]
-}
+//
+// Conversation state lives in HelpChatProvider (mounted at the
+// root layout), so navigating between pages doesn't reset the
+// thread. The provider also persists to localStorage per-user, so
+// closing the tab and coming back later keeps the conversation.
 
 const STARTER_QUESTIONS = [
   'How do I send my first Location Guide?',
@@ -37,10 +30,18 @@ const STARTER_QUESTIONS = [
 ]
 
 export default function HelpChatPanel() {
+  const { messages, setMessages, clearMessages } = useHelpChat()
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
+  // messageIdRef advances past any IDs already in the hydrated
+  // history so new messages don't collide with restored ones. Set
+  // once on mount; later messages come from this ref + 1 each.
   const messageIdRef = useRef(0)
+  useEffect(() => {
+    const maxId = messages.reduce((m, msg) => msg.id > m ? msg.id : m, 0)
+    if (messageIdRef.current < maxId) messageIdRef.current = maxId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const threadRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const hasMessages = messages.length > 0
@@ -66,7 +67,7 @@ export default function HelpChatPanel() {
 
   function startOver() {
     if (busy) return
-    setMessages([])
+    clearMessages()
     setDraft('')
     inputRef.current?.focus()
   }
@@ -77,7 +78,7 @@ export default function HelpChatPanel() {
     setBusy(true)
     setDraft('')
 
-    const userMsg: Message = { id: nextId(), role: 'user', content: question }
+    const userMsg: ChatMessage = { id: nextId(), role: 'user', content: question }
     setMessages(prev => [...prev, userMsg])
 
     // Build the history payload from the in-state messages BEFORE the
