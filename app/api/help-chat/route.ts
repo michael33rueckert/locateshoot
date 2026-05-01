@@ -35,7 +35,7 @@ interface ChatTurn {
 const GEMINI_MODEL  = 'gemini-2.5-flash'
 const GEMINI_API    = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const MAX_QUESTION_LENGTH = 600
-const MAX_HISTORY_TURNS   = 6   // last N messages (user + model combined)
+const MAX_HISTORY_TURNS   = 10  // last N messages (user + model combined)
 
 export async function POST(request: Request) {
   // 1. Auth — Bearer token required.
@@ -105,6 +105,12 @@ Rules:
 - When you reference an article, mention its title in plain text (the UI will surface a separate "Sources" link list, so you don't need to include URLs).
 - If the question is off-topic for LocateShoot (general photography advice, weather, etc.), politely redirect: "I can help with how LocateShoot works. For [topic] you'll want to check elsewhere."
 - Never claim to be a human or a different AI. If asked, say "I'm the LocateShoot help assistant powered by AI."
+
+Conversation flow:
+- Treat each request as part of an ongoing conversation. Read the prior turns above the current question and use them as context.
+- When the photographer asks a follow-up like "what about X?" or "how about for Y?" — interpret it relative to whatever you were just discussing.
+- Don't restate context the photographer already has from prior answers. If you just explained how to do something, the next answer can build on it instead of repeating it.
+- If the photographer changes topic, drop the prior thread and answer the new question fresh.
 
 Help-center articles:
 

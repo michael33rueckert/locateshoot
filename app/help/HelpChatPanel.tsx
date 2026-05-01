@@ -10,6 +10,11 @@ import { supabase } from '@/lib/supabase'
 // help-article corpus as the only allowed source. The articles the
 // model referenced by title get rendered as a "Sources" pill row
 // under the answer so the photographer can read the full context.
+//
+// Multi-turn flow: the input sits BELOW the thread (standard chat
+// pattern) and stays focused after every answer so a follow-up is
+// one keystroke away. Each new question ships the prior turns as
+// context, capped at MAX_HISTORY_TURNS server-side.
 
 interface Source {
   slug:     string
@@ -32,12 +37,13 @@ const STARTER_QUESTIONS = [
 ]
 
 export default function HelpChatPanel() {
-  const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const messageIdRef = useRef(0)
   const threadRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const hasMessages = messages.length > 0
 
   // Scroll the thread to the bottom on every new message so the
   // latest turn is visible without manual scrolling.
@@ -46,15 +52,28 @@ export default function HelpChatPanel() {
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, busy])
 
+  // Re-focus the input after each answer so a follow-up is one
+  // keystroke away. Skip while busy so we don't fight the disabled
+  // state during the request.
+  useEffect(() => {
+    if (!busy) inputRef.current?.focus()
+  }, [busy, messages.length])
+
   function nextId() {
     messageIdRef.current += 1
     return messageIdRef.current
   }
 
+  function startOver() {
+    if (busy) return
+    setMessages([])
+    setDraft('')
+    inputRef.current?.focus()
+  }
+
   async function ask(q: string) {
     const question = q.trim()
     if (!question || busy) return
-    setOpen(true)
     setBusy(true)
     setDraft('')
 
@@ -124,65 +143,41 @@ export default function HelpChatPanel() {
 
   return (
     <div style={{ background: 'var(--ink)', color: 'var(--cream)', borderRadius: 14, padding: '1.5rem', marginBottom: '2rem', boxShadow: '0 8px 28px rgba(26,22,18,.18)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(196,146,42,.18)', border: '1px solid rgba(196,146,42,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
           ✨
         </div>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 17, fontWeight: 700 }}>Ask the help assistant</div>
           <div style={{ fontSize: 11, color: 'rgba(245,240,232,.55)', fontWeight: 300 }}>Powered by AI · Answers come from the help articles below</div>
         </div>
+        {hasMessages && (
+          <button
+            onClick={startOver}
+            disabled={busy}
+            style={{
+              padding: '5px 11px',
+              borderRadius: 999,
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,.18)',
+              color: 'rgba(245,240,232,.7)',
+              fontFamily: 'inherit',
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: busy ? 'default' : 'pointer',
+              opacity: busy ? 0.5 : 1,
+              flexShrink: 0,
+            }}
+          >
+            ↺ Start over
+          </button>
+        )}
       </div>
 
-      <form
-        onSubmit={e => { e.preventDefault(); ask(draft) }}
-        style={{ display: 'flex', gap: 8, marginBottom: 12 }}
-      >
-        <input
-          type="text"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder="e.g. How do I share a guide with my client?"
-          disabled={busy}
-          style={{
-            flex: 1,
-            padding: '11px 14px',
-            background: 'rgba(255,255,255,.06)',
-            border: '1px solid rgba(255,255,255,.12)',
-            borderRadius: 8,
-            color: 'var(--cream)',
-            fontFamily: 'inherit',
-            fontSize: 14,
-            outline: 'none',
-            opacity: busy ? 0.6 : 1,
-          }}
-          maxLength={600}
-        />
-        <button
-          type="submit"
-          disabled={busy || !draft.trim()}
-          style={{
-            padding: '11px 18px',
-            borderRadius: 8,
-            background: 'var(--gold)',
-            color: 'var(--ink)',
-            border: 'none',
-            fontFamily: 'inherit',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: busy || !draft.trim() ? 'default' : 'pointer',
-            opacity: busy || !draft.trim() ? 0.5 : 1,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {busy ? 'Thinking…' : 'Ask →'}
-        </button>
-      </form>
-
-      {/* Starter questions — shown only before any conversation has
-          happened. Tapping one fires the question immediately. */}
-      {!open && messages.length === 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {/* Empty state — starter questions ABOVE the input so they
+          read as suggestions rather than examples-after-the-fact. */}
+      {!hasMessages && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
           {STARTER_QUESTIONS.map(q => (
             <button
               key={q}
@@ -205,8 +200,10 @@ export default function HelpChatPanel() {
         </div>
       )}
 
-      {/* Chat thread — only renders after the first question. */}
-      {open && messages.length > 0 && (
+      {/* Conversation thread — sits above the input now (standard
+          chat pattern). Capped height with internal scroll so a
+          long back-and-forth doesn't push the input off-screen. */}
+      {hasMessages && (
         <div
           ref={threadRef}
           style={{
@@ -216,6 +213,7 @@ export default function HelpChatPanel() {
             flexDirection: 'column',
             gap: 12,
             padding: '4px 2px',
+            marginBottom: 14,
           }}
         >
           {messages.map(m => (
@@ -288,6 +286,57 @@ export default function HelpChatPanel() {
           )}
         </div>
       )}
+
+      {/* Input row — at the bottom, where photographers expect it
+          in a chat. Placeholder copy flips to "Ask a follow-up..."
+          once the thread has any messages so the conversational
+          flow is obvious. */}
+      <form
+        onSubmit={e => { e.preventDefault(); ask(draft) }}
+        style={{ display: 'flex', gap: 8 }}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder={hasMessages ? 'Ask a follow-up…' : 'e.g. How do I share a guide with my client?'}
+          disabled={busy}
+          autoFocus
+          style={{
+            flex: 1,
+            padding: '11px 14px',
+            background: 'rgba(255,255,255,.06)',
+            border: '1px solid rgba(255,255,255,.12)',
+            borderRadius: 8,
+            color: 'var(--cream)',
+            fontFamily: 'inherit',
+            fontSize: 14,
+            outline: 'none',
+            opacity: busy ? 0.6 : 1,
+          }}
+          maxLength={600}
+        />
+        <button
+          type="submit"
+          disabled={busy || !draft.trim()}
+          style={{
+            padding: '11px 18px',
+            borderRadius: 8,
+            background: 'var(--gold)',
+            color: 'var(--ink)',
+            border: 'none',
+            fontFamily: 'inherit',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: busy || !draft.trim() ? 'default' : 'pointer',
+            opacity: busy || !draft.trim() ? 0.5 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {busy ? 'Thinking…' : hasMessages ? 'Send →' : 'Ask →'}
+        </button>
+      </form>
     </div>
   )
 }
