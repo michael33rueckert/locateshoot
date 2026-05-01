@@ -10,10 +10,13 @@ import { listHelpArticles, getHelpArticle } from '@/lib/help'
 // LLM's context window, so we just bundle ALL of them into the
 // system prompt every call. No embedding store needed at this scale.
 //
-// Free tier limits (gemini-2.5-flash, as of early 2026):
+// Free tier limits (gemini-2.0-flash, as of early 2026):
 //   - 1500 requests/day
 //   - 1M tokens/day
 //   - 15 requests/min
+// gemini-2.5-flash was the first attempt but its free tier is much
+// tighter and gave 429s on first call from some regions. 2.0-flash
+// has the generous free tier we need at beta scale.
 // Per-user rate limit below caps each photographer at 30 questions
 // per hour so a single account can't drain the daily budget.
 //
@@ -29,7 +32,7 @@ interface ChatTurn {
   content: string
 }
 
-const GEMINI_MODEL  = 'gemini-2.5-flash'
+const GEMINI_MODEL  = 'gemini-2.0-flash'
 const GEMINI_API    = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const MAX_QUESTION_LENGTH = 600
 const MAX_HISTORY_TURNS   = 6   // last N messages (user + model combined)
@@ -134,7 +137,17 @@ ${corpus}`
 
   if (!geminiResponse.ok) {
     const errText = await geminiResponse.text().catch(() => '')
-    console.error('help-chat: gemini error', geminiResponse.status, errText.slice(0, 400))
+    // Full body in Vercel logs so we can debug "free tier doesn't
+    // include this model in your region" / "API key not enabled" /
+    // "billing required" errors that all surface as 4xx with
+    // distinct messages from Google.
+    console.error('help-chat: gemini error', {
+      model:    GEMINI_MODEL,
+      status:   geminiResponse.status,
+      body:     errText.slice(0, 1200),
+      hasKey:   !!apiKey,
+      keyLen:   apiKey.length,
+    })
     // 429 from Gemini → bubble up as rate-limited so the UI can be
     // appropriately apologetic. Other errors get a generic message.
     if (geminiResponse.status === 429) {
