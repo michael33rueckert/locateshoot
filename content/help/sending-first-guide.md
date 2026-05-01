@@ -3,14 +3,22 @@ title: Sending your first Location Guide
 category: Getting started
 summary: Step-by-step — from picking your spots to dropping the link in your client confirmation email.
 order: 2
-updated: 2026-04-30
+updated: 2026-05-01
 ---
 
 A Location Guide is the link you send to a client so they can pick their session location. Here's the full flow.
 
-## 1. Add at least a few locations to your portfolio
+## 1. Add at least one location to your portfolio (manual first)
 
-From the **Explore** map, find a location you've shot at and tap **Add to portfolio**. You can also add custom locations that aren't on the map yet. Each portfolio entry becomes your private copy — edit the description, add your own photos, set permit / parking notes.
+Open the **Portfolio** page and tap **+ Add new location**. Enter the place name (e.g., "Loose Park"), search the address, and optionally add a description, parking notes, permit info, or photos. The first location is one you set up yourself end-to-end — exactly what you'd type into a session-prep email, just stored once and reusable.
+
+The first time, it's worth manually adding **one or two of your real go-to spots** — the ones you'd recommend to a client today. That gives you a clear sense of what each field does and how the location renders on the client side.
+
+### Want more ideas? The Explore map is right there
+
+Once your first location is in, head to the **Explore** map. It shows popular spots and other photographers' favorites in your area. Tap any pin and **Add to portfolio** to copy it into your portfolio with the basics pre-filled — name, address, description, tags. You'll still want to upload your own photos to make it match your work, but the rest of the data is there.
+
+The Explore map is the fastest way to bulk up a portfolio after you've added your hand-picked first few.
 
 ## 2. Open the Dashboard and create a guide
 

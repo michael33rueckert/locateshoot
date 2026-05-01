@@ -1,31 +1,31 @@
 ---
 title: Building your portfolio
 category: Portfolio
-summary: How to add locations from the Explore map vs. add custom ones, plus when each is the right choice.
+summary: Add a custom location manually, then use the Explore map to round out your portfolio with popular spots near you.
 order: 1
 updated: 2026-05-01
 ---
 
-Your **portfolio** is the list of locations any guide can include. Two ways to add to it.
+Your **portfolio** is the list of locations any guide can include. Two ways to add to it. Most photographers do a hand-picked manual add first, then use the Explore map to fill in.
 
-## Add from the Explore map
+## Start with a manual add
 
-The fastest path. Open the **Explore** map, find a location you've shot at (or one you'd like to shoot at), and tap **Add to portfolio**. Two things happen:
+Open the **Portfolio** page and tap **+ Add new location** (or use `/portfolio?add=1` to jump straight to the form). You'll fill in:
+
+- A **name** (required) — what your client will see at the top of the location card
+- An **address** (the search box geocodes it to coordinates and pins it on the map)
+- Anything else you want — description, tags, permit info, parking notes, best time to visit, photos
+
+For your first one or two, pick spots you'd actually recommend to a client today. Filling them in by hand gives you a feel for what each field does and how the location renders on the client side. After that, the Explore map (below) is the fast way to bulk up.
+
+## Round it out from the Explore map
+
+Open the **Explore** map, find a location you've shot at (or one you'd like to shoot at), and tap **Add to portfolio**. Two things happen:
 
 - A copy of the location lands in your portfolio with the source's name, coordinates, description, tags, and (if available) photos
 - That portfolio entry is **yours** — edit anything you want without affecting the public map version. Add your own photos. Override the description. Toggle off Google Photos. Mark it private. None of your edits show up on the public Explore map.
 
-This is the right path for any well-known spot — if it's on the Explore map, start there.
-
-## Add a custom location
-
-For locations that aren't on the map. Use **+ Add new location** from the Portfolio page or the Dashboard. You'll need:
-
-- A **name** (required)
-- An **address** (the search box geocodes it to coordinates)
-- Anything else you want — description, tags, permit info, parking, photos
-
-Custom locations behave the same as ones added from Explore, except they don't have a "source" to fall back on for stats like rating or save count.
+The Explore-sourced locations differ from custom ones in one small way: they keep an invisible link back to the public version, which lets your Pick page surface a few extra fields (rating, save count) you didn't have to fill in yourself. Custom locations don't have that fallback — whatever you fill in is what your clients see.
 
 ## Public vs. private locations
 

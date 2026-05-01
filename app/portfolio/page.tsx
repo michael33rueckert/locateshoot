@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
@@ -51,6 +52,14 @@ export default function PortfolioPage() {
   // inline instead of opening the Add modal.
   const [showCapUpgrade, setShowCapUpgrade] = useState(false)
   const [toast,    setToast]    = useState<string | null>(null)
+
+  // Deep-link support — `/portfolio?add=1` opens the Add Location
+  // modal on mount. Used by the Getting Started walkthrough to
+  // drop new photographers straight into the manual-add flow.
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams?.get('add') === '1') setShowAdd(true)
+  }, [searchParams])
 
   const load = useCallback(async () => {
     setLoading(true)

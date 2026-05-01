@@ -52,14 +52,14 @@ const SLIDES: Slide[] = [
     icon:    '📍',
     title:   'Build your portfolio of locations.',
     bullets: [
-      { headline: 'Add your own locations to your portfolio.',
-        detail:   'Use "+ Add new location" to set up the spots you actually shoot. They live privately to your account and are the only locations that ever appear on your Location Guides.' },
-      { headline: 'Need ideas? Browse the Explore map.',
-        detail:   'The Explore map suggests popular spots and other photographers\' favorites in your area. Save the ones that fit your style — they get copied into your portfolio with a stand-in preview photo.' },
+      { headline: 'Start by adding one of your own.',
+        detail:   '"+ Add new location" opens a quick form — name the spot, search the address, optionally drop in a description, parking notes, or photos. Locations live privately to your account; only the ones in a Location Guide are shared with clients.' },
       { headline: 'Upload your real photos.',
-        detail:   'Once you upload your own photos to a saved location, that\'s what your clients see on Location Guides — not the placeholder.' },
+        detail:   'A few from a recent session is enough. Whatever you upload is what your clients see on the Location Guide for that spot.' },
+      { headline: 'Want suggestions? The Explore map shows popular spots near you.',
+        detail:   'Once you have one or two manual locations down, the Explore map is a fast way to add more. Tap any pin → "Add to portfolio" copies the basics into your portfolio for you to customize.' },
     ],
-    cta: { href: '/explore', label: 'Browse the map →' },
+    cta: { href: '/portfolio?add=1', label: 'Add your first location →' },
   },
   {
     kind:    'howto',
@@ -97,7 +97,7 @@ const SLIDES: Slide[] = [
     kind:    'picker',
     eyebrow: 'Step 4',
     icon:    '🌎',
-    title:   'Suggested locations near you.',
+    title:   'More suggestions from the Explore map.',
   },
   {
     kind:  'outro',
@@ -406,7 +406,7 @@ export default function HowItWorksPage() {
           {slide.kind === 'picker' && (
             <div>
               <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, textAlign: 'center', maxWidth: 540, margin: '0 auto 1.25rem' }}>
-                Tell us your city so we can show you popular spots in your area. Quickly add popular locations to your portfolio directly from the map.
+                Already added one of your own? Nice. Here&apos;s a quick way to add a few more — tell us your city and we&apos;ll show you popular spots from the Explore map nearby. Add as many or as few as you want.
               </p>
 
               <div style={{ marginBottom: '1.25rem' }}>
