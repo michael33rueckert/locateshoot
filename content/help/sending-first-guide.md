@@ -8,7 +8,7 @@ updated: 2026-05-01
 
 A Location Guide is the link you send to a client so they can pick their session location. Here's the full flow.
 
-## 1. Add at least one location to your portfolio (manual first)
+## 1. Add at least one location to your portfolio
 
 Open the **Portfolio** page and tap **+ Add new location**. Enter the place name (e.g., "Loose Park"), search the address, and optionally add a description, parking notes, permit info, or photos. The first location is one you set up yourself end-to-end — exactly what you'd type into a session-prep email, just stored once and reusable.
 

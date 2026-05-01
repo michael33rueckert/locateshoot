@@ -15,8 +15,9 @@ import HelpChatPanel from '@/app/help/HelpChatPanel'
 // Visibility rules mirror FeedbackButton:
 //   - Only signed-in photographers see it.
 //   - Hidden on /pick/* (the client-facing share flow).
-//   - Hidden on /help itself — the panel is already on that page
-//     in line, so a floating button would just open a duplicate.
+// The /help page used to inline the same panel; that's been removed,
+// so the floating launcher is now the single entry point for chat
+// across every signed-in surface, including /help itself.
 
 export default function HelpChatLauncher() {
   const pathname = usePathname() ?? ''
@@ -39,7 +40,6 @@ export default function HelpChatLauncher() {
   }, [open])
 
   if (pathname.startsWith('/pick')) return null
-  if (pathname.startsWith('/help'))  return null
   if (signedIn !== true) return null
 
   return (

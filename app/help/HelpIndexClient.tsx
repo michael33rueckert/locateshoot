@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
-import HelpChatPanel from './HelpChatPanel'
 import type { HelpArticleMeta } from '@/lib/help'
 
 interface Props {
@@ -80,15 +79,11 @@ export default function HelpIndexClient({ articles, categories }: Props) {
           </p>
         </div>
 
-        {/* AI help assistant — sits above the categorized article
-            list. Reads from the same /content/help/*.md corpus the
-            articles below render from, so the answers stay in sync
-            with what the photographer can browse manually. */}
-        <HelpChatPanel />
-
         {/* Search bar — client-side, filters across title + summary +
             category. No fuzzy matching for now; substring is enough
-            for a small article set. */}
+            for a small article set. The AI assistant lives in the
+            floating ✨ Help button (bottom-right) so visitors who
+            want chat have it without it dominating this index. */}
         <div style={{ position: 'relative', marginBottom: '2rem' }}>
           <input
             type="text"
