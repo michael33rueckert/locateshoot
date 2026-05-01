@@ -55,6 +55,9 @@ export default function SiteFooter() {
           <Link href="/onboarding/how-it-works" style={{ color: 'var(--ink-soft)', textDecoration: 'none' }}>
             Getting Started
           </Link>
+          <Link href="/help" style={{ color: 'var(--ink-soft)', textDecoration: 'none' }}>
+            Help
+          </Link>
         </div>
       </div>
     </footer>
