@@ -19,8 +19,10 @@ import matter from 'gray-matter'
 
 export const HELP_CATEGORY_ORDER = [
   'Getting started',
+  'Portfolio',
   'Location Guides',
   'Branding',
+  'Account',
   'Billing',
   'Troubleshooting',
 ] as const

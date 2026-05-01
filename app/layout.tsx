@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import MfaGate from '@/components/MfaGate'
 import InstallPrompt from '@/components/InstallPrompt'
 import FeedbackButton from '@/components/FeedbackButton'
+import HelpChatLauncher from '@/components/HelpChatLauncher'
 import SiteFooter from '@/components/SiteFooter'
 
 const playfair = Playfair_Display({
@@ -56,6 +57,7 @@ export default function RootLayout({
         <SiteFooter />
         <MfaGate />
         <InstallPrompt />
+        <HelpChatLauncher />
         <FeedbackButton />
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {

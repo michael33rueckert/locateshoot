@@ -22,3 +22,9 @@ LocateShoot helps you let clients pick their session location without the back-a
 3. Create your first **Location Guide** from the dashboard, drop the link in your next session-confirmation email, and you're live.
 
 The full setup takes about 20 minutes, and most photographers send their first guide the same day they sign up.
+
+## Need a hand?
+
+- **Ask the AI assistant** at the top of this help center, or via the floating ✨ Help button on any signed-in page. It answers from these articles in plain language.
+- **Browse the categories below** — Portfolio, Location Guides, Branding, Account, Billing, Troubleshooting.
+- **Send feedback or a direct question** with the 💬 Feedback button at the bottom-right of every signed-in page.
