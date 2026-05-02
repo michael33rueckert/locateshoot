@@ -147,19 +147,32 @@ export async function POST(request: Request) {
     permit_notes: string | null
     pinterest_url: string | null
     blog_url: string | null
+    // Photographer-curated labeled links (e.g. "Family session" → URL)
+    // shown as a row of small anchors at the bottom of each card.
+    // Empty array for public-locations rows (it's a portfolio-only field).
+    session_links: { label: string; url: string }[]
   }
   const locDetails: Record<string, LocDetail> = {}
   if (ids.length > 0) {
     // portfolio_locations first — try with the new link columns and fall
-    // back without them when the migration hasn't been run yet (same
+    // back stepwise when newer migrations haven't been run yet (same
     // pattern as the pick-data endpoint).
     const baseCols = 'id,name,city,state,latitude,longitude,description,best_time,parking_info,permit_required,permit_notes'
     let portfolioRows: any[] = []
     {
-      const r = await admin.from('portfolio_locations').select(`${baseCols},pinterest_url,blog_url`).in('id', ids)
+      // Newest column set first: includes session_links from
+      // 20260428_session_links migration.
+      const r = await admin.from('portfolio_locations').select(`${baseCols},pinterest_url,blog_url,session_links`).in('id', ids)
       if (r.error) {
-        const fb = await admin.from('portfolio_locations').select(baseCols).in('id', ids)
-        portfolioRows = fb.data ?? []
+        // Drop session_links and retry — covers Supabase instances
+        // that haven't run the migration yet.
+        const r2 = await admin.from('portfolio_locations').select(`${baseCols},pinterest_url,blog_url`).in('id', ids)
+        if (r2.error) {
+          const fb = await admin.from('portfolio_locations').select(baseCols).in('id', ids)
+          portfolioRows = fb.data ?? []
+        } else {
+          portfolioRows = r2.data ?? []
+        }
       } else {
         portfolioRows = r.data ?? []
       }
@@ -176,6 +189,14 @@ export async function POST(request: Request) {
         permit_notes: p.permit_notes,
         pinterest_url: p.pinterest_url ?? null,
         blog_url: p.blog_url ?? null,
+        session_links: Array.isArray(p.session_links)
+          ? p.session_links
+              .map((l: any) => ({
+                label: typeof l?.label === 'string' ? l.label : '',
+                url:   typeof l?.url   === 'string' ? l.url   : '',
+              }))
+              .filter((l: { label: string; url: string }) => l.label && l.url)
+          : [],
       }
     })
     // Anything still missing might be a public locations row (legacy share-
@@ -198,6 +219,7 @@ export async function POST(request: Request) {
           permit_notes: p.permit_notes,
           pinterest_url: null,
           blog_url: null,
+          session_links: [],
         }
       })
     }
@@ -332,6 +354,16 @@ export async function POST(request: Request) {
         const links: string[] = []
         if (d?.pinterest_url) links.push(`<a href="${escapeHtml(d.pinterest_url)}" style="color:${brandAccent};text-decoration:none;font-size:13px;">📌 Pinterest board</a>`)
         if (d?.blog_url)      links.push(`<a href="${escapeHtml(d.blog_url)}"      style="color:${brandAccent};text-decoration:none;font-size:13px;">✍ Blog post</a>`)
+        // Photographer-curated session links — labels come from the
+        // photographer ("Family session", "Engagement gallery", etc.)
+        // so we render the label as-is rather than stamping a generic
+        // icon. Same inline style as the Pinterest / blog links so the
+        // row reads as one consistent group.
+        if (d?.session_links) {
+          for (const link of d.session_links) {
+            links.push(`<a href="${escapeHtml(link.url)}" style="color:${brandAccent};text-decoration:none;font-size:13px;">🔗 ${escapeHtml(link.label)}</a>`)
+          }
+        }
 
         return `
           <div style="border:1px solid #ece5d8;border-radius:10px;padding:18px 20px;margin-bottom:14px;background:white;">
