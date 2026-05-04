@@ -71,7 +71,13 @@ async function handlePreview(request: Request, admin: SupabaseClient): Promise<N
   const photographerPlan  = profile?.plan ?? null
   const isProPhotographer = photographerPlan === 'starter' || photographerPlan === 'pro' || photographerPlan === 'Pro'
   const isProTemplate     = photographerPlan === 'pro' || photographerPlan === 'Pro'
-  const branding          = profile?.preferences ?? null
+  // White-label fields (logo + LocateShoot footer removal) are Pro-
+  // only. Strip them for non-Pro previews so a downgraded photographer
+  // sees what their clients will actually see, not a stale Pro render.
+  let branding: any = profile?.preferences ?? null
+  if (branding && !isProTemplate) {
+    branding = { ...branding, remove_ls_branding: false, logo_url: null }
+  }
 
   // Pick template — same waterfall the share-link flow uses, scoped
   // to this user's default template (no per-guide override exists in
@@ -328,6 +334,27 @@ export async function GET(request: Request, context: any) {
     // for stability if the profile is later deleted, but the live
     // value wins whenever it's available.
     if (prof?.full_name) (share as any).photographer_name = prof.full_name
+  }
+
+  // Free plan: only the auto-generated portfolio guide serves clients.
+  // Existing custom guides created on a paid plan stay in the database
+  // untouched — they just stop loading until the photographer is back
+  // on Starter or Pro, at which point the same URL works again with
+  // no further action. Return the same 410 shape an expired link uses
+  // so the client UI shows a consistent "guide unavailable" page.
+  const isStarterOrPro = photographerPlan === 'starter' || photographerPlan === 'pro' || photographerPlan === 'Pro'
+  if (!isStarterOrPro && !share.is_full_portfolio) {
+    return NextResponse.json({ error: 'expired' }, { status: 410 })
+  }
+
+  // White-label fields (logo + LocateShoot footer removal) are Pro-
+  // only. Strip them so a Pro→Free downgrade can't keep rendering
+  // white-label, and a determined Free user can't enable it via direct
+  // Supabase preferences write either (the trigger doesn't gate
+  // preferences columns, but render-time stripping does).
+  const isStrictlyPro = photographerPlan === 'pro' || photographerPlan === 'Pro'
+  if (branding && !isStrictlyPro) {
+    branding = { ...branding, remove_ls_branding: false, logo_url: null }
   }
 
   // Pick page template resolution (Pro-only feature):
