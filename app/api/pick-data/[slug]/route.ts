@@ -121,6 +121,13 @@ async function handlePreview(request: Request, admin: SupabaseClient): Promise<N
     }
   }
 
+  // Same Free-plan cap the share-link flow applies — keep the preview
+  // honest so a Free photographer with a 12-location portfolio sees
+  // exactly the 5 clients will see, not all 12.
+  if (!isProPhotographer && portfolioRows.length > 5) {
+    portfolioRows = portfolioRows.slice(0, 5)
+  }
+
   let locations: any[] = []
   if (portfolioRows.length > 0) {
     const portfolioIds = portfolioRows.map((r: any) => r.id)
@@ -375,6 +382,17 @@ export async function GET(request: Request, context: any) {
       .eq('user_id', share.user_id)
       .order('created_at', { ascending: false })
     portfolioIds = (livePortfolio ?? []).map((r: any) => r.id)
+  }
+
+  // Free plan: cap at 5 locations per guide regardless of portfolio
+  // size. The portfolio cap trigger only blocks new inserts, so a
+  // photographer who downgrades from a paid plan keeps their oversized
+  // portfolio — this slice prevents the extras from leaking to clients
+  // through either the auto full-portfolio guide or any legacy custom
+  // guides created while they were paid.
+  const FREE_GUIDE_LOCATION_CAP = 5
+  if (!isProPhotographer && portfolioIds.length > FREE_GUIDE_LOCATION_CAP) {
+    portfolioIds = portfolioIds.slice(0, FREE_GUIDE_LOCATION_CAP)
   }
 
   if (portfolioIds.length > 0) {

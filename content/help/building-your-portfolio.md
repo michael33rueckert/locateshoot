@@ -41,7 +41,7 @@ The access type shows on the client's view of every Location Guide as a small gr
 
 ## The Free-plan cap
 
-Free accounts can add up to **5 portfolio locations**. The 6th add prompts an upgrade to Starter (unlimited). Existing locations don't disappear if you downgrade — but you can't add more until you're back on Starter or Pro.
+Free accounts can add up to **5 portfolio locations**. The 6th add prompts an upgrade to Starter (unlimited).
 
 ## What's different for "added from Explore" vs. custom
 
