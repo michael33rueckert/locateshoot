@@ -195,6 +195,17 @@ export default function PortfolioPage() {
 
   const needsPhotosCount = locs.filter(l => l.photo_count === 0).length
 
+  // Free plan: only the first 5 portfolio locations (in sort_order)
+  // surface to clients via the auto-Portfolio guide. Beyond that, the
+  // photographer can still see + edit them in the portfolio, but they
+  // render grayed-out with a "Hidden from clients" badge so it's clear
+  // why a downgraded photographer's old portfolio doesn't fully show
+  // up on share pages. Re-subscribing flips them back on automatically.
+  const isFreePlan = !hasStarter(profile?.plan)
+  const portfolioCap = freePortfolioLocationCap()
+  const activeIds = isFreePlan ? new Set(locs.slice(0, portfolioCap).map(l => l.id)) : null
+  const overflowCount = isFreePlan ? Math.max(0, locs.length - portfolioCap) : 0
+
   // Reorder portfolio locations. Writes sort_order on every row so the order
   // is stable. Driven by the useReorderDrag hook below — works on mouse,
   // pen, and touch via Pointer Events (HTML5 drag-and-drop was touch-hostile,
@@ -261,6 +272,20 @@ export default function PortfolioPage() {
               description={`The Free plan includes up to ${freePortfolioLocationCap()} portfolio locations. Upgrade to Starter or Pro for unlimited portfolio locations and unlimited Location Guides.`}
             />
             <button onClick={() => setShowCapUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
+          </div>
+        )}
+
+        {/* Free plan with leftover portfolio rows from a previous paid
+            tier — surface a single inline UpgradePrompt explaining why
+            the cards below the cap are grayed out. Each individual card
+            also shows a "Hidden from clients" badge; this banner is the
+            re-subscribe call to action. */}
+        {overflowCount > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <UpgradePrompt
+              feature="your full portfolio"
+              description={`You have ${overflowCount} portfolio location${overflowCount === 1 ? '' : 's'} beyond the Free-plan ${portfolioCap}-location cap. They're saved here and you can still edit them, but only your top ${portfolioCap} (in the order below) appear to clients. Re-subscribe to surface all of them again.`}
+            />
           </div>
         )}
 
@@ -347,6 +372,9 @@ export default function PortfolioPage() {
                 const canReorder = filter === 'all' && !search.trim() && locs.length > 1
                 const bind = canReorder ? reorder.bindItem(loc.id) : {}
                 const isOver = reorder.overId === loc.id && reorder.draggingId && reorder.draggingId !== loc.id
+                // Beyond the Free-plan cap — card stays editable but
+                // visually demoted so it's clear clients don't see it.
+                const inactive = activeIds ? !activeIds.has(loc.id) : false
                 return (
                   <div key={loc.id} onClick={() => setEditing(loc.id)}
                     {...bind}
@@ -356,7 +384,8 @@ export default function PortfolioPage() {
                       background: 'white',
                       cursor: canReorder ? 'grab' : 'pointer',
                       transition: 'all .15s',
-                      opacity: isDragging ? 0.4 : 1,
+                      opacity: isDragging ? 0.4 : (inactive ? 0.55 : 1),
+                      filter: inactive ? 'saturate(0.6)' : undefined,
                       position: 'relative',
                       // pan-y pre-drag lets the user scroll the page by
                       // dragging a card up/down; the hook flips this to
@@ -386,7 +415,12 @@ export default function PortfolioPage() {
                         }}
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                       />}
-                      {noPhotos && (
+                      {inactive && (
+                        <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(181,75,42,.95)', color: 'white', fontSize: 10, fontWeight: 600, zIndex: 1 }}>
+                          🔒 Hidden from clients
+                        </div>
+                      )}
+                      {noPhotos && !inactive && (
                         <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(196,146,42,.95)', color: 'white', fontSize: 10, fontWeight: 600 }}>
                           ⚠ Add your photos
                         </div>

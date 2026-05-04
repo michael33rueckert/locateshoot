@@ -716,6 +716,7 @@ export default function DashboardPage() {
                               bgClass={BG_CYCLE[i % BG_CYCLE.length]}
                               guide={card.data}
                               featured={card.isPortfolio}
+                              inactive={!card.isPortfolio && !isProUser}
                               copyState={
                                 card.isPortfolio
                                   ? (fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle')
@@ -812,8 +813,12 @@ export default function DashboardPage() {
                     {portfolioLocs.slice(0, 6).map((loc, idx) => {
                       const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
                       const noPhotos = loc.photo_count === 0
+                      // Free plan: positions beyond the 5-location cap
+                      // are still editable but won't reach clients —
+                      // gray-out + badge mirrors the /portfolio page.
+                      const inactive = !hasStarter(profile?.plan) && idx >= freePortfolioLocationCap()
                       return (
-                        <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
+                        <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s', opacity: inactive ? 0.55 : 1, filter: inactive ? 'saturate(0.6)' : undefined }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
                           <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ aspectRatio: '4 / 3', position: 'relative', overflow: 'hidden' }}>
@@ -834,7 +839,12 @@ export default function DashboardPage() {
                               }}
                               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                             />}
-                            {noPhotos && (
+                            {inactive && (
+                              <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(181,75,42,.95)', color: 'white', fontSize: 10, fontWeight: 600, zIndex: 1 }}>
+                                🔒 Hidden
+                              </div>
+                            )}
+                            {noPhotos && !inactive && (
                               <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(196,146,42,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
                                 ⚠ Add your photos
                               </div>

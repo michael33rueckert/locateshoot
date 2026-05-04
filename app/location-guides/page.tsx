@@ -264,6 +264,20 @@ export default function LocationGuidesPage() {
           </div>
         )}
 
+        {/* Free plan with leftover custom guides from a previous paid
+            tier — surface a single inline UpgradePrompt explaining why
+            the cards below show grayed-out. The cards themselves have
+            their own "Inactive" badges; this banner is the call to
+            action. */}
+        {!hasStarter(profile?.plan) && filtered.length > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <UpgradePrompt
+              feature="your existing Location Guides"
+              description={`You have ${filtered.length} custom Location Guide${filtered.length === 1 ? '' : 's'} that won't reach clients on the Free plan — re-subscribe to Starter or Pro and the same URLs work again automatically.`}
+            />
+          </div>
+        )}
+
         {/* Search */}
         <div style={{ marginBottom: '1rem' }}>
           <input
@@ -332,6 +346,7 @@ export default function LocationGuidesPage() {
                   bgClass={BG_CYCLE[i % BG_CYCLE.length]}
                   guide={card.data}
                   featured={card.isPortfolio}
+                  inactive={!card.isPortfolio && !hasStarter(profile?.plan)}
                   copyState={
                     card.isPortfolio
                       ? (fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle')

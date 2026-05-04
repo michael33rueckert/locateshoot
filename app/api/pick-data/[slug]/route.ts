@@ -105,6 +105,7 @@ async function handlePreview(request: Request, admin: SupabaseClient): Promise<N
       .from('portfolio_locations')
       .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
       .eq('user_id', user.id)
+      .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
     if (r.error) {
       const r2 = await admin
@@ -401,12 +402,16 @@ export async function GET(request: Request, context: any) {
 
   // When is_full_portfolio is true, the link auto-syncs with the photographer's
   // current portfolio rather than a static stored list — so resolve it live.
+  // Order by sort_order to match what the photographer sees on /portfolio
+  // (their drag-to-reorder choice). Falls back to created_at for ties /
+  // rows that predate the sort_order column.
   let portfolioIds: any[] = (share.portfolio_location_ids ?? []).filter((id: any) => id != null)
   if (share.is_full_portfolio && share.user_id) {
     const { data: livePortfolio } = await admin
       .from('portfolio_locations')
       .select('id')
       .eq('user_id', share.user_id)
+      .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
     portfolioIds = (livePortfolio ?? []).map((r: any) => r.id)
   }

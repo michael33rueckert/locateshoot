@@ -52,6 +52,7 @@ export default function LocationGuideCard({
   onDelete,
   onPreview,
   featured,
+  inactive,
 }: {
   guide:       GuideCardData
   bgClass:     string
@@ -69,6 +70,13 @@ export default function LocationGuideCard({
    *  pinned "Entire Portfolio" guide). Adds a thin gold border so it
    *  visually anchors above the custom-guide cards in the same grid. */
   featured?:   boolean
+  /** True when this guide exists but cannot serve clients on the
+   *  photographer's current plan (e.g. a custom guide that's still in
+   *  the database after a Pro→Free downgrade). Renders the card grayed
+   *  out with an "Inactive" badge, disables Copy URL + Preview, and
+   *  keeps Edit + Delete so the photographer can still manage the row.
+   *  Re-subscribing flips this back off automatically. */
+  inactive?:   boolean
 }) {
   const exp = expirationSummary(guide)
   const idleBorder     = featured ? '2px solid var(--gold)'    : '1px solid var(--cream-dark)'
@@ -83,9 +91,11 @@ export default function LocationGuideCard({
       flexDirection: 'column',
       transition: 'all .15s',
       boxShadow: idleShadow,
+      opacity: inactive ? 0.55 : 1,
+      filter: inactive ? 'saturate(0.6)' : undefined,
     }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
-    onMouseLeave={e => { e.currentTarget.style.border = idleBorder; e.currentTarget.style.boxShadow = idleShadow }}>
+    onMouseEnter={e => { if (inactive) return; e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
+    onMouseLeave={e => { if (inactive) return; e.currentTarget.style.border = idleBorder; e.currentTarget.style.boxShadow = idleShadow }}>
       {/* Header band — cover photo if set, otherwise a colored gradient + emoji */}
       <div
         className={guide.cover_photo_url ? undefined : bgClass}
@@ -130,12 +140,14 @@ export default function LocationGuideCard({
           borderRadius: 999,
           fontSize: 10,
           fontWeight: 500,
-          background: guide.cover_photo_url ? 'rgba(255,255,255,.92)' : exp.bg,
-          color: exp.color,
+          background: inactive
+            ? 'rgba(181,75,42,.92)'
+            : (guide.cover_photo_url ? 'rgba(255,255,255,.92)' : exp.bg),
+          color: inactive ? 'white' : exp.color,
           backdropFilter: 'blur(4px)',
           whiteSpace: 'nowrap',
           zIndex: 1,
-        }}>{exp.label}</span>
+        }}>{inactive ? '⏸ Inactive — needs Starter+' : exp.label}</span>
         {guide.is_full_portfolio && (
           <span style={{
             position: 'absolute',
@@ -167,26 +179,28 @@ export default function LocationGuideCard({
         {/* Actions */}
         <div style={{ display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap' }}>
           <button
-            onClick={onCopy}
+            onClick={inactive ? undefined : onCopy}
+            disabled={inactive}
+            title={inactive ? 'Re-subscribe to share this guide' : undefined}
             style={{
               flex: 1,
               minWidth: 110,
               padding: '8px 12px',
               borderRadius: 4,
-              background: copyState === 'copied' ? 'var(--sage)' : 'var(--gold)',
-              color: copyState === 'copied' ? 'white' : 'var(--ink)',
+              background: inactive ? 'var(--cream-dark)' : (copyState === 'copied' ? 'var(--sage)' : 'var(--gold)'),
+              color: inactive ? 'var(--ink-soft)' : (copyState === 'copied' ? 'white' : 'var(--ink)'),
               border: 'none',
               fontSize: 12,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: inactive ? 'not-allowed' : 'pointer',
               fontFamily: 'inherit',
               whiteSpace: 'nowrap',
               transition: 'all .15s',
             }}
           >
-            {copyState === 'copied' ? '✓ Copied!' : '📋 Copy URL'}
+            {inactive ? '🔒 Paused' : (copyState === 'copied' ? '✓ Copied!' : '📋 Copy URL')}
           </button>
-          {onPreview && (
+          {onPreview && !inactive && (
             <button onClick={onPreview} style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', color: 'var(--ink)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
               👁 Preview
             </button>
