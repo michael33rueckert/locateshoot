@@ -117,6 +117,30 @@ export default function HelpArticleClient({ article }: Props) {
                 code:   ({ children }) => <code style={{ background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4, fontSize: 13, fontFamily: 'ui-monospace, monospace' }}>{children}</code>,
                 blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid var(--gold)', paddingLeft: 14, color: 'var(--ink-soft)', fontStyle: 'italic', margin: '1rem 0' }}>{children}</blockquote>,
                 hr:     () => <hr style={{ border: 'none', borderTop: '1px solid var(--cream-dark)', margin: '2rem 0' }} />,
+                // Inline screenshots inside articles. Constrain
+                // height so a tall modal screenshot doesn't take
+                // over the page; native sizing rather than
+                // object-fit: cover so the image isn't cropped.
+                // Subtle border + soft shadow make the screenshot
+                // read as embedded media, not a flat image.
+                img:    ({ src, alt }) => (
+                  <img
+                    src={typeof src === 'string' ? src : undefined}
+                    alt={alt ?? ''}
+                    loading="lazy"
+                    style={{
+                      display: 'block',
+                      maxWidth: '100%',
+                      maxHeight: 520,
+                      width: 'auto',
+                      height: 'auto',
+                      margin: '1.25rem auto',
+                      borderRadius: 8,
+                      border: '1px solid var(--cream-dark)',
+                      boxShadow: '0 4px 16px rgba(26,22,18,.08)',
+                    }}
+                  />
+                ),
               }}
             >
               {article.body}

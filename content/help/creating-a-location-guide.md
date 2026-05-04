@@ -8,6 +8,9 @@ updated: 2026-05-01
 
 The New Location Guide window has more options than first meets the eye. This article walks through every field in the order they appear so you know exactly what each one does.
 
+![New Location Guide modal — guide name, message, multi-pick toggle, and expiration radio buttons.](/help/screenshots/new-location-guide-modal.png)
+*The New Location Guide window — every field below is laid out in the order they appear here.*
+
 ## Guide name (required)
 
 Shown to your client at the top of the page they receive. Use a name that makes sense to them, not just to you. Examples that read well to clients:

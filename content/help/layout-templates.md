@@ -8,6 +8,9 @@ updated: 2026-05-01
 
 Pro photographers can pick how the location list renders on the client's Pick page. There are six templates to choose from. They're all styled with your colors / font / logo from Branding — the difference is layout density and rhythm.
 
+![Layout Templates picker on the Branding tab — Editorial, Card, Grid, Magazine, Compact list, Minimal — with Editorial currently selected.](/help/screenshots/branding-layout-templates.png)
+*The Layout Templates picker on the Branding tab — six visual options with previews of how each will render.*
+
 ## The six templates
 
 **Editorial** — long-form story per location. Big photo, headline-style location name, paragraph copy. The most "magazine feature article" feel. Good for a curated 4-6 location wedding guide where each spot deserves its own moment.

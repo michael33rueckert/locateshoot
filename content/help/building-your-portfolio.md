@@ -22,6 +22,9 @@ For your first one or two, pick spots you'd actually recommend to a client today
 
 Open the **Explore** map, find a location you've shot at (or one you'd like to shoot at), and tap **Add to portfolio**. Two things happen:
 
+![The Explore map with the My Portfolio filter highlighted, sidebar list of locations on the left.](/help/screenshots/explore-map-portfolio-filter.png)
+*The Explore map. Pin colors: green = public, red = private, gold = currently selected, blue = your portfolio. Use the search box and filters at the top to narrow.*
+
 - A copy of the location lands in your portfolio with the source's name, coordinates, description, tags, and (if available) photos
 - That portfolio entry is **yours** — edit anything you want without affecting the public map version. Add your own photos. Override the description. Toggle off Google Photos. Mark it private. None of your edits show up on the public Explore map.
 

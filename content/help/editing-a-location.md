@@ -8,6 +8,9 @@ updated: 2026-05-01
 
 Tap any portfolio location to open the editor. Every field shows up somewhere in your client's view of a Location Guide that includes this spot. Here's what each one does.
 
+![Top half of the Add / Edit portfolio location modal — search, name, description, city, state, access, tags, best time, parking, Pinterest, blog, session links.](/help/screenshots/add-portfolio-location-top.png)
+*Top half of the editor — basic info, access, tags, and the supplemental link fields.*
+
 ## Pinned location
 
 The address-search field that geocodes a location to coordinates. The map pin shown to your client comes from these coordinates. Editing the address re-pins the location and sets a label like "Loose Park, Kansas City, MO".
@@ -60,6 +63,9 @@ Repeating list of labeled URLs for past sessions you've shot at this location. E
 - "Engagement gallery" → `https://yoursite.com/engagements/sarah-mike`
 
 Renders as a row of buttons on the client's view, labeled with whatever you filled in. Photographers use this to show clients real examples of what their session might look like at this spot. **Starter+ feature**.
+
+![Bottom half of the editor — permit toggle, Google Photos opt-out, photo upload, and Add to portfolio / Cancel.](/help/screenshots/add-portfolio-location-bottom.png)
+*Bottom half of the editor — permit + photo settings and the save action.*
 
 ## 🔒 Permit required
 
