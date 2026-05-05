@@ -8,6 +8,7 @@ import FeedbackButton from '@/components/FeedbackButton'
 import HelpChatLauncher from '@/components/HelpChatLauncher'
 import { HelpChatProvider } from '@/components/HelpChatProvider'
 import SiteFooter from '@/components/SiteFooter'
+import SentryUserScope from '@/components/SentryUserScope'
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -61,6 +62,7 @@ export default function RootLayout({
           <InstallPrompt />
           <HelpChatLauncher />
           <FeedbackButton />
+          <SentryUserScope />
         </HelpChatProvider>
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
