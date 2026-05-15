@@ -67,12 +67,28 @@ export default function LocationGuidesPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/'; return }
+      // share_links query: filter quick_share=true rows out so single-
+      // location "Copy link" shares don't clutter the curated guides
+      // list. Falls back to the legacy column set on pre-migration
+      // Supabase instances — quick-shares will appear in the list
+      // until the migration runs, which is acceptable.
+      const guidesP = (async () => {
+        const r = await supabase.from('share_links')
+          .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url,quick_share')
+          .eq('user_id', user.id)
+          .eq('quick_share', false)
+          .order('created_at', { ascending: false })
+        if (r.error) {
+          return supabase.from('share_links')
+            .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+        }
+        return r
+      })()
       const [profRes, guidesRes, portRes] = await Promise.all([
         supabase.from('profiles').select('id,full_name,custom_domain,custom_domain_verified,plan').eq('id', user.id).single(),
-        supabase.from('share_links')
-          .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
+        guidesP,
         supabase.from('portfolio_locations').select('id,source_location_id,name,city,state').eq('user_id', user.id).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
       ])
       if (profRes.data) setProfile(profRes.data as any)

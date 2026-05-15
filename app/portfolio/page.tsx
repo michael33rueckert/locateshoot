@@ -10,6 +10,7 @@ import UpgradePrompt from '@/components/UpgradePrompt'
 import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
 import { hasStarter, freePortfolioLocationCap } from '@/lib/plan'
+import { shareSingleLocation } from '@/lib/portfolio-share'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
 // that the Dashboard's portfolio section does, so edits in either place stay in
@@ -50,6 +51,34 @@ export default function PortfolioPage() {
   // already at the 5-location cap — drops the dual-plan UpgradePrompt
   // inline instead of opening the Add modal.
   const [showCapUpgrade, setShowCapUpgrade] = useState(false)
+  // Per-location "Copy link" UX state: copying spinner + just-copied
+  // green flash. Keyed by location id so neighboring cards don't share
+  // the same state.
+  const [copyLinkBusyId, setCopyLinkBusyId] = useState<string | null>(null)
+  const [copyLinkDoneId, setCopyLinkDoneId] = useState<string | null>(null)
+
+  async function copySingleLocationLink(loc: { id: string; name: string }) {
+    if (!profile) return
+    if (!hasStarter(profile.plan)) {
+      // Free plan — surface the same upgrade prompt the portfolio-cap
+      // path uses. Cheaper than a new prompt variant and consistent
+      // with what the rest of the page already does for locked
+      // features.
+      setShowCapUpgrade(true)
+      setToast('⭐ Upgrade to share single locations')
+      return
+    }
+    setCopyLinkBusyId(loc.id)
+    const r = await shareSingleLocation(
+      { id: profile.id, full_name: profile.full_name, custom_domain: profile.custom_domain, custom_domain_verified: profile.custom_domain_verified },
+      { id: loc.id, name: loc.name },
+    )
+    setCopyLinkBusyId(null)
+    if (!r.ok) { setToast(`⚠ ${r.error}`); return }
+    setCopyLinkDoneId(loc.id)
+    setToast('📋 Link copied!')
+    setTimeout(() => setCopyLinkDoneId(curr => curr === loc.id ? null : curr), 1800)
+  }
   const [toast,    setToast]    = useState<string | null>(null)
 
   // Deep-link support — `/portfolio?add=1` opens the Add Location
@@ -429,9 +458,33 @@ export default function PortfolioPage() {
                     </div>
                     <div style={{ padding: '12px 14px' }}>
                       <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6 }}>📍 {cityLine || '—'}</div>
-                      <div style={{ fontSize: 11, color: noPhotos ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: noPhotos ? 600 : 300 }}>
-                        {noPhotos ? '→ Tap to upload your photos' : 'Tap to edit →'}
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 8 }}>📍 {cityLine || '—'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <button
+                          onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
+                          disabled={copyLinkBusyId === loc.id || inactive}
+                          title={inactive ? 'Re-subscribe to share this location' : 'Copy a single-location share link'}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 4,
+                            border: 'none',
+                            background: inactive
+                              ? 'var(--cream-dark)'
+                              : (copyLinkDoneId === loc.id ? 'var(--sage)' : 'var(--cream)'),
+                            color: inactive ? 'var(--ink-soft)' : (copyLinkDoneId === loc.id ? 'white' : 'var(--ink)'),
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: inactive || copyLinkBusyId === loc.id ? 'not-allowed' : 'pointer',
+                            fontFamily: 'inherit',
+                            whiteSpace: 'nowrap',
+                            transition: 'all .15s',
+                          }}
+                        >
+                          {copyLinkBusyId === loc.id ? '…' : (copyLinkDoneId === loc.id ? '✓ Copied!' : '📋 Copy link')}
+                        </button>
+                        <div style={{ fontSize: 11, color: noPhotos ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: noPhotos ? 600 : 300 }}>
+                          {noPhotos ? '→ Add photos' : 'Tap to edit →'}
+                        </div>
                       </div>
                     </div>
                   </div>

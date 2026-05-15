@@ -79,8 +79,12 @@ export default function LocationGuideCard({
   inactive?:   boolean
 }) {
   const exp = expirationSummary(guide)
-  const idleBorder     = featured ? '2px solid var(--gold)'    : '1px solid var(--cream-dark)'
-  const idleShadow     = featured ? '0 4px 14px rgba(196,146,42,.18)' : '0 1px 3px rgba(26,22,18,.03)'
+  // Every guide card gets the gold border + soft gold shadow so the
+  // grid reads visually distinct from the white-tile portfolio location
+  // cards on the same page. featured (the full-Portfolio card) bumps
+  // the border thicker for additional anchoring.
+  const idleBorder     = featured ? '2px solid var(--gold)'    : '1px solid var(--gold)'
+  const idleShadow     = featured ? '0 4px 14px rgba(196,146,42,.18)' : '0 2px 8px rgba(196,146,42,.08)'
   return (
     <div style={{
       background: 'white',
@@ -93,9 +97,19 @@ export default function LocationGuideCard({
       boxShadow: idleShadow,
       opacity: inactive ? 0.55 : 1,
       filter: inactive ? 'saturate(0.6)' : undefined,
+      position: 'relative',
     }}
-    onMouseEnter={e => { if (inactive) return; e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
-    onMouseLeave={e => { if (inactive) return; e.currentTarget.style.border = idleBorder; e.currentTarget.style.boxShadow = idleShadow }}>
+    onMouseEnter={e => { if (inactive) return; e.currentTarget.style.boxShadow = '0 4px 14px rgba(196,146,42,.25)' }}
+    onMouseLeave={e => { if (inactive) return; e.currentTarget.style.boxShadow = idleShadow }}>
+      {/* Solid gold accent strip across the top of every guide card.
+          The single strongest visual cue that "this is a guide" vs.
+          "this is a location" — clients of the portfolio + dashboard
+          pages render LocationGuideCard alongside flat location cards,
+          and the strip + uppercase tag below pop out at a glance. */}
+      <div style={{ height: 4, background: 'var(--gold)', flexShrink: 0 }} />
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 2, padding: '3px 9px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 9, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', boxShadow: '0 1px 4px rgba(26,22,18,.18)' }}>
+        📚 Guide
+      </div>
       {/* Header band — cover photo if set, otherwise a colored gradient + emoji */}
       <div
         className={guide.cover_photo_url ? undefined : bgClass}
@@ -126,15 +140,21 @@ export default function LocationGuideCard({
               }}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
             />
-            {/* Subtle bottom-to-top scrim so overlaid badges stay readable on bright photos */}
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,.18) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0) 100%)' }} />
+            {/* Top + bottom scrims so overlaid badges (📚 GUIDE tag at
+                top, expiration badge at bottom) stay readable on bright
+                photos without darkening the photo as a whole. */}
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,.18) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,.22) 100%)' }} />
           </>
         ) : (
           <span style={{ fontSize: 38, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.12))' }}>📚</span>
         )}
+        {/* Expiration badge — moved to the bottom-left of the cover
+            photo so the 📚 GUIDE tag (top-left) doesn't overlap it. The
+            bottom scrim added below the photo keeps this readable on
+            bright images. */}
         <span style={{
           position: 'absolute',
-          top: 8,
+          bottom: 8,
           left: 8,
           padding: '3px 10px',
           borderRadius: 999,

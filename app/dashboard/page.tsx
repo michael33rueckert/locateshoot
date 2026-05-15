@@ -13,7 +13,7 @@ import GuidePreviewModal from '@/components/GuidePreviewModal'
 import UpgradePrompt from '@/components/UpgradePrompt'
 import { hasStarter, hasPro, normalizePlan, freePortfolioLocationCap } from '@/lib/plan'
 import { buildShareUrl } from '@/lib/custom-domain'
-import { shareFullPortfolio as shareFullPortfolioFn } from '@/lib/portfolio-share'
+import { shareFullPortfolio as shareFullPortfolioFn, shareSingleLocation } from '@/lib/portfolio-share'
 import { thumbUrl } from '@/lib/image'
 
 interface Profile           { id: string; full_name: string | null; email: string | null; plan: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
@@ -92,6 +92,9 @@ export default function DashboardPage() {
   const [editingPermLink,     setEditingPermLink]      = useState<PermanentLink | null>(null)
   const [showAddPortfolio,    setShowAddPortfolio]     = useState(false)
   const [copiedGuideId,       setCopiedGuideId]        = useState<string | null>(null)
+  // Per-location quick-share state in the portfolio preview grid.
+  const [copyingPortfolioLocId, setCopyingPortfolioLocId] = useState<string | null>(null)
+  const [copiedPortfolioLocId,  setCopiedPortfolioLocId]  = useState<string | null>(null)
   const [deleteGuideId,       setDeleteGuideId]        = useState<string | null>(null)
   // Two-step confirmation for the Client Favorites + Client Selections
   // Dismiss buttons — first click arms the row (button label flips to
@@ -247,12 +250,30 @@ export default function DashboardPage() {
         setPortfolioLocs([])
       }
 
-      const { data: permData } = await supabase
-        .from('share_links')
-        .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(6)
+      // Filter quick_share=true (single-location "Copy link" shares)
+      // out of the curated-guides preview. Falls back to the legacy
+      // column set on pre-migration schemas.
+      let permData: any[] | null = null
+      {
+        const r = await supabase
+          .from('share_links')
+          .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url,quick_share')
+          .eq('user_id', user.id)
+          .eq('quick_share', false)
+          .order('created_at', { ascending: false })
+          .limit(6)
+        if (r.error) {
+          const fb = await supabase
+            .from('share_links')
+            .select('id,session_name,slug,created_at,location_ids,portfolio_location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(6)
+          permData = fb.data ?? null
+        } else {
+          permData = r.data ?? null
+        }
+      }
 
       // Recent client picks across ALL guides (not just the 6 most-
       // recent guides we render). Powers the 'Client Selections'
@@ -522,6 +543,28 @@ export default function DashboardPage() {
   // sees the card immediately and the row is built on first interaction.
   const fullPortfolioPermLink = permanentLinks.find(l => l.is_full_portfolio) ?? null
   const customGuides          = permanentLinks.filter(l => !l.is_full_portfolio)
+
+  // Per-location "Copy link" UX state for the portfolio preview grid.
+  // Free users get the upgrade prompt via setShowCapUpgrade so the
+  // existing inline dual-plan card surfaces.
+  async function copySingleLocationLink(loc: { id: string; name: string }) {
+    if (!profile) return
+    if (!hasStarter(profile.plan)) {
+      setShowCapUpgrade(true)
+      setToast('⭐ Upgrade to share single locations')
+      return
+    }
+    setCopyingPortfolioLocId(loc.id)
+    const r = await shareSingleLocation(
+      { id: profile.id, full_name: profile.full_name, custom_domain: profile.custom_domain, custom_domain_verified: profile.custom_domain_verified },
+      { id: loc.id, name: loc.name },
+    )
+    setCopyingPortfolioLocId(null)
+    if (!r.ok) { setToast(`⚠ ${r.error}`); return }
+    setCopiedPortfolioLocId(loc.id)
+    setToast('📋 Link copied!')
+    setTimeout(() => setCopiedPortfolioLocId(curr => curr === loc.id ? null : curr), 1800)
+  }
 
   async function ensureFullPortfolioPermLink(): Promise<PermanentLink | null> {
     if (fullPortfolioPermLink) return fullPortfolioPermLink
@@ -852,10 +895,34 @@ export default function DashboardPage() {
                           </div>
                           <div style={{ padding: '10px 12px' }}>
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: noPhotos ? 8 : 4 }}>📍 {cityLine || '—'}</div>
-                            {noPhotos
-                              ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.4 }}>→ Add your professional photos</div>
-                              : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
+                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6 }}>📍 {cityLine || '—'}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                              <button
+                                onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
+                                disabled={copyingPortfolioLocId === loc.id || inactive}
+                                title={inactive ? 'Re-subscribe to share this location' : 'Copy a single-location share link'}
+                                style={{
+                                  padding: '5px 9px',
+                                  borderRadius: 4,
+                                  border: 'none',
+                                  background: inactive
+                                    ? 'var(--cream-dark)'
+                                    : (copiedPortfolioLocId === loc.id ? 'var(--sage)' : 'var(--cream)'),
+                                  color: inactive ? 'var(--ink-soft)' : (copiedPortfolioLocId === loc.id ? 'white' : 'var(--ink)'),
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  cursor: inactive || copyingPortfolioLocId === loc.id ? 'not-allowed' : 'pointer',
+                                  fontFamily: 'inherit',
+                                  whiteSpace: 'nowrap',
+                                  transition: 'all .15s',
+                                }}
+                              >
+                                {copyingPortfolioLocId === loc.id ? '…' : (copiedPortfolioLocId === loc.id ? '✓ Copied!' : '📋 Copy link')}
+                              </button>
+                              {noPhotos
+                                ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.4 }}>→ Add photos</div>
+                                : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
+                            </div>
                           </div>
                         </div>
                       )
