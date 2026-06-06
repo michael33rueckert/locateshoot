@@ -1,32 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = [
-  '/coming-soon',
-  '/api/preview',
-  '/not-available',
-  // Email-confirmation handler. The link in Supabase's confirmation
-  // email opens in whatever browser the user taps from (often their
-  // phone's default, which doesn't have the preview cookie set on
-  // their desktop). Letting it through the gate lets the callback
-  // exchange the code, set the session, AND set the preview cookie
-  // before redirecting them on to /dashboard.
-  '/auth/callback',
-]
-
-// PWA installability requires the browser to fetch these without cookies. If the
-// preview gate redirects them, Chrome fails to parse the manifest and refuses to
-// install — you get "Add to Home Screen" (shortcut) instead of "Install app".
-const PWA_PATHS = new Set([
-  '/manifest.json',
-  '/sw.js',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/icon-512-maskable.png',
-  '/apple-touch-icon.png',
-  '/icon.png',
-])
-
 const APEX_DOMAIN = process.env.NEXT_PUBLIC_APEX_DOMAIN ?? 'locateshoot.com'
 
 function isPrimaryHost(host: string | null): boolean {
@@ -67,43 +41,6 @@ export function middleware(request: NextRequest) {
       const redirect = new URL(pathname + (request.nextUrl.search ?? ''), `https://${APEX_DOMAIN}`)
       return NextResponse.redirect(redirect, 307)
     }
-    // Allow the pick path through on the custom domain.
-    return NextResponse.next()
-  }
-
-  // ── Always allow public paths, static files, and PWA asset paths ──────────
-  const isPublicPath = PUBLIC_PATHS.some(p => pathname.startsWith(p))
-  const isStaticFile = pathname.startsWith('/_next') || pathname.startsWith('/favicon')
-  const isPwaPath    = PWA_PATHS.has(pathname) || pathname.startsWith('/icon.')
-  // Client-facing share flow — real clients receiving a pick link don't have
-  // the preview cookie, so the entire pick path (view + data + notify) must
-  // bypass the pre-launch gate.
-  const isClientPickPath =
-       pathname.startsWith('/pick/')
-    || pathname.startsWith('/api/pick-data/')
-    || pathname === '/api/submit-pick'
-    || pathname === '/api/submit-favorites'
-    || pathname === '/api/place-photos'
-    // Share-link analytics — the client's browser fires these as the
-    // pick page renders + heartbeats. No cookie, must bypass the gate.
-    || pathname.startsWith('/api/share-views')
-
-  // Stripe webhook — Stripe POSTs from its own servers, no cookies, ever.
-  // The gate would 307 it to /coming-soon and the subscription state never
-  // syncs back to the photographer's profile. Auth is handled by the
-  // route itself via signing-secret verification.
-  const isStripeWebhook = pathname === '/api/webhook/stripe'
-
-  if (isPublicPath || isStaticFile || isPwaPath || isClientPickPath || isStripeWebhook) {
-    return NextResponse.next()
-  }
-
-  // ── Check for preview cookie ───────────────────────────────────────────────
-  const isLocalhost = request.nextUrl.hostname === 'localhost'
-  const hasPreview  = isLocalhost || request.cookies.get('locateshoot_preview')?.value === 'true'
-
-  if (!hasPreview) {
-    return NextResponse.redirect(new URL('/coming-soon', request.url))
   }
 
   return NextResponse.next()
