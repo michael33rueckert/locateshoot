@@ -352,6 +352,7 @@ export default function AdminPage() {
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Portfolio</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Shares</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Joined</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -417,6 +418,9 @@ export default function AdminPage() {
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.portfolio_count}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.share_link_count}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink-soft)', fontSize: 11, whiteSpace: 'nowrap' }}>{timeAgo(u.created_at)}</td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <Link href={`/admin/users/${u.id}`} style={{ padding: '5px 10px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>Manage →</Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
