@@ -44,12 +44,15 @@ export function optimizedImage(
 export const thumbUrl  = (url: string | null | undefined) => optimizedImage(url, { width: 480,  height: 360 })
 export const tileUrl   = (url: string | null | undefined) => optimizedImage(url, { width: 120,  height: 120 })
 export const mediumUrl = (url: string | null | undefined) => optimizedImage(url, { width: 1200, height: 900 })
-// Pick page detail panel hero: serve the ORIGINAL upload, not a
-// /render/image/ transform. Empirically Supabase's render endpoint
-// was still arriving 4:3-cropped at the browser even when called
-// with width-only and no resize parameter — the only reliable way
-// to make portraits NOT crop is to skip the transform pipeline.
-// Acceptable here because the hero shows one photo at a time and
-// the others are lazy-loaded; we already cap upload size at ~10MB
-// in the photographer's edit modal so this isn't unbounded.
-export const heroUrl = (url: string | null | undefined) => url ?? null
+// Pick page detail panel hero: bounded render with resize=contain so
+// portraits letterbox instead of being cropped, while still capping
+// the byte size. The earlier implementation served the ORIGINAL upload
+// (5–8 MB per photo, 4:3-cropped problems with width-only) — switching
+// to contain inside a 1400×1400 box keeps aspect AND ships ~200–500 KB
+// JPEGs, which is what the client experience needs.
+//
+// The hero's <img> already has an onError fallback to the original
+// URL, so if Supabase's render endpoint chokes on any specific photo,
+// the hero gracefully degrades to the original instead of a broken
+// image.
+export const heroUrl = (url: string | null | undefined) => optimizedImage(url, { width: 1400, height: 1400, resize: 'contain', quality: 80 })
