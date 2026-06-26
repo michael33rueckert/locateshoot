@@ -128,6 +128,23 @@ export async function POST(request: Request) {
     .eq('id', link.user_id)
     .single()
 
+  // Fall back to auth.users.email when profiles.email is null. The
+  // public.profiles row doesn't auto-populate email at signup (no
+  // handle_new_user trigger in the schema), so for accounts created
+  // without an explicit profile update, profile.email is NULL — which
+  // silently skipped the photographer notification on the `if
+  // (profile?.email)` guard below. Reading from auth.users.email via
+  // the admin API is authoritative regardless.
+  let photographerEmail: string | null = profile?.email ?? null
+  if (!photographerEmail) {
+    try {
+      const { data: authUser } = await admin.auth.admin.getUserById(link.user_id)
+      photographerEmail = authUser?.user?.email ?? null
+    } catch (e) {
+      console.error('submit-pick: failed to resolve auth.users.email fallback', e)
+    }
+  }
+
   // Pull rich location details for every pick, so the client email can
   // include city, description, best time, parking, permit, Pinterest, blog,
   // and a Get Directions button per spot. Picks reference either
@@ -246,7 +263,7 @@ export async function POST(request: Request) {
   // if email send fails.
   let emailResult: { ok: boolean; error?: string } = { ok: true }
   try {
-    if (profile?.email) {
+    if (photographerEmail) {
       const firstNamePhotog = (profile.full_name ?? '').split(' ')[0] || 'there'
       const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? 'https://locateshoot.com'
       const dashUrl = `${appOrigin}/dashboard`
@@ -299,7 +316,7 @@ export async function POST(request: Request) {
         : `📍 ${clientDisplay} picked ${countWord}`
 
       const r = await sendEmail({
-        to:      profile.email,
+        to:      photographerEmail,
         subject,
         html,
         replyTo: email || undefined,
@@ -458,7 +475,7 @@ export async function POST(request: Request) {
         // them directly. Even when From: is the custom domain, we still set
         // reply-to to the photographer's primary contact email — they may
         // have a different inbox they actually read mail in.
-        replyTo:     profile.email ?? undefined,
+        replyTo:     photographerEmail ?? undefined,
         fromName:    fromNameClient,
         fromAddress: useCustomSender ? profile.sender_email! : undefined,
       })
