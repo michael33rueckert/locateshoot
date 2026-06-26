@@ -264,7 +264,7 @@ export async function POST(request: Request) {
   let emailResult: { ok: boolean; error?: string } = { ok: true }
   try {
     if (photographerEmail) {
-      const firstNamePhotog = (profile.full_name ?? '').split(' ')[0] || 'there'
+      const firstNamePhotog = (profile?.full_name ?? '').split(' ')[0] || 'there'
       const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? 'https://locateshoot.com'
       const dashUrl = `${appOrigin}/dashboard`
       const clientDisplay = [firstName, lastName].filter(Boolean).join(' ').trim()
@@ -497,7 +497,12 @@ export async function POST(request: Request) {
       ? `📍 ${clientDisplay} picked a location`
       : `📍 ${clientDisplay} picked ${names.length} locations`
     const body = names.length === 1 ? names[0] : names.join(' · ')
-    await sendPushToUser(admin, link.user_id, {
+    // Capture + log the result so Vercel logs reveal whether the push
+    // was delivered, no-op'd (no subscriptions on file), or partially
+    // failed (stale endpoints pruned). Without this the Vercel logs
+    // were silent on every successful submit and we couldn't tell
+    // what was happening for individual pick events.
+    const pushResult = await sendPushToUser(admin, link.user_id, {
       title,
       body,
       // Deep-link to the Client Selections section on the dashboard
@@ -507,6 +512,7 @@ export async function POST(request: Request) {
       url: '/dashboard#client-picks',
       tag: `pick-${inserted.id}`,
     })
+    console.log('submit-pick push', { user_id: link.user_id, pick_id: inserted.id, ...pushResult })
   } catch (e: any) {
     console.error('submit-pick push failure', e)
   }
