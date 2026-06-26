@@ -33,14 +33,23 @@ export async function sendPushToUser(
   admin: Admin,
   userId: string,
   payload: PushPayload,
-): Promise<{ sent: number; failed: number }> {
-  if (!ensureConfigured()) return { sent: 0, failed: 0 }
+): Promise<{ sent: number; failed: number; subscribed: number; reason?: string }> {
+  if (!ensureConfigured()) {
+    console.warn('sendPushToUser: VAPID not configured, skipping push', { userId })
+    return { sent: 0, failed: 0, subscribed: 0, reason: 'vapid-missing' }
+  }
 
   const { data: rows, error } = await admin
     .from('push_subscriptions')
     .select('endpoint,p256dh,auth')
     .eq('user_id', userId)
-  if (error || !rows || rows.length === 0) return { sent: 0, failed: 0 }
+  if (error) {
+    console.error('sendPushToUser: push_subscriptions query failed', { userId, error: error.message })
+    return { sent: 0, failed: 0, subscribed: 0, reason: 'query-error' }
+  }
+  if (!rows || rows.length === 0) {
+    return { sent: 0, failed: 0, subscribed: 0, reason: 'no-subscriptions' }
+  }
 
   const body = JSON.stringify(payload)
   let sent = 0
@@ -49,9 +58,19 @@ export async function sendPushToUser(
 
   await Promise.all(rows.map(async (row: any) => {
     try {
+      // urgency: 'high' tells the push service (Android FCM, APNs via
+      // Apple's webpush gateway, etc.) to surface the notification
+      // immediately instead of queueing it for the device's next wake.
+      // Without this, Pixel + iPhone PWAs running in Doze / background-
+      // app-refresh deferred mode have been receiving pick alerts
+      // several minutes — sometimes hours — late, defeating the
+      // "client just picked!" use case the notification exists for.
+      // TTL: 60s drops the push from the queue if the device is offline
+      // longer than that — a stale pick alert is worse than none.
       await webpush.sendNotification(
         { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
         body,
+        { urgency: 'high', TTL: 60 },
       )
       sent++
     } catch (err: any) {
@@ -70,10 +89,11 @@ export async function sendPushToUser(
   if (stale.length > 0) {
     try {
       await admin.from('push_subscriptions').delete().eq('user_id', userId).in('endpoint', stale)
+      console.warn('sendPushToUser: pruned stale endpoints', { userId, count: stale.length })
     } catch (e) {
       console.error('prune stale push_subscriptions failed', e)
     }
   }
 
-  return { sent, failed }
+  return { sent, failed, subscribed: rows.length }
 }
