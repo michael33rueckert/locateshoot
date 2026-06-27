@@ -583,24 +583,45 @@ export default function ExplorePage() {
   }, [])
 
   function requestLocation() {
-    // Prefer the photographer's saved home from their profile over the
-    // device's GPS reading. A photographer traveling to Omaha for a
-    // weekend doesn't want their "Near me" to suddenly recommend Omaha
-    // venues — they shoot near their actual home and that's what they
-    // want here. GPS stays as the fallback for photographers who haven't
-    // set a home (new accounts, edge cases).
-    if (homeLocation) {
-      setUserLocation({ lat: homeLocation.lat, lng: homeLocation.lng })
-      setLocGranted(true)
-      setToast('📍 Showing locations near your home')
+    // The buttons that call this ("Use my location", "📡 Near me") imply
+    // device GPS, so we ask GPS first. Earlier this preferred the
+    // photographer's saved home — but a traveling photographer on
+    // location somewhere else genuinely wants nearby spots, and the
+    // home-city preference made the button feel broken ("why is this
+    // showing Kansas City when I'm in Denver?"). Home stays as the
+    // FALLBACK when GPS is denied / unavailable so the click still
+    // does something useful.
+    function useHomeFallback(reason: string) {
+      if (homeLocation) {
+        setUserLocation({ lat: homeLocation.lat, lng: homeLocation.lng })
+        setLocGranted(true)
+        setToast(`📍 ${reason} — showing locations near your home instead`)
+      } else {
+        setToast(`⚠ ${reason}`)
+      }
+    }
+    if (!navigator.geolocation) {
+      useHomeFallback('Device location unavailable')
       return
     }
-    if (!navigator.geolocation) return
     setLocLoading(true)
     navigator.geolocation.getCurrentPosition(
-      pos => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLocGranted(true); setLocLoading(false); setToast('📍 Showing locations near you!') },
-      () => { setLocLoading(false) },
-      { timeout: 10000 },
+      pos => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setLocGranted(true)
+        setLocLoading(false)
+        setToast('📍 Showing locations near you!')
+      },
+      err => {
+        setLocLoading(false)
+        const reason = err.code === err.PERMISSION_DENIED
+          ? 'Location permission denied'
+          : err.code === err.POSITION_UNAVAILABLE
+            ? "Couldn't get device location"
+            : 'Location request timed out'
+        useHomeFallback(reason)
+      },
+      { timeout: 10000, enableHighAccuracy: false, maximumAge: 60_000 },
     )
   }
 
