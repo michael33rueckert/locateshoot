@@ -891,8 +891,14 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {/* Filter bar */}
-      <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',flexShrink:0,zIndex:100}}>
+      {/* Filter bar — position:relative + high z-index so the AddressSearch
+          dropdown (and any future overlays anchored to this row) paints
+          ABOVE Leaflet's internal panes (popups peak at z-index 700,
+          controls at 800). Without an explicit stacking context here,
+          the dropdown ends up competing with map content in document
+          order and gets covered up on mobile when the filter row's
+          children extend below the bar's bottom edge into the map area. */}
+      <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',flexShrink:0,position:'relative',zIndex:1500,isolation:'isolate'}}>
         <div className="explore-filter-row" style={{padding:'8px 1.5rem',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setShowFilters(p=>!p)} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${showFilters||activeFilterCount>0?'var(--gold)':'var(--cream-dark)'}`,background:showFilters||activeFilterCount>0?'rgba(196,146,42,.08)':'white',color:showFilters||activeFilterCount>0?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
             ⚙ Filters & Sort
