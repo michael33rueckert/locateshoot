@@ -392,14 +392,14 @@ export default function CreateLocationGuideModal({
           every scroll inside the modal trigger a full-viewport
           re-composite of the blurred area. Solid translucent scrim
           reads visually fine and scrolls smooth. */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', zIndex: 900 }} />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', zIndex: 1700 }} />
       {/* contain: layout style + will-change: transform on the
           scrolling container scopes layout/style recalc to just the
           modal and promotes it to its own compositing layer so the
           browser doesn't re-paint anything outside it on each scroll
           frame. Big jank reduction on desktop where the viewport is
           ~10x the pixel count of mobile. */}
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', willChange: 'transform', contain: 'layout style', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '90svh', overflowY: 'auto', zIndex: 1000, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', willChange: 'transform', contain: 'layout style', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflowY: 'auto', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>

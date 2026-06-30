@@ -25,8 +25,8 @@ export default function MultiLocationModal({
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(6px)', zIndex: 1000 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 460, maxWidth: '94vw', padding: '1.75rem', zIndex: 1001, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(6px)', zIndex: 1700 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 460, maxWidth: '94vw', padding: '1.75rem', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
         <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>🧭 Multi-location link</div>
         <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, marginBottom: '1.25rem' }}>
           Auto-syncs with your full portfolio. Lets clients pick more than one location — enforce a max distance between picks so they stay within your session window.

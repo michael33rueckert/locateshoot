@@ -62,7 +62,7 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
     <>
       <div
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 1000 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 1700 }}
       />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
@@ -76,7 +76,7 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
         // tall mobile + foldable displays, clipping the header
         // buttons. dvh fixes that. 90% leaves a comfortable margin.
         height: 'min(1040px, 90dvh)',
-        zIndex: 1001,
+        zIndex: 1800,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
         boxShadow: '0 24px 64px rgba(0,0,0,.45)',
