@@ -46,7 +46,7 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.6)', backdropFilter: 'blur(4px)', zIndex: 5000 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 12, width: 620, maxWidth: '94vw', maxHeight: '92vh', overflowY: 'auto', zIndex: 5001, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 12, width: 620, maxWidth: '94vw', maxHeight: '92svh', overflowY: 'auto', zIndex: 5001, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>Edit location</div>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--ink-soft)' }}>✕</button>
