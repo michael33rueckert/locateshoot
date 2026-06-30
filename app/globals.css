@@ -1058,6 +1058,18 @@ body {
   body { padding-bottom: env(safe-area-inset-bottom, 0) !important; }
 }
  
+/* ── Desktop sidebar nav ──
+   AppNav renders BOTH a top-bar and a left sidebar; CSS picks which
+   one shows. Signed-in users on ≥1024px get the sidebar layout;
+   everyone else gets the top-bar (mobile + signed-out). The
+   `ls-sidebar-active` class on <html> is toggled by AppNav based on
+   auth state so signed-out marketing surfaces aren't affected. */
+@media (min-width: 1024px) {
+  html.ls-sidebar-active .app-sidebar { display: flex !important; }
+  html.ls-sidebar-active .app-topbar  { display: none !important; }
+  html.ls-sidebar-active body         { padding-left: 220px; }
+}
+
 /* ── Hamburger nav ── */
 .hamburger-btn {
   display: none;

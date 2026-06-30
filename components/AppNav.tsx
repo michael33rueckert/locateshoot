@@ -33,6 +33,19 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
     })
   }, [])
 
+  // Mark <html> with `ls-sidebar-active` when signed in so the global
+  // CSS rules can (a) reveal the desktop sidebar, (b) hide the desktop
+  // top-bar, and (c) shift body content right by the sidebar's width.
+  // Signed-out users keep the old top-bar layout, so the marketing-
+  // facing surfaces (sign-in, etc) aren't affected.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const root = document.documentElement
+    if (email) root.classList.add('ls-sidebar-active')
+    else       root.classList.remove('ls-sidebar-active')
+    return () => root.classList.remove('ls-sidebar-active')
+  }, [email])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     // Hide when already installed.
@@ -118,7 +131,70 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
   return (
     <>
-      <nav style={{ position: 'sticky', top: 0, zIndex: 1500, isolation: 'isolate', background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 60 }}>
+      {/* DESKTOP SIDEBAR — visible only when signed in AND viewport ≥
+          1024px (per globals.css rules). Pages don't render this
+          themselves; AppNav owns both layouts and CSS swaps which one
+          shows. Body padding-left is also applied via the
+          ls-sidebar-active class so page content doesn't underflow
+          the fixed sidebar. */}
+      {signedIn && (
+        <aside className="app-sidebar" style={{
+          position: 'fixed', top: 0, left: 0, height: '100vh', width: 220,
+          background: 'rgba(26,22,18,.98)', borderRight: '1px solid rgba(255,255,255,.07)',
+          zIndex: 1500, isolation: 'isolate',
+          display: 'none',  // CSS @media flips to 'flex' on desktop
+          flexDirection: 'column',
+        }}>
+          {/* Sidebar header — logo + notification bell side by side */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <Link href="/dashboard" style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 900, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)' }} />
+              LocateShoot
+            </Link>
+            <NotificationBell placement="right" />
+          </div>
+
+          {/* Nav links — scrollable if the list ever outgrows the
+              column. flex:1 + overflow-y:auto keeps the footer pinned
+              at the bottom. */}
+          <nav style={{ flex: 1, overflowY: 'auto', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {LINKS.map(l => {
+              const active = isActive(l.href)
+              return (
+                <Link key={l.href} href={l.href} style={{
+                  display: 'block', padding: '9px 12px', borderRadius: 6,
+                  fontSize: 13, fontWeight: active ? 600 : 400,
+                  color: active ? 'var(--gold)' : 'rgba(245,240,232,.7)',
+                  background: active ? 'rgba(196,146,42,.1)' : 'transparent',
+                  textDecoration: 'none',
+                }}>
+                  {l.label}
+                </Link>
+              )
+            })}
+          </nav>
+
+          {/* Footer — install button + email + sign out, pinned to the
+              bottom of the column. */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', padding: '12px' }}>
+            {canInstall && (
+              <button onClick={installApp} title="Install LocateShoot" style={{ width: '100%', marginBottom: 8, padding: '7px 10px', borderRadius: 6, background: canInstall === 'manual' ? 'transparent' : 'rgba(196,146,42,.12)', border: `1px solid ${canInstall === 'manual' ? 'rgba(255,255,255,.15)' : 'rgba(196,146,42,.35)'}`, color: canInstall === 'manual' ? 'rgba(245,240,232,.6)' : 'var(--gold)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                📲 Install app
+              </button>
+            )}
+            {email && (
+              <div title={email} style={{ fontSize: 11, color: 'rgba(245,240,232,.4)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {email}
+              </div>
+            )}
+            <button onClick={signOut} style={{ width: '100%', padding: '7px 10px', borderRadius: 6, background: 'transparent', border: '1px solid rgba(255,255,255,.2)', color: 'rgba(245,240,232,.7)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Sign out
+            </button>
+          </div>
+        </aside>
+      )}
+
+      <nav className="app-topbar" style={{ position: 'sticky', top: 0, zIndex: 1500, isolation: 'isolate', background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 60 }}>
         <Link href={signedIn ? '/dashboard' : '/'} style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 900, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
         </Link>
