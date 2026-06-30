@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import { supabase } from '@/lib/supabase'
+import { thumbUrl } from '@/lib/image'
 
 // Multi-step walkthrough shown to new photographers (and re-visitable from
 // the menu's Getting Started link). Single page, one slide visible at a
@@ -185,9 +186,44 @@ export default function HowItWorksPage() {
           if (p.location_id && p.url && !photoMap[p.location_id]) photoMap[p.location_id] = p.url
         })
       }
-      setNearby(rows.map(r => ({ ...r, photo_url: photoMap[r.id] ?? null })) as any)
+      const withInitialPhotos = rows.map(r => ({ ...r, photo_url: photoMap[r.id] ?? null }))
+      setNearby(withInitialPhotos as any)
       // Pre-select the top 12 so it's one click to get rolling.
       setSelected(new Set(rows.slice(0, 12).map(r => r.id)))
+
+      // Google Places fallback for any location that doesn't have an
+      // uploaded photo in location_photos. Same pattern Portfolio +
+      // Explore use — locations without uploads were rendering with
+      // just the gradient backdrop on this page, which made the
+      // location picker feel empty even when the actual venue is
+      // well-known. Fire each lookup in parallel and patch state per-
+      // item so photos appear as they resolve; cache per-id in
+      // sessionStorage so re-searching the same city doesn't re-burn
+      // Places API quota.
+      const isStaleGoogleUrl = (u: string | null | undefined) =>
+        !!u && /googleusercontent\.com|googleapis\.com\/v1\/places/.test(u)
+      const missing = withInitialPhotos.filter(l => !l.photo_url || isStaleGoogleUrl(l.photo_url))
+      missing.forEach(async loc => {
+        const cacheKey = `google-photo:${loc.id}`
+        try {
+          const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
+          if (cached) {
+            setNearby(prev => prev.map(l => l.id === loc.id ? { ...l, photo_url: cached } as any : l))
+            return
+          }
+          const res = await fetch('/api/place-photos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: loc.name, city: loc.city, state: loc.state, lat: loc.latitude, lng: loc.longitude }),
+          })
+          if (!res.ok) return
+          const json = await res.json()
+          const url = json?.photos?.[0]?.url
+          if (!url) return
+          try { sessionStorage.setItem(cacheKey, url) } catch { /* quota etc. */ }
+          setNearby(prev => prev.map(l => l.id === loc.id ? { ...l, photo_url: url } as any : l))
+        } catch { /* non-fatal */ }
+      })
     } finally { setSearching(false) }
   }, [])
 
@@ -466,7 +502,7 @@ export default function HowItWorksPage() {
                           return (
                             <div key={l.id} onClick={() => toggleLoc(l.id)} style={{ borderRadius: 8, overflow: 'hidden', border: `1px solid ${sel ? 'var(--gold)' : 'var(--cream-dark)'}`, background: sel ? 'rgba(196,146,42,.04)' : 'white', cursor: 'pointer', transition: 'all .15s', position: 'relative' }}>
                               <div className={BG_CYCLE[i % BG_CYCLE.length]} style={{ aspectRatio: '4 / 3', position: 'relative', overflow: 'hidden' }}>
-                                {l.photo_url && <img src={l.photo_url} alt="" loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                                {l.photo_url && <img src={thumbUrl(l.photo_url) ?? l.photo_url} alt="" loading="lazy" decoding="async" onError={e => { if (e.currentTarget.src !== l.photo_url) e.currentTarget.src = l.photo_url! }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                                 <div style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 4, background: sel ? 'var(--gold)' : 'rgba(255,255,255,.92)', border: `1.5px solid ${sel ? 'var(--gold)' : 'var(--cream-dark)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--ink)', zIndex: 1 }}>{sel ? '✓' : ''}</div>
                               </div>
                               <div style={{ padding: '10px 12px' }}>
