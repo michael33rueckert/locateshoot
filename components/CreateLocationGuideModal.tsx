@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { tileUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
 import type { SavedTemplate } from '@/lib/pick-template'
+import PortfolioEditModal from '@/components/PortfolioEditModal'
 
 const MAX_HIGHLIGHTS = 3
 
@@ -66,6 +67,7 @@ export default function CreateLocationGuideModal({
   onClose,
   onCreated,
   onAddLocation,
+  onPortfolioChanged,
 }: {
   portfolio:         PortfolioLocationLite[]
   preselectAll:      boolean
@@ -80,6 +82,11 @@ export default function CreateLocationGuideModal({
   onCreated:         (link: any) => void
   /** When provided, the modal shows an "Add new location" button that calls this. Parent owns the nested AddPortfolioLocationModal and refreshes `portfolio` afterwards. */
   onAddLocation?:    () => void
+  /** Called after the user edits or deletes a location from inside
+   *  the per-row ✏️ button. Parent should refetch portfolio data so
+   *  the row reflects the change (name, photo, etc.) immediately.
+   *  Without this prop the edit button is hidden. */
+  onPortfolioChanged?: () => void
 }) {
   const isEdit = !!editLink
   // Full-portfolio guides ("My Portfolio" / Share all) auto-sync against
@@ -129,6 +136,11 @@ export default function CreateLocationGuideModal({
   // Photo pool for the cover picker — keyed to portfolio_location_id so we can
   // show only photos from locations the photographer has included in the guide.
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ pid: string; url: string }[]>([])
+  // Per-row ✏️ button opens PortfolioEditModal stacked on top of this
+  // modal so the photographer can fix a name / photo / permit on a
+  // location they're picking without losing their guide-in-progress.
+  // null = no edit open. Only used when onPortfolioChanged is wired.
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
 
   // Load existing message, expiration, cover photo, multi-pick,
   // highlights, and template selection when editing. Both
@@ -536,6 +548,15 @@ export default function CreateLocationGuideModal({
                           title={hl ? 'Remove from recommended' : atCap ? `Already highlighting ${MAX_HIGHLIGHTS}` : 'Mark as recommended'}
                           style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: hl ? 'rgba(196,146,42,.15)' : 'transparent', color: hl ? 'var(--gold)' : atCap ? 'var(--cream-dark)' : 'var(--sand)', cursor: atCap ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                         >★</button>
+                        {onPortfolioChanged && (
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setEditingLocationId(id) }}
+                            aria-label="Edit this location"
+                            title="Edit this location (name, photos, permit, etc.)"
+                            style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                          >✏️</button>
+                        )}
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); toggleLoc(id) }}
@@ -592,6 +613,15 @@ export default function CreateLocationGuideModal({
                             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
                             <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {cityLine || '—'}</div>
                           </div>
+                          {onPortfolioChanged && (
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); setEditingLocationId(loc.id) }}
+                              aria-label="Edit this location"
+                              title="Edit this location (name, photos, permit, etc.)"
+                              style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                            >✏️</button>
+                          )}
                           <div style={{ fontSize: 18, color: 'var(--gold)', flexShrink: 0, padding: '0 4px' }} aria-hidden>＋</div>
                         </div>
                       )
@@ -731,6 +761,29 @@ export default function CreateLocationGuideModal({
           </div>
         </div>
       </div>
+
+      {/* Edit-location overlay. Stacks on top of this modal so the
+          photographer's guide-in-progress (selected ids, message,
+          cover photo, expiration mode, etc.) is preserved. On save
+          or delete we ask the parent to refetch the portfolio, which
+          re-renders this modal with fresh data so the row shows the
+          new name / photo immediately. */}
+      {editingLocationId && onPortfolioChanged && (
+        <PortfolioEditModal
+          portfolioId={editingLocationId}
+          userId={userId}
+          onClose={() => setEditingLocationId(null)}
+          onSaved={() => { setEditingLocationId(null); onPortfolioChanged() }}
+          onDeleted={() => {
+            // Drop the just-deleted id from selected + highlighted so
+            // the guide doesn't try to save with a dangling reference.
+            setSelectedIds(prev => prev.filter(x => x !== editingLocationId))
+            setHighlightedIds(prev => prev.filter(x => x !== editingLocationId))
+            setEditingLocationId(null)
+            onPortfolioChanged()
+          }}
+        />
+      )}
     </>
   )
 }

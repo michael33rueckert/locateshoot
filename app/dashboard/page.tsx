@@ -1288,6 +1288,7 @@ export default function DashboardPage() {
           photographerName={profile?.full_name ?? ''}
           isPro={hasPro(profile?.plan)}
           onAddLocation={() => setShowAddPortfolio(true)}
+          onPortfolioChanged={loadData}
           onClose={() => { setShowCreatePermanent(false); setPreselectAllPortfolio(false) }}
           onCreated={(link) => {
             setPermanentLinks(prev => [{ ...link, picks: [], expanded: false }, ...prev])
@@ -1306,6 +1307,7 @@ export default function DashboardPage() {
           isPro={hasPro(profile?.plan)}
           editLink={editingPermLink}
           onAddLocation={() => setShowAddPortfolio(true)}
+          onPortfolioChanged={loadData}
           onClose={() => setEditingPermLink(null)}
           onCreated={(link) => {
             setPermanentLinks(prev => prev.map(l => l.id === link.id ? { ...l, ...link } : l))

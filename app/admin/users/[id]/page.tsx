@@ -308,6 +308,7 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
           isPro={targetIsPro}
           editLink={editGuide ?? undefined}
           onAddLocation={() => { setEditGuide(null); setAddGuide(false); setAddPortfolio(true) }}
+          onPortfolioChanged={loadAll}
           onClose={() => { setAddGuide(false); setEditGuide(null) }}
           onCreated={() => { setAddGuide(false); setEditGuide(null); loadAll(); setToast(editGuide ? '✓ Guide updated' : '✓ Guide created') }}
         />

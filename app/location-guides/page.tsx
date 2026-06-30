@@ -401,6 +401,7 @@ export default function LocationGuidesPage() {
           photographerName={profile?.full_name ?? ''}
           isPro={hasPro(profile?.plan)}
           onAddLocation={() => setShowAdd(true)}
+          onPortfolioChanged={load}
           onClose={() => { setShowCreate(false); setPreselectIds([]) }}
           onCreated={() => { setShowCreate(false); setPreselectIds([]); load(); setToast('📚 Guide created!') }}
         />
@@ -415,6 +416,7 @@ export default function LocationGuidesPage() {
           isPro={hasPro(profile?.plan)}
           editLink={editing}
           onAddLocation={() => setShowAdd(true)}
+          onPortfolioChanged={load}
           onClose={() => setEditing(null)}
           onCreated={() => { setEditing(null); load(); setToast('✓ Guide updated') }}
         />
