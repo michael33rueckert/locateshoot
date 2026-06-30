@@ -210,9 +210,9 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
           {portfolio.length === 0 ? (
             <div style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)' }}>No portfolio locations yet. Use “+ Add new location” to start setting one up.</div>
           ) : (
-            {/* Horizontal "tiles" — matches /portfolio + dashboard
-                shape so the admin sees the same compact list view
-                the photographer would. */}
+            // Horizontal "tiles" — matches /portfolio + dashboard shape so
+            // the admin sees the same compact list view the photographer
+            // would.
             <div style={{ padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 10 }}>
               {portfolio.map(loc => {
                 const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
