@@ -210,20 +210,24 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
           {portfolio.length === 0 ? (
             <div style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)' }}>No portfolio locations yet. Use “+ Add new location” to start setting one up.</div>
           ) : (
-            <div style={{ padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
+            {/* Horizontal "tiles" — matches /portfolio + dashboard
+                shape so the admin sees the same compact list view
+                the photographer would. */}
+            <div style={{ padding: '1rem 1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 10 }}>
               {portfolio.map(loc => {
                 const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
                 return (
                   <div key={loc.id} onClick={() => setEditPortfolio(loc.id)}
-                    style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s' }}
+                    style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s', display: 'flex', alignItems: 'stretch', gap: 12, padding: 10 }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)' }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)' }}>
-                    <div style={{ aspectRatio: '4 / 3', background: 'var(--cream-dark)', position: 'relative' }}>
+                    <div style={{ width: 76, height: 76, flexShrink: 0, borderRadius: 6, background: 'var(--cream-dark)', position: 'relative', overflow: 'hidden' }}>
                       {loc.preview_url && <img src={thumbUrl(loc.preview_url) ?? loc.preview_url} alt="" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                     </div>
-                    <div style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>📍 {cityLine || '—'}</div>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>📍 {cityLine || '—'}</div>
+                      <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>
                     </div>
                   </div>
                 )

@@ -398,7 +398,15 @@ export default function PortfolioPage() {
                 Press and hold any card, then drag to reorder. The order here is how clients see your portfolio.
               </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+            {/* Horizontal "tiles" layout — Windows File Explorer "Tiles"
+                view inspiration: thumbnail on the left, name + city
+                middle, Share button on the right. Each card is a
+                compact ~96px-tall rectangle so the grid reads as a
+                LIST of locations rather than a wall of photo cards
+                (which is what the Location Guide cards still look
+                like). Visually inseparable shape-wise from guide
+                cards was the original UX confusion. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 10 }}>
               {filtered.map((loc, idx) => {
                 const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
                 const noPhotos = loc.photo_count === 0
@@ -423,9 +431,8 @@ export default function PortfolioPage() {
                       opacity: isDragging ? 0.4 : (inactive ? 0.55 : 1),
                       filter: inactive ? 'saturate(0.6)' : undefined,
                       position: 'relative',
-                      // pan-y pre-drag lets the user scroll the page by
-                      // dragging a card up/down; the hook flips this to
-                      // 'none' the instant long-press commits.
+                      display: 'flex', alignItems: 'stretch', gap: 12,
+                      padding: 10,
                       touchAction: canReorder ? 'pan-y' : 'auto',
                       userSelect: 'none',
                       WebkitUserSelect: 'none',
@@ -433,17 +440,16 @@ export default function PortfolioPage() {
                     }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,22,18,.08)' }}
                     onMouseLeave={e => { if (!reorder.draggingId) { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' } }}>
-                    <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ aspectRatio: '4 / 3', position: 'relative', overflow: 'hidden' }}>
+                    {/* Thumbnail — square on the left. Compact ~80x80
+                        so the whole tile stays short. Badges (hidden /
+                        needs photos / secret) overlay the thumb at
+                        smaller sizes than the previous full-bleed
+                        layout used. */}
+                    <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ width: 80, height: 80, flexShrink: 0, borderRadius: 6, position: 'relative', overflow: 'hidden' }}>
                       {loc.preview_url && <img
                         src={thumbUrl(loc.preview_url) ?? loc.preview_url}
                         alt=""
                         decoding="async"
-                        // Supabase's /render/image/ endpoint occasionally
-                        // rate-limits or cold-starts. When that happens the
-                        // tile shows just the bg-* gradient because the
-                        // <img> never paints. Fall back to the original
-                        // (non-resized) URL on error so the photo still
-                        // appears.
                         onError={e => {
                           if (e.currentTarget.src !== loc.preview_url) {
                             e.currentTarget.src = loc.preview_url!
@@ -452,47 +458,45 @@ export default function PortfolioPage() {
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                       />}
                       {inactive && (
-                        <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(181,75,42,.95)', color: 'white', fontSize: 10, fontWeight: 600, zIndex: 1 }}>
-                          🔒 Hidden from clients
-                        </div>
+                        <div title="Hidden from clients (Free-plan 5-location cap)" style={{ position: 'absolute', top: 4, right: 4, padding: '2px 6px', borderRadius: 4, background: 'rgba(181,75,42,.95)', color: 'white', fontSize: 9, fontWeight: 700, zIndex: 1 }}>🔒</div>
                       )}
                       {noPhotos && !inactive && (
-                        <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(196,146,42,.95)', color: 'white', fontSize: 10, fontWeight: 600 }}>
-                          ⚠ Add your photos
-                        </div>
+                        <div title="Add your photos" style={{ position: 'absolute', top: 4, right: 4, padding: '2px 6px', borderRadius: 4, background: 'rgba(196,146,42,.95)', color: 'white', fontSize: 9, fontWeight: 700 }}>⚠</div>
                       )}
-                      {loc.is_secret && <div style={{ position: 'absolute', top: 8, left: 8, padding: '3px 10px', borderRadius: 999, background: 'rgba(124,92,191,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>🤫 Secret</div>}
+                      {loc.is_secret && <div title="Secret" style={{ position: 'absolute', top: 4, left: 4, padding: '2px 6px', borderRadius: 4, background: 'rgba(124,92,191,.9)', color: 'white', fontSize: 9, fontWeight: 700 }}>🤫</div>}
                     </div>
-                    <div style={{ padding: '12px 14px' }}>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 8 }}>📍 {cityLine || '—'}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <button
-                          onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
-                          disabled={copyLinkBusyId === loc.id || inactive}
-                          title={inactive ? 'Re-subscribe to share this location' : 'Share — opens the OS share sheet, or copies the URL'}
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: 4,
-                            border: 'none',
-                            background: inactive
-                              ? 'var(--cream-dark)'
-                              : (copyLinkDoneId === loc.id ? 'var(--sage)' : 'var(--cream)'),
-                            color: inactive ? 'var(--ink-soft)' : (copyLinkDoneId === loc.id ? 'white' : 'var(--ink)'),
-                            fontSize: 11,
-                            fontWeight: 600,
-                            cursor: inactive || copyLinkBusyId === loc.id ? 'not-allowed' : 'pointer',
-                            fontFamily: 'inherit',
-                            whiteSpace: 'nowrap',
-                            transition: 'all .15s',
-                          }}
-                        >
-                          {copyLinkBusyId === loc.id ? '…' : (copyLinkDoneId === loc.id ? '✓ Link copied!' : '📤 Share')}
-                        </button>
-                        <div style={{ fontSize: 11, color: noPhotos ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: noPhotos ? 600 : 300 }}>
-                          {noPhotos ? '→ Add photos' : 'Tap to edit →'}
-                        </div>
+                    {/* Middle — name + city + small "tap to edit" hint */}
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>📍 {cityLine || '—'}</div>
+                      <div style={{ fontSize: 10, color: noPhotos ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: noPhotos ? 600 : 300 }}>
+                        {noPhotos ? '→ Add photos' : 'Tap to edit →'}
                       </div>
+                    </div>
+                    {/* Right — Share button vertically centered */}
+                    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      <button
+                        onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
+                        disabled={copyLinkBusyId === loc.id || inactive}
+                        title={inactive ? 'Re-subscribe to share this location' : 'Share — opens the OS share sheet, or copies the URL'}
+                        style={{
+                          padding: '7px 12px',
+                          borderRadius: 4,
+                          border: 'none',
+                          background: inactive
+                            ? 'var(--cream-dark)'
+                            : (copyLinkDoneId === loc.id ? 'var(--sage)' : 'var(--cream)'),
+                          color: inactive ? 'var(--ink-soft)' : (copyLinkDoneId === loc.id ? 'white' : 'var(--ink)'),
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: inactive || copyLinkBusyId === loc.id ? 'not-allowed' : 'pointer',
+                          fontFamily: 'inherit',
+                          whiteSpace: 'nowrap',
+                          transition: 'all .15s',
+                        }}
+                      >
+                        {copyLinkBusyId === loc.id ? '…' : (copyLinkDoneId === loc.id ? '✓' : '📤 Share')}
+                      </button>
                     </div>
                   </div>
                 )

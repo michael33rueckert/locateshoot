@@ -503,7 +503,12 @@ export default function CreateLocationGuideModal({
                 <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6, fontWeight: 300, lineHeight: 1.5 }}>
                   Tap the <span style={{ color: 'var(--gold)' }}>★</span> to mark up to {MAX_HIGHLIGHTS} as your <strong style={{ fontWeight: 500 }}>recommended</strong> picks — clients see those highlighted at the top of the list.
                 </div>
-                <div style={{ border: '1px solid var(--cream-dark)', borderRadius: 8, overflow: 'hidden' }}>
+                {/* Gold-bordered container so the rows inside read at a
+                    glance as "currently in this guide," visually
+                    distinct from the "Add more from your portfolio"
+                    list below (which uses the cream-dark border). The
+                    subtle gold tint inside reinforces the same. */}
+                <div style={{ border: '2px solid var(--gold)', borderRadius: 8, overflow: 'hidden', background: 'rgba(196,146,42,.04)', boxShadow: '0 1px 6px rgba(196,146,42,.08)' }}>
                   {selectedIds.map((id, i) => {
                     const loc = portfolio.find(p => p.id === id)
                     if (!loc) return null
@@ -526,8 +531,8 @@ export default function CreateLocationGuideModal({
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10,
                           padding: '9px 14px',
-                          borderBottom: i < selectedIds.length - 1 ? '1px solid var(--cream-dark)' : 'none',
-                          background: isOver ? 'rgba(196,146,42,.12)' : isDragging ? 'rgba(196,146,42,.06)' : 'white',
+                          borderBottom: i < selectedIds.length - 1 ? '1px solid rgba(196,146,42,.18)' : 'none',
+                          background: isOver ? 'rgba(196,146,42,.18)' : isDragging ? 'rgba(196,146,42,.1)' : 'transparent',
                           opacity: isDragging ? 0.5 : 1,
                           userSelect: 'none',
                           WebkitUserSelect: 'none',

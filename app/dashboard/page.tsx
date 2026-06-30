@@ -864,29 +864,25 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div style={{ position: 'relative' }}>
-                  <div style={{ padding: '1rem 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
+                  {/* Horizontal "tiles" layout — see /portfolio for the
+                      shape rationale. Compact rectangle (~96px tall)
+                      with thumb on left, name + city middle, share
+                      button right. Distinct from the guide cards
+                      above which are still 4:3 photo cards. */}
+                  <div style={{ padding: '1rem 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 10 }}>
                     {portfolioLocs.slice(0, 6).map((loc, idx) => {
                       const cityLine = loc.city && loc.state ? `${loc.city}, ${loc.state}` : (loc.city ?? loc.state ?? '')
                       const noPhotos = loc.photo_count === 0
-                      // Free plan: positions beyond the 5-location cap
-                      // are still editable but won't reach clients —
-                      // gray-out + badge mirrors the /portfolio page.
                       const inactive = !hasStarter(profile?.plan) && idx >= freePortfolioLocationCap()
                       return (
-                        <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s', opacity: inactive ? 0.55 : 1, filter: inactive ? 'saturate(0.6)' : undefined }}
+                        <div key={loc.id} onClick={() => setEditingPortfolioId(loc.id)} style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'white', cursor: 'pointer', transition: 'all .15s', opacity: inactive ? 0.55 : 1, filter: inactive ? 'saturate(0.6)' : undefined, display: 'flex', alignItems: 'stretch', gap: 12, padding: 10 }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,22,18,.08)' }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.boxShadow = 'none' }}>
-                          <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ aspectRatio: '4 / 3', position: 'relative', overflow: 'hidden' }}>
+                          <div className={BG_CYCLE[idx % BG_CYCLE.length]} style={{ width: 76, height: 76, flexShrink: 0, borderRadius: 6, position: 'relative', overflow: 'hidden' }}>
                             {loc.preview_url && <img
                               src={thumbUrl(loc.preview_url) ?? loc.preview_url}
                               alt=""
                               decoding="async"
-                              // Supabase's /render/image/ endpoint occasionally
-                              // rate-limits or cold-starts, leaving the tile
-                              // showing the colored bg-* gradient with no
-                              // image. Fall back to the original (non-resized)
-                              // file so the photo still appears even if it
-                              // costs a slightly bigger download.
                               onError={e => {
                                 if (e.currentTarget.src !== loc.preview_url) {
                                   e.currentTarget.src = loc.preview_url!
@@ -895,46 +891,42 @@ export default function DashboardPage() {
                               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                             />}
                             {inactive && (
-                              <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(181,75,42,.95)', color: 'white', fontSize: 10, fontWeight: 600, zIndex: 1 }}>
-                                🔒 Hidden
-                              </div>
+                              <div title="Hidden from clients" style={{ position: 'absolute', top: 4, right: 4, padding: '2px 6px', borderRadius: 4, background: 'rgba(181,75,42,.95)', color: 'white', fontSize: 9, fontWeight: 700, zIndex: 1 }}>🔒</div>
                             )}
                             {noPhotos && !inactive && (
-                              <div style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 20, background: 'rgba(196,146,42,.9)', color: 'white', fontSize: 10, fontWeight: 600 }}>
-                                ⚠ Add your photos
-                              </div>
+                              <div title="Add your photos" style={{ position: 'absolute', top: 4, right: 4, padding: '2px 6px', borderRadius: 4, background: 'rgba(196,146,42,.95)', color: 'white', fontSize: 9, fontWeight: 700 }}>⚠</div>
                             )}
                           </div>
-                          <div style={{ padding: '10px 12px' }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
-                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 6 }}>📍 {cityLine || '—'}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                              <button
-                                onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
-                                disabled={copyingPortfolioLocId === loc.id || inactive}
-                                title={inactive ? 'Re-subscribe to share this location' : 'Share — opens the OS share sheet, or copies the URL'}
-                                style={{
-                                  padding: '5px 9px',
-                                  borderRadius: 4,
-                                  border: 'none',
-                                  background: inactive
-                                    ? 'var(--cream-dark)'
-                                    : (copiedPortfolioLocId === loc.id ? 'var(--sage)' : 'var(--cream)'),
-                                  color: inactive ? 'var(--ink-soft)' : (copiedPortfolioLocId === loc.id ? 'white' : 'var(--ink)'),
-                                  fontSize: 10,
-                                  fontWeight: 600,
-                                  cursor: inactive || copyingPortfolioLocId === loc.id ? 'not-allowed' : 'pointer',
-                                  fontFamily: 'inherit',
-                                  whiteSpace: 'nowrap',
-                                  transition: 'all .15s',
-                                }}
-                              >
-                                {copyingPortfolioLocId === loc.id ? '…' : (copiedPortfolioLocId === loc.id ? '✓ Link copied!' : '📤 Share')}
-                              </button>
-                              {noPhotos
-                                ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.4 }}>→ Add photos</div>
-                                : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
-                            </div>
+                          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 3 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--ink-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>📍 {cityLine || '—'}</div>
+                            {noPhotos
+                              ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600 }}>→ Add photos</div>
+                              : <div style={{ fontSize: 10, color: 'var(--ink-soft)' }}>Tap to edit →</div>}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
+                              disabled={copyingPortfolioLocId === loc.id || inactive}
+                              title={inactive ? 'Re-subscribe to share this location' : 'Share — opens the OS share sheet, or copies the URL'}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 4,
+                                border: 'none',
+                                background: inactive
+                                  ? 'var(--cream-dark)'
+                                  : (copiedPortfolioLocId === loc.id ? 'var(--sage)' : 'var(--cream)'),
+                                color: inactive ? 'var(--ink-soft)' : (copiedPortfolioLocId === loc.id ? 'white' : 'var(--ink)'),
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: inactive || copyingPortfolioLocId === loc.id ? 'not-allowed' : 'pointer',
+                                fontFamily: 'inherit',
+                                whiteSpace: 'nowrap',
+                                transition: 'all .15s',
+                              }}
+                            >
+                              {copyingPortfolioLocId === loc.id ? '…' : (copiedPortfolioLocId === loc.id ? '✓' : '📤 Share')}
+                            </button>
                           </div>
                         </div>
                       )
