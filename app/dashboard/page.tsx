@@ -14,6 +14,7 @@ import UpgradePrompt from '@/components/UpgradePrompt'
 import { hasStarter, hasPro, normalizePlan, freePortfolioLocationCap } from '@/lib/plan'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio as shareFullPortfolioFn, shareSingleLocation } from '@/lib/portfolio-share'
+import { shareOrCopy } from '@/lib/share'
 import { thumbUrl } from '@/lib/image'
 
 interface Profile           { id: string; full_name: string | null; email: string | null; plan: string | null; custom_domain: string | null; custom_domain_verified: boolean; preferences: Record<string, any> | null }
@@ -437,11 +438,16 @@ export default function DashboardPage() {
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
 
-  function copyGuideUrl(slug: string, id: string) {
+  async function copyGuideUrl(slug: string, id: string, title: string) {
     const url = buildShareUrl(slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
-    navigator.clipboard?.writeText(url).catch(() => {})
-    setCopiedGuideId(id); setToast('📋 URL copied!')
-    setTimeout(() => setCopiedGuideId(null), 2000)
+    const r = await shareOrCopy({ url, title })
+    if (r.method === 'clipboard') {
+      setCopiedGuideId(id); setToast('📋 Link copied!')
+      setTimeout(() => setCopiedGuideId(null), 2000)
+    } else if (r.method === 'failed') {
+      setToast('⚠ Could not share — please copy manually')
+    }
+    // method === 'native': share sheet provides feedback, no toast.
   }
   function previewGuide(slug: string) {
     const url = buildShareUrl(slug, { customDomain: profile?.custom_domain, customDomainVerified: profile?.custom_domain_verified })
@@ -561,9 +567,15 @@ export default function DashboardPage() {
     )
     setCopyingPortfolioLocId(null)
     if (!r.ok) { setToast(`⚠ ${r.error}`); return }
-    setCopiedPortfolioLocId(loc.id)
-    setToast('📋 Link copied!')
-    setTimeout(() => setCopiedPortfolioLocId(curr => curr === loc.id ? null : curr), 1800)
+    const share = await shareOrCopy({ url: r.url, title: loc.name })
+    if (share.method === 'clipboard') {
+      setCopiedPortfolioLocId(loc.id)
+      setToast('📋 Link copied!')
+      setTimeout(() => setCopiedPortfolioLocId(curr => curr === loc.id ? null : curr), 1800)
+    } else if (share.method === 'failed') {
+      setToast('⚠ Could not share — please copy manually')
+    }
+    // native share sheet → no toast.
   }
 
   async function ensureFullPortfolioPermLink(): Promise<PermanentLink | null> {
@@ -587,7 +599,7 @@ export default function DashboardPage() {
   async function copyFullPortfolio() {
     const g = await ensureFullPortfolioPermLink()
     if (!g) return
-    copyGuideUrl(g.slug, g.id)
+    copyGuideUrl(g.slug, g.id, g.session_name || 'My Portfolio')
   }
   async function editFullPortfolio() {
     const g = await ensureFullPortfolioPermLink()
@@ -770,7 +782,7 @@ export default function DashboardPage() {
                                   ? 'idle'
                                   : (deleteGuideId === card.link!.id ? 'confirming' : 'idle')
                               }
-                              onCopy={card.isPortfolio ? copyFullPortfolio : () => copyGuideUrl(card.link!.slug, card.link!.id)}
+                              onCopy={card.isPortfolio ? copyFullPortfolio : () => copyGuideUrl(card.link!.slug, card.link!.id, card.link!.session_name || 'Location Guide')}
                               onEdit={card.isPortfolio ? editFullPortfolio : () => setEditingPermLink(card.link!)}
                               onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
                               onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}
@@ -900,7 +912,7 @@ export default function DashboardPage() {
                               <button
                                 onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
                                 disabled={copyingPortfolioLocId === loc.id || inactive}
-                                title={inactive ? 'Re-subscribe to share this location' : 'Copy a single-location share link'}
+                                title={inactive ? 'Re-subscribe to share this location' : 'Share — opens the OS share sheet, or copies the URL'}
                                 style={{
                                   padding: '5px 9px',
                                   borderRadius: 4,
@@ -917,7 +929,7 @@ export default function DashboardPage() {
                                   transition: 'all .15s',
                                 }}
                               >
-                                {copyingPortfolioLocId === loc.id ? '…' : (copiedPortfolioLocId === loc.id ? '✓ Copied!' : '📋 Copy link')}
+                                {copyingPortfolioLocId === loc.id ? '…' : (copiedPortfolioLocId === loc.id ? '✓ Link copied!' : '📤 Share')}
                               </button>
                               {noPhotos
                                 ? <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 600, lineHeight: 1.4 }}>→ Add photos</div>

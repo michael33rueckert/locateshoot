@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio } from '@/lib/portfolio-share'
 import { hasStarter, hasPro } from '@/lib/plan'
+import { shareOrCopy } from '@/lib/share'
 
 const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 
@@ -180,11 +181,18 @@ export default function LocationGuidesPage() {
     setToast('Guide deleted')
   }
 
-  function copyLink(slug: string, id: string) {
+  async function copyLink(slug: string, id: string, title: string) {
     const url = buildShareUrl(slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
-    navigator.clipboard?.writeText(url).catch(() => {})
-    setCopiedId(id); setToast('📋 Link copied!')
-    setTimeout(() => setCopiedId(null), 2000)
+    const r = await shareOrCopy({ url, title })
+    if (r.method === 'clipboard') {
+      // Native share unavailable — show the same toast + button feedback we
+      // had before so the user knows the URL is on their clipboard.
+      setCopiedId(id); setToast('📋 Link copied!')
+      setTimeout(() => setCopiedId(null), 2000)
+    } else if (r.method === 'failed') {
+      setToast('⚠ Could not share — please copy manually')
+    }
+    // method === 'native': the OS share sheet IS the feedback. No toast.
   }
   function previewGuide(slug: string) {
     const url = buildShareUrl(slug, { customDomain: profile?.custom_domain ?? null, customDomainVerified: profile?.custom_domain_verified ?? false })
@@ -230,7 +238,7 @@ export default function LocationGuidesPage() {
   async function copyFullPortfolio() {
     const g = await ensureFullPortfolioGuide()
     if (!g) return
-    copyLink(g.slug, g.id)
+    copyLink(g.slug, g.id, g.session_name || 'My Portfolio')
   }
   async function editFullPortfolio() {
     const g = await ensureFullPortfolioGuide()
@@ -373,7 +381,7 @@ export default function LocationGuidesPage() {
                       ? 'idle'
                       : (deleteId === card.link!.id ? 'confirming' : 'idle')
                   }
-                  onCopy={card.isPortfolio ? copyFullPortfolio : () => copyLink(card.link!.slug, card.link!.id)}
+                  onCopy={card.isPortfolio ? copyFullPortfolio : () => copyLink(card.link!.slug, card.link!.id, card.link!.session_name || 'Location Guide')}
                   onEdit={card.isPortfolio ? editFullPortfolio : () => setEditing(card.link!)}
                   onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
                   onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}

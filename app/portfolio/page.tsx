@@ -11,6 +11,7 @@ import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
 import { hasStarter, freePortfolioLocationCap } from '@/lib/plan'
 import { shareSingleLocation } from '@/lib/portfolio-share'
+import { shareOrCopy } from '@/lib/share'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
 // that the Dashboard's portfolio section does, so edits in either place stay in
@@ -75,9 +76,15 @@ export default function PortfolioPage() {
     )
     setCopyLinkBusyId(null)
     if (!r.ok) { setToast(`⚠ ${r.error}`); return }
-    setCopyLinkDoneId(loc.id)
-    setToast('📋 Link copied!')
-    setTimeout(() => setCopyLinkDoneId(curr => curr === loc.id ? null : curr), 1800)
+    const share = await shareOrCopy({ url: r.url, title: loc.name })
+    if (share.method === 'clipboard') {
+      setCopyLinkDoneId(loc.id)
+      setToast('📋 Link copied!')
+      setTimeout(() => setCopyLinkDoneId(curr => curr === loc.id ? null : curr), 1800)
+    } else if (share.method === 'failed') {
+      setToast('⚠ Could not share — please copy manually')
+    }
+    // native share sheet → no toast; the sheet itself is the feedback.
   }
   const [toast,    setToast]    = useState<string | null>(null)
 
@@ -463,7 +470,7 @@ export default function PortfolioPage() {
                         <button
                           onClick={e => { e.stopPropagation(); copySingleLocationLink({ id: loc.id, name: loc.name }) }}
                           disabled={copyLinkBusyId === loc.id || inactive}
-                          title={inactive ? 'Re-subscribe to share this location' : 'Copy a single-location share link'}
+                          title={inactive ? 'Re-subscribe to share this location' : 'Share — opens the OS share sheet, or copies the URL'}
                           style={{
                             padding: '6px 10px',
                             borderRadius: 4,
@@ -480,7 +487,7 @@ export default function PortfolioPage() {
                             transition: 'all .15s',
                           }}
                         >
-                          {copyLinkBusyId === loc.id ? '…' : (copyLinkDoneId === loc.id ? '✓ Copied!' : '📋 Copy link')}
+                          {copyLinkBusyId === loc.id ? '…' : (copyLinkDoneId === loc.id ? '✓ Link copied!' : '📤 Share')}
                         </button>
                         <div style={{ fontSize: 11, color: noPhotos ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: noPhotos ? 600 : 300 }}>
                           {noPhotos ? '→ Add photos' : 'Tap to edit →'}

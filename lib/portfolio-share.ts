@@ -25,7 +25,9 @@ function urlFor(slug: string, profile: ProfileInfo): string {
 
 /**
  * Reuse the photographer's existing single-pick full-portfolio link if there is
- * one; otherwise create it. Copies the URL to the clipboard on success.
+ * one; otherwise create it. Returns the URL — the caller decides whether to
+ * pass it through navigator.share (OS share sheet) or write to clipboard via
+ * lib/share.ts → shareOrCopy().
  */
 export async function shareFullPortfolio(profile: ProfileInfo): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   // Look for an existing max_picks <= 1 full-portfolio link.
@@ -38,7 +40,6 @@ export async function shareFullPortfolio(profile: ProfileInfo): Promise<{ ok: tr
   const match = (existing ?? []).find((l: any) => (l.max_picks ?? 1) <= 1)
   if (match) {
     const url = urlFor(match.slug, profile)
-    try { await navigator.clipboard?.writeText(url) } catch { /* clipboard may be blocked */ }
     return { ok: true, url }
   }
 
@@ -60,7 +61,6 @@ export async function shareFullPortfolio(profile: ProfileInfo): Promise<{ ok: tr
   if (error || !inserted) return { ok: false, error: error?.message ?? 'Could not create portfolio link' }
 
   const url = urlFor(inserted.slug, profile)
-  try { await navigator.clipboard?.writeText(url) } catch { /* noop */ }
   return { ok: true, url }
 }
 
@@ -100,7 +100,6 @@ export async function shareSingleLocation(
 
   if (existingSlug) {
     const url = urlFor(existingSlug, profile)
-    try { await navigator.clipboard?.writeText(url) } catch { /* clipboard may be blocked */ }
     return { ok: true, url }
   }
 
@@ -143,7 +142,6 @@ export async function shareSingleLocation(
   }
 
   const url = urlFor(inserted.slug, profile)
-  try { await navigator.clipboard?.writeText(url) } catch { /* noop */ }
   return { ok: true, url }
 }
 

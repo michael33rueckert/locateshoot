@@ -201,7 +201,7 @@ export default function LocationGuideCard({
           <button
             onClick={inactive ? undefined : onCopy}
             disabled={inactive}
-            title={inactive ? 'Re-subscribe to share this guide' : undefined}
+            title={inactive ? 'Re-subscribe to share this guide' : 'Share — opens the OS share sheet, or copies the URL'}
             style={{
               flex: 1,
               minWidth: 110,
@@ -218,7 +218,7 @@ export default function LocationGuideCard({
               transition: 'all .15s',
             }}
           >
-            {inactive ? '🔒 Paused' : (copyState === 'copied' ? '✓ Copied!' : '📋 Copy URL')}
+            {inactive ? '🔒 Paused' : (copyState === 'copied' ? '✓ Link copied!' : '📤 Share')}
           </button>
           {onPreview && !inactive && (
             <button onClick={onPreview} style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid var(--cream-dark)', background: 'white', color: 'var(--ink)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
