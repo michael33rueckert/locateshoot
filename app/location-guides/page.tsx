@@ -8,6 +8,8 @@ import LocationGuideCard from '@/components/LocationGuideCard'
 import GuidePreviewModal from '@/components/GuidePreviewModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import UpgradePrompt from '@/components/UpgradePrompt'
+import PortfolioGuideBanner from '@/components/PortfolioGuideBanner'
+import DemoGuideCards, { type DemoGuideTemplate } from '@/components/DemoGuideCards'
 import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
 import { shareFullPortfolio } from '@/lib/portfolio-share'
@@ -56,6 +58,10 @@ export default function LocationGuidesPage() {
   // create modal. Same gate as the dashboard's Location Guides
   // section.
   const [showQuotaUpgrade, setShowQuotaUpgrade] = useState(false)
+  // When set, opens CreateLocationGuideModal pre-filled with this
+  // demo template's session_name + message. Clicking a demo card sets
+  // this; onClose / onCreated clears it.
+  const [demoPrefill, setDemoPrefill] = useState<DemoGuideTemplate | null>(null)
 
   useEffect(() => {
     if (!toast) return
@@ -319,77 +325,70 @@ export default function LocationGuidesPage() {
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>Loading your guides…</div>
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           </div>
-        ) : (() => {
-          // Single grid that includes the always-on portfolio guide first,
-          // followed by every custom guide. Search filters across both —
-          // hide the portfolio card if its title doesn't match the query.
-          const portfolioCardData = {
-            id:                fullPortfolioGuide?.id ?? 'full-portfolio',
-            session_name:      fullPortfolioGuide?.session_name ?? 'My Portfolio',
-            slug:              fullPortfolioGuide?.slug ?? '',
-            created_at:        fullPortfolioGuide?.created_at ?? new Date().toISOString(),
-            is_full_portfolio: true,
-            expires_at:        null as string | null,
-            expire_on_submit:  false,
-            cover_photo_url:   fullPortfolioGuide?.cover_photo_url ?? null,
-            pick_count:        fullPortfolioGuide?.pick_count ?? 0,
-            location_count:    portfolio.length,
-          }
-          const portfolioMatches = !q || portfolioCardData.session_name.toLowerCase().includes(q)
-          const cards = [
-            ...(portfolioMatches ? [{ isPortfolio: true as const, data: portfolioCardData, link: fullPortfolioGuide }] : []),
-            ...filtered.map(g => ({ isPortfolio: false as const, data: {
-              id:                g.id,
-              session_name:      g.session_name,
-              slug:              g.slug,
-              created_at:        g.created_at,
-              is_full_portfolio: g.is_full_portfolio,
-              expires_at:        g.expires_at,
-              expire_on_submit:  g.expire_on_submit,
-              cover_photo_url:   g.cover_photo_url,
-              pick_count:        g.pick_count,
-              location_count:    (g.portfolio_location_ids?.length ?? 0) + (g.location_ids?.length ?? 0),
-            }, link: g })),
-          ]
+        ) : (
+          <>
+            {/* Portfolio guide banner — always visible, styled as its
+                own thing so it doesn't look like "just another guide"
+                in the grid below. Search still applies to the custom
+                guides only; the banner stays put regardless of
+                search since it's the one guide the photographer
+                always has. */}
+            <PortfolioGuideBanner
+              photographerName={profile?.full_name ?? ''}
+              locationCount={portfolio.length}
+              coverPhotoUrl={fullPortfolioGuide?.cover_photo_url ?? null}
+              hasLink={!!fullPortfolioGuide}
+              onShare={copyFullPortfolio}
+              onEdit={editFullPortfolio}
+              onPreview={previewFullPortfolio}
+              pickCount={fullPortfolioGuide?.pick_count ?? 0}
+              copyState={fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle'}
+            />
 
-          if (cards.length === 0) {
-            return (
+            {/* Custom guides — grid below the banner. Portfolio guide
+                filtered out (banner replaces it). */}
+            {filtered.length === 0 && !q ? (
+              // No custom guides + no active search → new user. Show
+              // demo cards to explain what a custom guide IS and let
+              // them create their first one with a click.
+              <DemoGuideCards onPickTemplate={t => { setDemoPrefill(t); setShowCreate(true) }} />
+            ) : filtered.length === 0 && q ? (
               <div style={{ background: 'white', borderRadius: 12, border: '1px solid var(--cream-dark)', padding: '2.5rem 1.5rem', textAlign: 'center' }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>No matches</div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300 }}>No guide name contains &quot;{search}&quot;.</div>
               </div>
-            )
-          }
-
-          return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
-              {cards.map((card, i) => (
-                <LocationGuideCard
-                  key={card.data.id}
-                  bgClass={BG_CYCLE[i % BG_CYCLE.length]}
-                  guide={card.data}
-                  featured={card.isPortfolio}
-                  inactive={!card.isPortfolio && !hasStarter(profile?.plan)}
-                  copyState={
-                    card.isPortfolio
-                      ? (fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle')
-                      : (copiedId === card.link!.id ? 'copied' : 'idle')
-                  }
-                  deleteState={
-                    card.isPortfolio
-                      ? 'idle'
-                      : (deleteId === card.link!.id ? 'confirming' : 'idle')
-                  }
-                  onCopy={card.isPortfolio ? copyFullPortfolio : () => copyLink(card.link!.slug, card.link!.id, card.link!.session_name || 'Location Guide')}
-                  onEdit={card.isPortfolio ? editFullPortfolio : () => setEditing(card.link!)}
-                  onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
-                  onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}
-                />
-              ))}
-            </div>
-          )
-        })()}
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+                {filtered.map((g, i) => (
+                  <LocationGuideCard
+                    key={g.id}
+                    bgClass={BG_CYCLE[i % BG_CYCLE.length]}
+                    guide={{
+                      id:                g.id,
+                      session_name:      g.session_name,
+                      slug:              g.slug,
+                      created_at:        g.created_at,
+                      is_full_portfolio: g.is_full_portfolio,
+                      expires_at:        g.expires_at,
+                      expire_on_submit:  g.expire_on_submit,
+                      cover_photo_url:   g.cover_photo_url,
+                      pick_count:        g.pick_count,
+                      location_count:    (g.portfolio_location_ids?.length ?? 0) + (g.location_ids?.length ?? 0),
+                    }}
+                    inactive={!hasStarter(profile?.plan)}
+                    copyState={copiedId === g.id ? 'copied' : 'idle'}
+                    deleteState={deleteId === g.id ? 'confirming' : 'idle'}
+                    onCopy={() => copyLink(g.slug, g.id, g.session_name || 'Location Guide')}
+                    onEdit={() => setEditing(g)}
+                    onDelete={() => deleteGuide(g.id)}
+                    onPreview={() => previewGuide(g.slug)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {showCreate && (
@@ -400,10 +399,12 @@ export default function LocationGuidesPage() {
           userId={profile?.id ?? ''}
           photographerName={profile?.full_name ?? ''}
           isPro={hasPro(profile?.plan)}
+          initialSessionName={demoPrefill?.session_name}
+          initialMessage={demoPrefill?.message}
           onAddLocation={() => setShowAdd(true)}
           onPortfolioChanged={load}
-          onClose={() => { setShowCreate(false); setPreselectIds([]) }}
-          onCreated={() => { setShowCreate(false); setPreselectIds([]); load(); setToast('📚 Guide created!') }}
+          onClose={() => { setShowCreate(false); setPreselectIds([]); setDemoPrefill(null) }}
+          onCreated={() => { setShowCreate(false); setPreselectIds([]); setDemoPrefill(null); load(); setToast('📚 Guide created!') }}
         />
       )}
 

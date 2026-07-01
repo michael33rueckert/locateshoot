@@ -68,6 +68,8 @@ export default function CreateLocationGuideModal({
   onCreated,
   onAddLocation,
   onPortfolioChanged,
+  initialSessionName,
+  initialMessage,
 }: {
   portfolio:         PortfolioLocationLite[]
   preselectAll:      boolean
@@ -87,6 +89,12 @@ export default function CreateLocationGuideModal({
    *  the row reflects the change (name, photo, etc.) immediately.
    *  Without this prop the edit button is hidden. */
   onPortfolioChanged?: () => void
+  /** Optional pre-filled name / message. Used by the demo-guide
+   *  cards on empty-guides state so a new user can save their first
+   *  guide with minimal typing. Ignored when editLink is set (edit
+   *  mode always loads existing values). */
+  initialSessionName?: string
+  initialMessage?:     string
 }) {
   const isEdit = !!editLink
   // Full-portfolio guides ("My Portfolio" / Share all) auto-sync against
@@ -94,7 +102,7 @@ export default function CreateLocationGuideModal({
   // to pick, no expiration to set. We still let the user edit name,
   // message, cover photo, and multi-pick options.
   const isFullPortfolio = !!editLink?.is_full_portfolio
-  const [sessionName,    setSessionName]    = useState(editLink?.session_name ?? (preselectAll ? 'My portfolio' : ''))
+  const [sessionName,    setSessionName]    = useState(editLink?.session_name ?? (preselectAll ? 'My portfolio' : (initialSessionName ?? '')))
   const [selectedIds,    setSelectedIds]    = useState<string[]>(
     isFullPortfolio
       ? portfolio.map(p => p.id)
@@ -119,7 +127,7 @@ export default function CreateLocationGuideModal({
   // missing in Supabase — surfaces a notice to the user so they know
   // their stars weren't actually persisted.
   const [highlightsDropped, setHighlightsDropped] = useState(false)
-  const [message,        setMessage]        = useState('')
+  const [message,        setMessage]        = useState(editLink ? '' : (initialMessage ?? ''))
   const [expirationMode, setExpirationMode] = useState<ExpirationMode>('never')
   const [expiresDate,    setExpiresDate]    = useState('') // yyyy-mm-dd
   const [saving,         setSaving]         = useState(false)

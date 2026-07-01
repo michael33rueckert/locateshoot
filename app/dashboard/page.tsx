@@ -8,6 +8,8 @@ import AppNav from '@/components/AppNav'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import CreateLocationGuideModal from '@/components/CreateLocationGuideModal'
+import PortfolioGuideBanner from '@/components/PortfolioGuideBanner'
+import DemoGuideCards, { type DemoGuideTemplate } from '@/components/DemoGuideCards'
 import LocationGuideCard from '@/components/LocationGuideCard'
 import GuidePreviewModal from '@/components/GuidePreviewModal'
 import UpgradePrompt from '@/components/UpgradePrompt'
@@ -96,6 +98,9 @@ export default function DashboardPage() {
   // Per-location quick-share state in the portfolio preview grid.
   const [copyingPortfolioLocId, setCopyingPortfolioLocId] = useState<string | null>(null)
   const [copiedPortfolioLocId,  setCopiedPortfolioLocId]  = useState<string | null>(null)
+  // Demo-guide template picked from the empty-state cards. Prefills
+  // the create modal's session_name + message.
+  const [demoPrefill,         setDemoPrefill]           = useState<DemoGuideTemplate | null>(null)
   const [deleteGuideId,       setDeleteGuideId]        = useState<string | null>(null)
   // Two-step confirmation for the Client Favorites + Client Selections
   // Dismiss buttons — first click arms the row (button label flips to
@@ -713,24 +718,7 @@ export default function DashboardPage() {
               )}
 
               {(() => {
-                // Synthesize a card record for the "entire portfolio" guide
-                // even when the underlying share_link row hasn't been
-                // materialized yet. Lazy-create runs on first Copy / Edit /
-                // Preview action.
-                const portfolioGuideCard = {
-                  id:                fullPortfolioPermLink?.id ?? 'full-portfolio',
-                  session_name:      fullPortfolioPermLink?.session_name ?? 'My Portfolio',
-                  slug:              fullPortfolioPermLink?.slug ?? '',
-                  created_at:        fullPortfolioPermLink?.created_at ?? new Date().toISOString(),
-                  is_full_portfolio: true,
-                  expires_at:        null,
-                  expire_on_submit:  false,
-                  cover_photo_url:   fullPortfolioPermLink?.cover_photo_url ?? null,
-                  pick_count:        fullPortfolioPermLink?.picks.length ?? 0,
-                  location_count:    portfolioLocs.length,
-                }
                 const customGuideCards = customGuides.map(link => ({
-                  isPortfolio: false as const,
                   link,
                   data: {
                     id:                link.id,
@@ -745,72 +733,72 @@ export default function DashboardPage() {
                     location_count:    (link.portfolio_location_ids?.length ?? 0) + (link.location_ids?.length ?? 0),
                   },
                 }))
-                const allCards = [
-                  { isPortfolio: true as const, link: fullPortfolioPermLink, data: portfolioGuideCard },
-                  ...customGuideCards,
-                ]
-                const previewCards = allCards.slice(0, 6)
-                const hasMore      = allCards.length > 6
+                // Cap the preview grid to 6 custom guides + "View all" link
+                // below. The banner sits above the grid unconditionally.
+                const previewCards = customGuideCards.slice(0, 6)
+                const hasMore      = customGuideCards.length > 6
+                const isProUser    = hasStarter(profile?.plan)
                 return (
                   <div style={{ position: 'relative' }}>
-                    <div style={{ padding: '1rem 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
-                      {previewCards.map((card, i) => {
-                        const isProUser = hasStarter(profile?.plan)
-                        // Analytics live on the underlying share_link row
-                        // for custom guides; the synthesized portfolio
-                        // guide reuses its own share_link's metrics when
-                        // one has been materialized.
-                        const link = card.isPortfolio ? fullPortfolioPermLink : card.link
-                        const views    = link?.views_total    ?? 0
-                        const uniques  = link?.unique_viewers ?? 0
-                        const seconds  = link?.total_seconds  ?? 0
-                        const avgSec   = views > 0 ? Math.round(seconds / views) : 0
-                        return (
-                          <div key={card.data.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <LocationGuideCard
-                              bgClass={BG_CYCLE[i % BG_CYCLE.length]}
-                              guide={card.data}
-                              featured={card.isPortfolio}
-                              inactive={!card.isPortfolio && !isProUser}
-                              copyState={
-                                card.isPortfolio
-                                  ? (fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle')
-                                  : (copiedGuideId === card.link!.id ? 'copied' : 'idle')
-                              }
-                              deleteState={
-                                card.isPortfolio
-                                  ? 'idle'
-                                  : (deleteGuideId === card.link!.id ? 'confirming' : 'idle')
-                              }
-                              onCopy={card.isPortfolio ? copyFullPortfolio : () => copyGuideUrl(card.link!.slug, card.link!.id, card.link!.session_name || 'Location Guide')}
-                              onEdit={card.isPortfolio ? editFullPortfolio : () => setEditingPermLink(card.link!)}
-                              onDelete={card.isPortfolio ? undefined : () => deleteGuide(card.link!.id)}
-                              onPreview={card.isPortfolio ? previewFullPortfolio : () => previewGuide(card.link!.slug)}
-                            />
-                            {/* Live analytics for paid plans (Starter +
-                                Pro both unlock view tracking). Free
-                                users see no analytics row at all —
-                                we removed the upgrade teaser since
-                                analytics isn't currently called out
-                                as a tier feature. */}
-                            {isProUser && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', border: '1px solid var(--cream-dark)', fontSize: 11, color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
-                                <span title={`${views} total views`}>👁 {views}</span>
-                                <span title={`${uniques} unique viewers`}>🧑 {uniques}</span>
-                                <span title={`Avg ${avgSec}s per view`}>⏱ {avgSec >= 60 ? `${Math.round(avgSec / 60)}m` : `${avgSec}s`}</span>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
+                    <div style={{ padding: '1rem 1.25rem 0' }}>
+                      <PortfolioGuideBanner
+                        photographerName={profile?.full_name ?? ''}
+                        locationCount={portfolioLocs.length}
+                        coverPhotoUrl={fullPortfolioPermLink?.cover_photo_url ?? null}
+                        hasLink={!!fullPortfolioPermLink}
+                        onShare={copyFullPortfolio}
+                        onEdit={editFullPortfolio}
+                        onPreview={previewFullPortfolio}
+                        pickCount={fullPortfolioPermLink?.picks.length ?? 0}
+                        viewCount={fullPortfolioPermLink?.views_total ?? 0}
+                        copyState={fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle'}
+                      />
                     </div>
-                    {/* Fade the bottom row + centered "View all" CTA when there's more than fits on the preview. */}
+                    {customGuideCards.length === 0 ? (
+                      <div style={{ padding: '0 1.25rem 1rem' }}>
+                        <DemoGuideCards onPickTemplate={t => {
+                          if (!isProUser) { setShowQuotaUpgrade(true); setToast('⭐ Upgrade to Starter to create custom guides'); return }
+                          setDemoPrefill(t); setShowCreatePermanent(true)
+                        }} />
+                      </div>
+                    ) : (
+                      <div style={{ padding: '0 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>
+                        {previewCards.map((card, i) => {
+                          const views    = card.link.views_total    ?? 0
+                          const uniques  = card.link.unique_viewers ?? 0
+                          const seconds  = card.link.total_seconds  ?? 0
+                          const avgSec   = views > 0 ? Math.round(seconds / views) : 0
+                          return (
+                            <div key={card.data.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <LocationGuideCard
+                                bgClass={BG_CYCLE[i % BG_CYCLE.length]}
+                                guide={card.data}
+                                inactive={!isProUser}
+                                copyState={copiedGuideId === card.link.id ? 'copied' : 'idle'}
+                                deleteState={deleteGuideId === card.link.id ? 'confirming' : 'idle'}
+                                onCopy={() => copyGuideUrl(card.link.slug, card.link.id, card.link.session_name || 'Location Guide')}
+                                onEdit={() => setEditingPermLink(card.link)}
+                                onDelete={() => deleteGuide(card.link.id)}
+                                onPreview={() => previewGuide(card.link.slug)}
+                              />
+                              {isProUser && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, padding: '6px 10px', borderRadius: 6, background: 'var(--cream)', border: '1px solid var(--cream-dark)', fontSize: 11, color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
+                                  <span title={`${views} total views`}>👁 {views}</span>
+                                  <span title={`${uniques} unique viewers`}>🧑 {uniques}</span>
+                                  <span title={`Avg ${avgSec}s per view`}>⏱ {avgSec >= 60 ? `${Math.round(avgSec / 60)}m` : `${avgSec}s`}</span>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                     {hasMore && (
                       <div style={{ pointerEvents: 'none', position: 'absolute', left: 0, right: 0, bottom: 0, height: 90, background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,.95) 70%, white 100%)' }} />
                     )}
                     <div style={{ padding: hasMore ? '1.25rem 1.25rem 1rem' : '0.75rem 1.25rem 1rem', display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
                       <Link href="/location-guides" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 20, border: '1px solid var(--cream-dark)', background: 'white', color: 'var(--ink)', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
-                        View all {hasMore ? `${allCards.length} guides` : 'guides'} →
+                        View all {hasMore ? `${customGuideCards.length} guides` : 'guides'} →
                       </Link>
                     </div>
                   </div>
@@ -1279,11 +1267,14 @@ export default function DashboardPage() {
           userId={profile?.id ?? ''}
           photographerName={profile?.full_name ?? ''}
           isPro={hasPro(profile?.plan)}
+          initialSessionName={demoPrefill?.session_name}
+          initialMessage={demoPrefill?.message}
           onAddLocation={() => setShowAddPortfolio(true)}
           onPortfolioChanged={loadData}
-          onClose={() => { setShowCreatePermanent(false); setPreselectAllPortfolio(false) }}
+          onClose={() => { setShowCreatePermanent(false); setPreselectAllPortfolio(false); setDemoPrefill(null) }}
           onCreated={(link) => {
             setPermanentLinks(prev => [{ ...link, picks: [], expanded: false }, ...prev])
+            setDemoPrefill(null)
             setToast('📚 Guide created!')
           }}
         />
