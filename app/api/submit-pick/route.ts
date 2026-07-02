@@ -364,7 +364,12 @@ export async function POST(request: Request) {
 
         const facts: string[] = []
         if (d?.best_time)         facts.push(`<strong>Best time:</strong> ${escapeHtml(d.best_time)}`)
-        if (d?.parking_info)      facts.push(`<strong>Parking:</strong> ${escapeHtml(d.parking_info)}`)
+        // Parking is pulled OUT of the facts list and rendered as its
+        // own highlighted callout next to the Get Directions button
+        // (see below) — it's the piece of info clients need most
+        // urgently when they're about to head there, so making it a
+        // discrete block instead of a small text line greatly reduces
+        // the "wait, where do I park?" phone calls.
         if (d?.permit_required && d.permit_notes) facts.push(`<strong>Permit:</strong> ${escapeHtml(d.permit_notes)}`)
         else if (d?.permit_required)              facts.push(`<strong>Permit required</strong>`)
 
@@ -390,6 +395,12 @@ export async function POST(request: Request) {
             ${cityLine ? `<div style="font-size:13px; color:#6b5f52; margin:0 0 12px;">📍 ${escapeHtml(cityLine)}</div>` : '<div style="margin-bottom:12px;"></div>'}
             ${d?.description ? `<p style="font-size:14px; line-height:1.65; color:#3a3229; margin:0 0 12px; font-weight:300;">${escapeHtml(d.description)}</p>` : ''}
             ${facts.length > 0 ? `<div style="font-size:13px; line-height:1.7; color:#3a3229; margin:0 0 14px;">${facts.join('<br>')}</div>` : ''}
+            ${d?.parking_info ? `
+              <div style="margin:0 0 14px; padding:12px 14px; background:#f6efe0; border-left:3px solid ${brandAccent}; border-radius:6px;">
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#8a7e70; margin:0 0 4px;">🅿 Parking</div>
+                <div style="font-size:14px; line-height:1.55; color:#1a1612; font-weight:300;">${escapeHtml(d.parking_info)}</div>
+              </div>
+            ` : ''}
             <div>
               <a href="${dirUrl}" style="display:inline-block;padding:10px 18px;background:${brandAccent};color:#1a1612;text-decoration:none;border-radius:4px;font-size:13px;font-weight:600;">
                 🗺 Get Directions
