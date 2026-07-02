@@ -60,12 +60,22 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
 
   return (
     <>
+      {/* Backdrop — solid scrim, no backdrop-filter blur. On desktop
+          the blur made every scroll frame inside the previewed pick
+          page's iframe trigger a full-viewport re-composite of the
+          blurred backdrop, which read as scroll lag. Same fix as the
+          other modals. */}
       <div
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 1700 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', zIndex: 1700 }}
       />
+      {/* contain: layout style + willChange: transform promote this
+          modal to its own compositing layer and scope its layout
+          recalc so scroll inside the iframe doesn't ripple through to
+          the page underneath. */}
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        willChange: 'transform', contain: 'layout style',
         background: '#1a1612',
         borderRadius: 14,
         width: 'min(1280px, 96vw)',
