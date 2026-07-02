@@ -469,8 +469,18 @@ export default function PortfolioEditModal({
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(4px)', zIndex: 1700 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflowY: 'auto', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+      {/* Backdrop — solid scrim, no backdrop-filter blur. On desktop
+          the blur made scroll frames inside the modal re-composite a
+          full-viewport blurred area for every scroll tick, which
+          reads as lag / jank. The solid rgba scrim looks identical
+          and scrolls smoothly. Same fix pattern the guide modal
+          already uses. */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', zIndex: 1700 }} />
+      {/* contain: layout style + willChange: transform scopes the
+          modal's layout/style recalc + promotes it to its own
+          compositing layer, so scroll frames don't ripple through to
+          the sidebar / page underneath. */}
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', willChange: 'transform', contain: 'layout style', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflowY: 'auto', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem', gap: 12 }}>
             <div>
