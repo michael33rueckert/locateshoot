@@ -274,6 +274,7 @@ export default function LocationGuidesPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Link href="/portfolio" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>← Portfolio</Link>
+            <Link href="/location-guides/expired" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>⏱ Expired Guides</Link>
             <button onClick={() => {
               if (!hasStarter(profile?.plan)) {
                 setShowQuotaUpgrade(true)

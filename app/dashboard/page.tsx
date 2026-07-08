@@ -691,21 +691,24 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>A curated set of portfolio locations for each city, style, or client — one reusable link per guide.</div>
                 </div>
-                <button
-                  onClick={() => {
-                    // Free plan gets 0 custom guides — only the auto-
-                    // generated Portfolio guide. Any attempt to add a
-                    // custom guide drops the upgrade prompt instead of
-                    // opening the create modal. Starter + Pro have no
-                    // cap on custom guides.
-                    if (!hasStarter(profile?.plan)) {
-                      setShowQuotaUpgrade(true)
-                      return
-                    }
-                    setShowCreatePermanent(true)
-                  }}
-                  style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}
-                >+ New guide</button>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+                  <Link href="/location-guides/expired" style={{ padding: '8px 12px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 11, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>⏱ Expired Guides</Link>
+                  <button
+                    onClick={() => {
+                      // Free plan gets 0 custom guides — only the auto-
+                      // generated Portfolio guide. Any attempt to add a
+                      // custom guide drops the upgrade prompt instead of
+                      // opening the create modal. Starter + Pro have no
+                      // cap on custom guides.
+                      if (!hasStarter(profile?.plan)) {
+                        setShowQuotaUpgrade(true)
+                        return
+                      }
+                      setShowCreatePermanent(true)
+                    }}
+                    style={{ padding: '8px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                  >+ New guide</button>
+                </div>
               </div>
               {showQuotaUpgrade && (
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
