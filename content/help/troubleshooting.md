@@ -12,7 +12,7 @@ A few things to check:
 
 1. **Check your spam folder.** Confirmation emails come from `notifications@locateshoot.com` — Gmail and Outlook sometimes route the first one to spam until you mark it as not spam.
 2. **Did the client actually submit?** Open the guide's link yourself; the dashboard shows every pick the moment it's submitted. If you don't see it on the dashboard, the client may have closed the tab without tapping **Send my pick**.
-3. **Push notifications enabled?** Profile → Settings → Notifications. Push works on Chrome, Edge, Safari (with a quick tap-to-allow), and as an installed PWA on iOS / Android.
+3. **Push notifications enabled?** Tap the 🔔 bell in the top-right of the nav bar on any signed-in page and allow when the browser asks. Push works on Chrome, Edge, Safari (with a quick tap-to-allow), and as an installed PWA on iOS / Android.
 
 ## "My client says the link doesn't work"
 

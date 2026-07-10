@@ -30,12 +30,12 @@ Click **+ New Location Guide**. Give it a name (e.g., "Engagement sessions" or "
 - **Maximum distance between picks** — useful when you want to cap how far apart locations can be (so an engagement shoot doesn't accidentally turn into a road trip).
 - **Recommended picks** — flag specific locations as your favorites; they'll show a ★ badge so the client knows which you'd suggest.
 
-## 4. Copy the link, send it
+## 4. Share the link
 
-You get a unique URL. Drop it anywhere — HoneyBook, Dubsado, Calendly, a text, an email, your contract. The client opens it and sees your curated locations in your branding.
+You get a unique URL. Tap **📤 Share** on the guide's row — on mobile that opens your device's share sheet (iMessage, WhatsApp, email, etc.); on desktop it copies the link to your clipboard. Drop it anywhere — HoneyBook, Dubsado, Calendly, a text, an email, your contract. The client opens it and sees your curated locations in your branding.
 
 ## 5. You get the email instantly when they pick
 
-The pick lands on your dashboard the moment they tap it. You get an email + push notification. They get a confirmation email with map directions to the spot.
+The pick lands on your dashboard the moment they tap it. You get an email + push notification. They get a confirmation email with map directions to the spot, plus any parking info you added to that location — so they know exactly where to pull up on session day without having to email you.
 
 That's the whole loop.

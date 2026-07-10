@@ -52,6 +52,15 @@ The portfolio copy is yours either way, but Explore-sourced locations keep a lin
 
 Custom locations don't have that fallback — whatever you fill in is what your clients see.
 
-## Reordering
+## Sorting and reordering
 
-Drag any portfolio tile to reorder. The order in your portfolio is the default order in your **Full Portfolio guide** and any custom guide where you haven't manually reordered the selections.
+The portfolio has a **Sort** dropdown near the top of the list. Four modes:
+
+- **Oldest first** (default) — the order you added them.
+- **Newest first** — most recently added on top.
+- **Alphabetical (A → Z)** — by location name.
+- **Custom (drag to arrange)** — pick this mode to enable drag handles and set your own order.
+
+The **Custom** order is what's used everywhere else: it's the default order of locations in your **Full Portfolio guide** and any custom guide where you haven't manually reordered the selections. The other three modes are personal view preferences that only change how the list looks to you on the Portfolio page — they don't change what your clients see.
+
+Your sort choice is remembered per-device.

@@ -88,9 +88,9 @@ See also: [Layout templates](/help/layout-templates).
 
 Once you save:
 
-- A new guide URL is generated and copied into your clipboard
-- The guide shows up immediately on your dashboard and on the Location Guides page
-- You can copy the link, preview it, edit it, or delete it from there
+- A new guide URL is generated. Tap **📤 Share** on the guide's row any time to open your device's share sheet (mobile) or copy the link to your clipboard (desktop).
+- The guide shows up immediately on your dashboard and on the Location Guides page.
+- From either page you can share the link, preview it, edit it, or delete it.
 
 ## Editing an existing guide
 

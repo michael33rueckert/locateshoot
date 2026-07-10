@@ -49,3 +49,7 @@ You can edit any guide and switch its expiration mode. Two practical things to k
 - Switching FROM **expire after pick** back to **save for future use** AFTER a client has already submitted a pick will reactivate the link — they (or anyone with the URL) can pick again
 
 For most photographers the simple rule is: **start with "save for future use"** unless you have a specific reason to limit the link.
+
+## Finding expired guides later
+
+Expired guides drop off your main Location Guides list to keep it focused on what's live. To see them, tap **⏱ Expired Guides** at the top of the Location Guides page — you can preview them, see when they expired, or clone one into a fresh guide with a new URL if a client needs to re-book.

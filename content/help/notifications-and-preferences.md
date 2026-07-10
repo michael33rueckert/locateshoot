@@ -23,8 +23,8 @@ Separate from email. Configured in your browser's notification permissions, not 
 
 To enable push:
 
-- On a desktop browser: open the app, look for the small bell / "🔔 Enable notifications" prompt in the dashboard, allow when the browser asks
-- On mobile: install LocateShoot as a PWA first (see your browser's "Add to Home Screen" or "Install app"), then allow notifications when prompted
+- On desktop: tap the 🔔 bell in the top-right of the nav bar (visible on every signed-in page) and allow when the browser asks.
+- On mobile: install LocateShoot as a PWA first (see your browser's "Add to Home Screen" or "Install app"), then tap the same 🔔 bell inside the PWA and allow when prompted.
 
 Push lands instantly. Email lands within a minute or two.
 

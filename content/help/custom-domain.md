@@ -51,7 +51,7 @@ After saving, DNS usually propagates in 5-30 minutes. Sometimes longer if your T
 ## What changes when it's verified
 
 - Every Location Guide URL now works on **both** `locateshoot.com/pick/...` and `links.yourstudio.com/pick/...`. Your existing links don't break.
-- The "copy link" button on your dashboard / Location Guides page starts giving you the custom-domain URL by default.
+- The **📤 Share** button on your dashboard / Location Guides page starts giving you the custom-domain URL by default.
 - Email link previews and confirmation emails reference the custom domain.
 
 ## Plan tier
