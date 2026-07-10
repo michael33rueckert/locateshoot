@@ -957,6 +957,19 @@ export default function DashboardPage() {
                 lands the photographer directly here. Sits below the
                 Portfolio card so it's the last thing in the left
                 column — the natural place for a chronological log. */}
+            <style>{`
+              /* Compact mobile treatment for Client Selections rows.
+                 Below 640px, hide the date/time column (still visible
+                 via the row's implicit chronological order — most
+                 recent first) and stop the row from wrapping, so the
+                 button sits next to the left content on a single row
+                 and the LI stays thin instead of ballooning to two
+                 lines. Padding also tightens up. */
+              @media (max-width: 640px) {
+                .dash-pick-li { padding: 10px 1rem !important; align-items: center !important; }
+                .dash-pick-date { display: none !important; }
+              }
+            `}</style>
             <div id="client-picks" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80 }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -995,7 +1008,7 @@ export default function DashboardPage() {
                       const timeText   = created.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
                       const isArmed    = dismissPickId === p.id
                       return (
-                        <li key={p.id} style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                        <li key={p.id} className="dash-pick-li" style={{ padding: '12px 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
                             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
                               {display}
@@ -1010,16 +1023,14 @@ export default function DashboardPage() {
                               from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
                             </div>
                           </div>
-                          {/* Right column — date + dismiss. marginLeft:auto
-                              keeps it flush-right when the row wraps to two
-                              lines on mobile; without it the wrapped column
-                              lands on the left of the new line and the
-                              "Click again to confirm" label looks stranded.
-                              maxWidth caps the "Click again to confirm"
-                              expansion so the button never grows past its
-                              own column boundary. */}
-                          <div style={{ marginLeft: 'auto', flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: '100%' }}>
-                            <div>
+                          {/* Right column — date + dismiss. On mobile the
+                              date is hidden (see dash-pick-date media rule)
+                              and the whole row is aligned so it can sit
+                              inline with the left content without wrapping,
+                              keeping the LI compact. Desktop keeps the
+                              stacked column layout. */}
+                          <div className="dash-pick-right" style={{ marginLeft: 'auto', flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: '100%' }}>
+                            <div className="dash-pick-date">
                               {dateText}<br />
                               <span style={{ fontSize: 11 }}>{timeText}</span>
                             </div>
