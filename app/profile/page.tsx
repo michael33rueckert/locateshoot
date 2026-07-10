@@ -7,6 +7,8 @@ import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import SavedTemplatesPanel from '@/components/SavedTemplatesPanel'
 import UpgradePrompt from '@/components/UpgradePrompt'
+import PasswordRequirements from '@/components/PasswordRequirements'
+import { validatePassword, PASSWORD_HINT_TEXT } from '@/lib/password'
 
 
 interface HomeLocation {
@@ -502,7 +504,7 @@ export default function ProfilePage() {
 
   async function updatePassword() {
     if (newPw !== confirmPw) { setToast('⚠ Passwords do not match'); return }
-    if (newPw.length < 8) { setToast('⚠ Password must be at least 8 characters'); return }
+    if (!validatePassword(newPw).ok) { setToast(`⚠ ${PASSWORD_HINT_TEXT}`); return }
     setSaving(true)
     const { error } = await supabase.auth.updateUser({ password: newPw })
     setSaving(false)
@@ -1018,13 +1020,17 @@ export default function ProfilePage() {
             <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '1.25rem', maxWidth: 420 }}>
               <div style={{ marginBottom: '.75rem' }}>
                 <label style={labelStyle}>New password</label>
-                <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} style={inputStyle} placeholder="••••••••" />
+                <input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} autoComplete="new-password" style={inputStyle} placeholder="••••••••" />
+                <PasswordRequirements value={newPw} />
               </div>
               <div style={{ marginBottom: '1.25rem' }}>
                 <label style={labelStyle}>Confirm new password</label>
-                <input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} style={inputStyle} placeholder="••••••••" />
+                <input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} autoComplete="new-password" style={inputStyle} placeholder="••••••••" />
+                {confirmPw && newPw !== confirmPw && (
+                  <div style={{ fontSize: 11, color: 'var(--rust)', marginTop: 4 }}>Passwords don&apos;t match yet.</div>
+                )}
               </div>
-              <button onClick={updatePassword} disabled={saving || !newPw || !confirmPw} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 24px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !newPw || !confirmPw ? 0.5 : 1 }}>
+              <button onClick={updatePassword} disabled={saving || !newPw || !confirmPw || !validatePassword(newPw).ok || newPw !== confirmPw} style={{ background: 'var(--gold)', color: 'var(--ink)', padding: '10px 24px', borderRadius: 4, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', opacity: saving || !newPw || !confirmPw || !validatePassword(newPw).ok || newPw !== confirmPw ? 0.5 : 1 }}>
                 {saving ? 'Updating…' : 'Update password'}
               </button>
             </div>

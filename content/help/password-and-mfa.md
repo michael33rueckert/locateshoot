@@ -57,4 +57,14 @@ Even with the email recovery flow in place, an authenticator that syncs across y
 
 ## Password requirements
 
-Passwords are enforced by our auth provider (Supabase). The current requirement on LocateShoot is: **at least 6 characters**. No forced mix of upper/lowercase, numbers, or symbols — but we strongly recommend a passphrase or password-manager-generated password of at least 12 characters, especially if 2FA isn't enabled on your account.
+Every password on LocateShoot must include:
+
+- At least **8 characters**
+- A **lowercase** letter (a–z)
+- An **uppercase** letter (A–Z)
+- A **number** (0–9)
+- A **symbol** (anything that isn't a letter or number — `!@#$%^&*`, punctuation, spaces, etc.)
+
+Both the sign-up form and the "New password" form on Profile → Password &amp; Security show a live checklist next to the field so you can see which requirements you've hit as you type.
+
+If you use a password manager, letting it generate a 16+ character random password will meet all of these automatically. If you're typing your own, a short passphrase like `Sunset-Loose-Park-2026!` hits every rule and is easier to remember than a scrambled string.

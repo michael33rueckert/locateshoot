@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import PasswordRequirements from '@/components/PasswordRequirements'
+import { validatePassword } from '@/lib/password'
 
 type Mode = 'login' | 'signup' | 'forgot' | 'mfa'
 
@@ -84,6 +86,10 @@ export default function AuthModal({ initialMode, onClose }: Props) {
       if (mode === 'signup') {
         if (!agreed) { setError('Please accept the terms to continue.'); return }
         if (!fullName.trim()) { setError('Please enter your full name.'); return }
+        if (!validatePassword(password).ok) {
+          setError('Password doesn\'t meet the requirements — check the checklist below the password field.')
+          return
+        }
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -232,9 +238,15 @@ export default function AuthModal({ initialMode, onClose }: Props) {
                 onChange={e => setPassword(e.target.value)}
                 type="password"
                 placeholder="Password"
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 style={inp}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
               />
+              {/* Live requirements only on signup — no point nagging
+                  returning users about their existing password. */}
+              {mode === 'signup' && (
+                <PasswordRequirements value={password} theme="dark" />
+              )}
             </div>
           )}
 
