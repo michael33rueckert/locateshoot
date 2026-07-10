@@ -1,15 +1,16 @@
 import Link from 'next/link'
 
-// Beta-stage Terms of Use. Written to be reasonably defensive
-// without overpromising. To be reviewed by a real attorney before
-// public launch — see the disclaimer banner inside.
+// Terms of Use. Written to be reasonably defensive without over-
+// promising. The "not legal advice" disclaimer at the bottom notes
+// that the language hasn't been counsel-reviewed line by line —
+// worth revisiting with an attorney at some point.
 
 export const metadata = {
   title: 'Terms of Use — LocateShoot',
   description: 'The terms governing your use of LocateShoot.',
 }
 
-const LAST_UPDATED = 'April 27, 2026'
+const LAST_UPDATED = 'July 9, 2026'
 
 export default function TermsOfUsePage() {
   return (
@@ -86,9 +87,8 @@ export default function TermsOfUsePage() {
           <P>If you believe content on the Service infringes your copyright, send a written notice to <A href="mailto:dmca@locateshoot.com">dmca@locateshoot.com</A> including: (a) identification of the copyrighted work, (b) identification of the allegedly infringing material with enough detail to locate it, (c) your contact info, (d) a statement of good-faith belief that the use is not authorized, (e) a statement under penalty of perjury that you are the owner or authorized to act, and (f) your physical or electronic signature. We will respond consistent with the DMCA, including by removing or disabling access to allegedly infringing material.</P>
         </Section>
 
-        <Section title="10. Service availability and beta status">
-          <P>The Service is currently in <strong>beta</strong>. Features may break, change, or be removed without notice. We may take the Service offline for maintenance, debugging, or to roll back changes. Beta status may end at any time, after which different terms (including different pricing and feature gates) may apply.</P>
-          <P>Outside the beta period, we use commercially reasonable efforts to keep the Service available, but we do not guarantee uptime or freedom from errors. The Service is provided &quot;as is&quot; (see Section 11).</P>
+        <Section title="10. Service availability">
+          <P>We use commercially reasonable efforts to keep the Service available, but we do not guarantee uptime or freedom from errors. Features may change, be added, or be removed as the Service evolves. We may take the Service offline for maintenance, updates, or debugging. The Service is provided &quot;as is&quot; (see Section 11).</P>
         </Section>
 
         <Section title="11. Disclaimer of warranties">
@@ -126,7 +126,7 @@ export default function TermsOfUsePage() {
         </Section>
 
         <div style={{ marginTop: '2.5rem', padding: '1rem 1.25rem', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>
-          <strong style={{ color: 'var(--gold)' }}>Beta disclaimer:</strong> These Terms of Use are a starting draft for the LocateShoot beta and have not yet been reviewed by an attorney. They are not legal advice. We will publish a finalized version, reviewed by counsel, before exiting beta. If anything in this document conflicts with applicable law, the law controls.
+          <strong style={{ color: 'var(--gold)' }}>Not legal advice:</strong> These Terms have not been individually reviewed by an attorney for your jurisdiction. They are provided for informational purposes and are not legal advice. If anything in this document conflicts with applicable law, the law controls.
         </div>
 
       </div>

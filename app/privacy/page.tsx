@@ -1,8 +1,8 @@
 import Link from 'next/link'
 
-// Beta-stage privacy policy. Written to be reasonably defensive
-// without overpromising. To be reviewed by a real attorney before
-// public launch — see the disclaimer banner inside.
+// Privacy policy. Written to be reasonably defensive without over-
+// promising. Same "not legal advice" caveat noted at the bottom
+// applies here — worth an attorney review at some point.
 //
 // Maintained under app/privacy so /privacy resolves to this page
 // and existing footer/legal links keep working.
@@ -12,7 +12,7 @@ export const metadata = {
   description: 'How LocateShoot collects, uses, and protects your information.',
 }
 
-const LAST_UPDATED = 'April 27, 2026'
+const LAST_UPDATED = 'July 9, 2026'
 
 export default function PrivacyPolicyPage() {
   return (
@@ -107,8 +107,8 @@ export default function PrivacyPolicyPage() {
           <P>Our service providers may process and store your information in the United States or other countries that may have different data-protection laws than your home country. By using the Service you consent to those transfers.</P>
         </Section>
 
-        <Section title="12. Beta status">
-          <P>The Service is currently in beta testing. During the beta, we may collect additional diagnostic information (error logs, feature usage) to identify and fix issues. We may also contact you for follow-up about feedback you submit. Anything submitted through the Feedback button may be used to improve the Service. The Service&apos;s features, pricing, and data-handling practices may change as we move out of beta — we will update this Policy and notify you of material changes.</P>
+        <Section title="12. Feedback and diagnostics">
+          <P>We collect diagnostic information — error logs, performance data, and aggregated feature-usage counts — so we can find and fix bugs and understand which features are getting use. We may also contact you for follow-up about feedback you submit. Anything submitted through the Feedback button may be used to improve the Service. Our features, pricing, and data-handling practices may change over time — we will update this Policy and notify you of material changes.</P>
         </Section>
 
         <Section title="13. Changes to this Policy">
@@ -120,7 +120,7 @@ export default function PrivacyPolicyPage() {
         </Section>
 
         <div style={{ marginTop: '2.5rem', padding: '1rem 1.25rem', background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.25)', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6 }}>
-          <strong style={{ color: 'var(--gold)' }}>Beta disclaimer:</strong> This Privacy Policy is a starting draft for the LocateShoot beta and has not yet been reviewed by an attorney. It is not legal advice. We will publish a finalized version, reviewed by counsel, before exiting beta. If anything in this document conflicts with applicable law, the law controls.
+          <strong style={{ color: 'var(--gold)' }}>Not legal advice:</strong> This Privacy Policy has not been individually reviewed by an attorney for your jurisdiction. It is provided for informational purposes and is not legal advice. If anything in this document conflicts with applicable law, the law controls.
         </div>
 
       </div>

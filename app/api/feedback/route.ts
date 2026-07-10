@@ -18,9 +18,9 @@ export async function POST(request: Request) {
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid body' }, { status: 400 })
   const {
     message, pageUrl,
-    // Optional structured fields from the beta-feedback form. All
-    // optional so older callers (or simple-message clients) still
-    // work without changes.
+    // Optional structured fields from the feedback form. All optional
+    // so older callers (or simple-message clients) still work without
+    // changes.
     feedbackType,    // 'bug' | 'idea' | 'praise' | 'other'
     stepsToRepro,
     viewport,
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     : ''
   const html = `
     <div style="font-family: Georgia, serif; color: #1a1612; max-width: 600px; margin: 0 auto; padding: 24px;">
-      <h2 style="font-size:18px; margin:0 0 12px;">${safeType ? escapeHtml(typeLabel[safeType]) : '💬 Feedback'} from a LocateShoot beta user</h2>
+      <h2 style="font-size:18px; margin:0 0 12px;">${safeType ? escapeHtml(typeLabel[safeType]) : '💬 Feedback'} from a LocateShoot user</h2>
       <table style="font-size:13px; color:#333; border-collapse:collapse; margin-bottom:16px;">
         <tr><td style="padding:4px 8px 4px 0; color:#888;">From</td><td style="padding:4px 0;">${reporterEmail ? escapeHtml(`${reporterName ?? ''} <${reporterEmail}>`.trim()) : '(anonymous)'}</td></tr>
         ${reporterEmail ? `<tr><td style="padding:4px 8px 4px 0; color:#888;">Reply OK?</td><td style="padding:4px 0;">${contactConsent === false ? 'No (do not reply)' : 'Yes'}</td></tr>` : ''}
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
   const subjPrefix = safeType ? typeLabel[safeType].replace(/^.*? /, '') : 'Feedback'
   const result = await sendEmail({
     to:      'feedback@locateshoot.com',
-    subject: `[Beta] ${subjPrefix}: ${reporterEmail ?? 'anonymous'}`,
+    subject: `${subjPrefix}: ${reporterEmail ?? 'anonymous'}`,
     html,
     // Honor the user's contact consent — only set replyTo if they
     // ticked the "OK to reply" box (default-true when signed in).

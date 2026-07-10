@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-// Global beta-feedback capture. Mounted in the root layout so every
-// page has a small tab at the bottom-right that opens a structured
-// form. Submissions POST to /api/feedback which emails
+// Global feedback capture. Mounted in the root layout so every page
+// has a small tab at the bottom-right that opens a structured form.
+// Submissions POST to /api/feedback which emails
 // feedback@locateshoot.com with the type, page URL, viewport, UA,
 // and reporter info.
 
@@ -134,7 +134,6 @@ export default function FeedbackButton() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: 'var(--gold)', color: 'var(--ink)', letterSpacing: '.05em' }}>BETA</span>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 20, fontWeight: 700, color: 'var(--ink)' }}>Send feedback</div>
             </div>
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: '1.25rem', lineHeight: 1.55 }}>
