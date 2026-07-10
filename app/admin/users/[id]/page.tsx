@@ -35,6 +35,8 @@ interface TargetUser {
   custom_domain_verified:   boolean | null
   preferences:              any
   created_at:               string
+  banned_until:             string | null
+  stripe_subscription_id:   string | null
 }
 
 interface PortfolioRow {
@@ -66,6 +68,18 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
   const [addPortfolio,  setAddPortfolio]  = useState(false)
   const [editGuide,     setEditGuide]     = useState<GuideRow | null>(null)
   const [addGuide,      setAddGuide]      = useState(false)
+
+  // ── Danger Zone state ──
+  // Deactivate modal: checkbox for the optional "also take share links
+  // offline" step. Delete modal: email echo + MFA code, both required.
+  const [deactivateOpen,      setDeactivateOpen]      = useState(false)
+  const [deactivateShares,    setDeactivateShares]    = useState(false)
+  const [deactivateBusy,      setDeactivateBusy]      = useState(false)
+  const [deleteOpen,          setDeleteOpen]          = useState(false)
+  const [deleteEmail,         setDeleteEmail]         = useState('')
+  const [deleteMfaCode,       setDeleteMfaCode]       = useState('')
+  const [deleteBusy,          setDeleteBusy]          = useState(false)
+  const [deleteError,         setDeleteError]         = useState('')
 
   // Auth gate — same shape as /admin. Anyone non-admin gets bounced
   // back to their dashboard. Without this check the page wouldn't be
@@ -143,6 +157,103 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
 
   useEffect(() => { loadAll() }, [loadAll])
 
+  // ── Danger Zone handlers ──
+
+  async function doDeactivate() {
+    setDeactivateBusy(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { setDeactivateBusy(false); return }
+    const res = await fetch(`/api/admin/users/${targetId}/deactivate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ takeSharesOffline: deactivateShares }),
+    })
+    const j = await res.json().catch(() => ({}))
+    setDeactivateBusy(false)
+    if (!res.ok) { setToast(`⚠ ${j.message ?? j.error ?? 'Deactivate failed'}`); return }
+    setDeactivateOpen(false)
+    const extra = deactivateShares && j.sharesExpired ? ` · ${j.sharesExpired} share link${j.sharesExpired === 1 ? '' : 's'} expired` : ''
+    setDeactivateShares(false)
+    setToast(`✓ Deactivated${extra}`)
+    loadAll()
+  }
+
+  async function doReactivate() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch(`/api/admin/users/${targetId}/reactivate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { setToast(`⚠ ${j.message ?? j.error ?? 'Reactivate failed'}`); return }
+    setToast('✓ Reactivated — this user can sign in again')
+    loadAll()
+  }
+
+  async function doDelete() {
+    setDeleteError('')
+    if (!target?.email) { setDeleteError('Target email unknown — reload the page.'); return }
+    if (deleteEmail.trim().toLowerCase() !== target.email.toLowerCase()) {
+      setDeleteError("Email doesn't match — type this user's exact email to confirm.")
+      return
+    }
+    if (deleteMfaCode.trim().length !== 6) {
+      setDeleteError('Enter the 6-digit code from your authenticator app.')
+      return
+    }
+    setDeleteBusy(true)
+
+    // Step 1: fresh MFA challenge on your admin session. mfa.verify()
+    // returns a refreshed session at aal2 and puts it in the client
+    // cache; the DELETE handler decodes the aal claim to require it.
+    try {
+      const { data: factors, error: fErr } = await supabase.auth.mfa.listFactors()
+      if (fErr) throw fErr
+      const totp = factors?.totp?.find(f => f.status === 'verified')
+      if (!totp) throw new Error('No MFA factor enrolled on your admin account. Enroll one in Profile → Security first.')
+      const ch = await supabase.auth.mfa.challenge({ factorId: totp.id })
+      if (ch.error) throw ch.error
+      const vr = await supabase.auth.mfa.verify({ factorId: totp.id, challengeId: ch.data.id, code: deleteMfaCode.trim() })
+      if (vr.error) throw vr.error
+    } catch (err: any) {
+      setDeleteBusy(false)
+      setDeleteError(err?.message ?? 'MFA verification failed. Try again.')
+      return
+    }
+
+    // Step 2: grab the fresh aal2 access token and call DELETE.
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setDeleteBusy(false)
+      setDeleteError('Session lost after MFA — please sign in again.')
+      return
+    }
+
+    const res = await fetch(`/api/admin/users/${targetId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+    const j = await res.json().catch(() => ({}))
+    setDeleteBusy(false)
+    if (!res.ok) {
+      setDeleteError(j.message ?? j.error ?? 'Delete failed — nothing changed.')
+      return
+    }
+
+    // Success — bounce back to the admin index so we're not looking at
+    // a now-empty user page. Warnings (Stripe / partial table delete)
+    // bubble up in the toast so the admin can follow up.
+    setDeleteOpen(false)
+    const warnings: string[] = []
+    if (j.stripeWarning) warnings.push(`Stripe: ${j.stripeWarning}`)
+    if (j.tableWarnings?.length) warnings.push(...j.tableWarnings)
+    router.replace('/admin')
+    // Toast survives navigation? No — but the redirect is enough
+    // signal on its own; the user is now off the deleted profile.
+    if (warnings.length) console.warn('Delete warnings:', warnings)
+  }
+
   // Adapters between the page's internal shapes and the modal props.
   const portfolioLite: PortfolioLocationLite[] = portfolio.map(p => ({
     id: p.id, name: p.name, city: p.city, state: p.state,
@@ -186,6 +297,9 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
         <div style={{ position: 'sticky', top: 12, zIndex: 10, background: 'var(--ink)', color: 'var(--cream)', padding: '12px 18px', borderRadius: 10, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', boxShadow: '0 6px 18px rgba(0,0,0,.2)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)' }}>Managing</span>
+            {target?.banned_until && (
+              <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: 'var(--rust)', color: 'white' }}>Deactivated</span>
+            )}
             <div>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700 }}>
                 {target?.full_name || 'Unnamed photographer'}
@@ -282,6 +396,46 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
             </div>
           )}
         </div>
+
+        {/* DANGER ZONE ────────────────────────────────────────────── */}
+        <div style={{ marginTop: '1.5rem', background: 'white', borderRadius: 10, border: '1px solid rgba(181,75,42,.3)', overflow: 'hidden' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(181,75,42,.15)', background: 'rgba(181,75,42,.04)' }}>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--rust)' }}>⚠ Danger Zone</div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>Account-level actions. Deactivate is reversible; Delete is not.</div>
+          </div>
+
+          <div style={{ padding: '1.25rem' }}>
+            {/* Deactivate / Reactivate row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingBottom: '1rem', borderBottom: '1px solid var(--cream-dark)', marginBottom: '1rem' }}>
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
+                  {target?.banned_until ? 'Reactivate account' : 'Deactivate account'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2, lineHeight: 1.5 }}>
+                  {target?.banned_until
+                    ? "Currently deactivated — this photographer can't sign in. Reactivating lifts the sign-in ban. Any share links you took offline at deactivation stay expired unless you edit them individually."
+                    : "Block sign-in without touching any of their data. Portfolio, Location Guides, and photos all stay put. Reversible."}
+                </div>
+              </div>
+              {target?.banned_until ? (
+                <button onClick={doReactivate} style={{ padding: '9px 20px', borderRadius: 6, border: '1px solid var(--sage)', background: 'white', color: 'var(--sage)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Reactivate</button>
+              ) : (
+                <button onClick={() => { setDeactivateShares(false); setDeactivateOpen(true) }} style={{ padding: '9px 20px', borderRadius: 6, border: '1px solid var(--rust)', background: 'white', color: 'var(--rust)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Deactivate…</button>
+              )}
+            </div>
+
+            {/* Delete row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Delete account and all data</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2, lineHeight: 1.5 }}>
+                  Permanently removes their profile, portfolio, Location Guides, photos, and auth login. {target?.stripe_subscription_id ? 'Cancels their Stripe subscription. ' : ''}Requires typing their email and your MFA code. This cannot be undone.
+                </div>
+              </div>
+              <button onClick={() => { setDeleteEmail(''); setDeleteMfaCode(''); setDeleteError(''); setDeleteOpen(true) }} style={{ padding: '9px 20px', borderRadius: 6, border: 'none', background: 'var(--rust)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Delete…</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* MODALS — reuse the photographer-side components with the
@@ -316,6 +470,103 @@ export default function AdminManageUserPage({ params }: { params: Promise<{ id: 
           onClose={() => { setAddGuide(false); setEditGuide(null) }}
           onCreated={() => { setAddGuide(false); setEditGuide(null); loadAll(); setToast(editGuide ? '✓ Guide updated' : '✓ Guide created') }}
         />
+      )}
+
+      {/* DEACTIVATE MODAL */}
+      {deactivateOpen && target && (
+        <>
+          <div onClick={() => !deactivateBusy && setDeactivateOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.6)', zIndex: 9700 }} />
+          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 12, width: 480, maxWidth: '94vw', padding: '1.5rem', zIndex: 9800, boxShadow: '0 24px 64px rgba(0,0,0,.35)' }}>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 20, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}>Deactivate this account?</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.55, marginBottom: '1.25rem' }}>
+              <strong style={{ color: 'var(--ink)' }}>{target.email}</strong> won&apos;t be able to sign in. Everything they&apos;ve created — portfolio, guides, photos — stays exactly as it is. You can reactivate them any time.
+            </div>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 6, background: 'var(--cream)', marginBottom: '1.25rem' }}>
+              <input type="checkbox" checked={deactivateShares} onChange={e => setDeactivateShares(e.target.checked)} disabled={deactivateBusy} style={{ marginTop: 3, cursor: 'pointer' }} />
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>Also take existing share links offline</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 2, lineHeight: 1.5 }}>
+                  Any client hitting one of their /pick URLs will see the &quot;guide expired&quot; page. The auto Full-Portfolio guide is left alone so it snaps back when you reactivate.
+                </div>
+              </div>
+            </label>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setDeactivateOpen(false)} disabled={deactivateBusy} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', border: '1px solid var(--cream-dark)', color: 'var(--ink-soft)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button onClick={doDeactivate} disabled={deactivateBusy} style={{ padding: '10px 20px', borderRadius: 6, border: 'none', background: 'var(--rust)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: deactivateBusy ? 0.6 : 1 }}>
+                {deactivateBusy ? 'Deactivating…' : 'Deactivate'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* DELETE MODAL — email echo + step-up MFA before the DELETE call */}
+      {deleteOpen && target && (
+        <>
+          <div onClick={() => !deleteBusy && setDeleteOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.7)', zIndex: 9700 }} />
+          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 12, width: 500, maxWidth: '94vw', maxHeight: '90svh', overflowY: 'auto', padding: '1.5rem', zIndex: 9800, boxShadow: '0 24px 64px rgba(0,0,0,.4)' }}>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--rust)', marginBottom: 6 }}>Delete this account?</div>
+            <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.55, marginBottom: '1rem' }}>
+              This permanently removes <strong>{target.email}</strong>&apos;s entire account — profile, {portfolio.length} portfolio location{portfolio.length === 1 ? '' : 's'}, {guides.length} Location Guide{guides.length === 1 ? '' : 's'}, all photos, and their auth login.
+              {target.stripe_subscription_id && <> Their Stripe subscription will also be cancelled.</>}
+            </div>
+            <div style={{ padding: '10px 14px', background: 'rgba(181,75,42,.08)', border: '1px solid rgba(181,75,42,.25)', borderRadius: 6, fontSize: 12, color: 'var(--rust)', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+              There is no undo. If you&apos;re not 100% sure, use Deactivate instead.
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                Type the user&apos;s email to confirm
+              </label>
+              <input
+                type="email"
+                value={deleteEmail}
+                onChange={e => setDeleteEmail(e.target.value)}
+                placeholder={target.email ?? ''}
+                disabled={deleteBusy}
+                autoComplete="off"
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--cream-dark)', borderRadius: 6, fontFamily: 'inherit', fontSize: 14, outline: 'none', color: 'var(--ink)', background: 'white', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                Your MFA code
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={deleteMfaCode}
+                onChange={e => setDeleteMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123 456"
+                maxLength={6}
+                disabled={deleteBusy}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--cream-dark)', borderRadius: 6, fontFamily: 'var(--font-mono, Menlo, monospace)', fontSize: 20, letterSpacing: 6, textAlign: 'center', outline: 'none', color: 'var(--ink)', background: 'white', boxSizing: 'border-box' }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, lineHeight: 1.5 }}>
+                Open your authenticator app and enter your current 6-digit LocateShoot code.
+              </div>
+            </div>
+
+            {deleteError && (
+              <div style={{ padding: '9px 12px', background: 'rgba(181,75,42,.1)', border: '1px solid rgba(181,75,42,.3)', borderRadius: 6, fontSize: 13, color: 'var(--rust)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                {deleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setDeleteOpen(false)} disabled={deleteBusy} style={{ padding: '10px 18px', borderRadius: 6, background: 'white', border: '1px solid var(--cream-dark)', color: 'var(--ink-soft)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button
+                onClick={doDelete}
+                disabled={deleteBusy || deleteMfaCode.length !== 6 || !deleteEmail.trim()}
+                style={{ padding: '10px 20px', borderRadius: 6, border: 'none', background: 'var(--rust)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: deleteBusy || deleteMfaCode.length !== 6 || !deleteEmail.trim() ? 0.55 : 1 }}
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {toast && (
