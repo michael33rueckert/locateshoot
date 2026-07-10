@@ -84,7 +84,7 @@ export default function PortfolioShareButton({
           whiteSpace: 'nowrap',
         }}
       >
-        {copyState === 'copied' ? '✓ Link copied!' : (label ?? '📚 Share Portfolio')}
+        {copyState === 'copied' ? '✓ Link copied!' : (label ?? '📚 Share Entire Portfolio')}
       </button>
       {hasMenu && (
         <button

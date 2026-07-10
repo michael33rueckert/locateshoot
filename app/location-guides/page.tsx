@@ -8,7 +8,6 @@ import LocationGuideCard from '@/components/LocationGuideCard'
 import GuidePreviewModal from '@/components/GuidePreviewModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import UpgradePrompt from '@/components/UpgradePrompt'
-import PortfolioShareButton from '@/components/PortfolioShareButton'
 import DemoGuideCards, { type DemoGuideTemplate } from '@/components/DemoGuideCards'
 import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
@@ -275,19 +274,13 @@ export default function LocationGuidesPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <Link href="/portfolio" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>← Portfolio</Link>
             <Link href="/location-guides/expired" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>⏱ Expired Guides</Link>
-            <PortfolioShareButton
-              onShare={copyFullPortfolio}
-              onPreview={previewFullPortfolio}
-              onEdit={editFullPortfolio}
-              copyState={fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle'}
-            />
             <button onClick={() => {
               if (!hasStarter(profile?.plan)) {
                 setShowQuotaUpgrade(true)
                 return
               }
               setShowCreate(true)
-            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ New guide</button>
+            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ New guide</button>
           </div>
         </div>
 

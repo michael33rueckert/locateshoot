@@ -693,13 +693,6 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
                   <Link href="/location-guides/expired" style={{ padding: '7px 12px', borderRadius: 4, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 11, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>⏱ Expired</Link>
-                  <PortfolioShareButton
-                    size="sm"
-                    onShare={copyFullPortfolio}
-                    onPreview={previewFullPortfolio}
-                    onEdit={editFullPortfolio}
-                    copyState={fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle'}
-                  />
                   <button
                     onClick={() => {
                       // Free plan gets 0 custom guides — only the auto-
@@ -713,7 +706,7 @@ export default function DashboardPage() {
                       }
                       setShowCreatePermanent(true)
                     }}
-                    style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                    style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                   >+ New guide</button>
                 </div>
               </div>
@@ -812,7 +805,14 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Your curated locations — shown to clients on Location Guides.</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <PortfolioShareButton
+                    size="sm"
+                    onShare={copyFullPortfolio}
+                    onPreview={previewFullPortfolio}
+                    onEdit={editFullPortfolio}
+                    copyState={fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle'}
+                  />
                   <button
                     onClick={() => {
                       // Free plan caps portfolio at 5 locations. If they're
@@ -825,9 +825,9 @@ export default function DashboardPage() {
                       }
                       setShowAddPortfolio(true)
                     }}
-                    style={{ padding: '8px 16px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                    style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                   >+ Add new location</button>
-                  <Link href="/explore" style={{ padding: '8px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>Browse Explore →</Link>
+                  <Link href="/explore" style={{ padding: '7px 14px', borderRadius: 4, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 12, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>Browse Explore →</Link>
                 </div>
               </div>
               {showCapUpgrade && (
