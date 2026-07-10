@@ -1,9 +1,9 @@
 ---
 title: Password and two-factor authentication
 category: Account
-summary: Change your password and set up an authenticator app for two-factor sign-in.
+summary: Change your password, set up an authenticator app, and recover access if you lose your phone.
 order: 2
-updated: 2026-05-01
+updated: 2026-07-10
 ---
 
 Profile → **Password & Security** tab.
@@ -38,10 +38,23 @@ Same tab — each enrolled factor has a remove button. Removing all factors disa
 
 ### Lost your authenticator app?
 
-The most common case: you got a new phone and forgot to migrate your authenticator. If you can still sign in on a device that's already authenticated, remove the factor and re-add it from the new phone.
+If you get a new phone and can still sign in on a device that's already authenticated, the easy path is: sign in on the old device, remove the factor from Profile → Password & Security, then re-enroll from the new phone.
 
-If you can't get in at all, contact support via the Feedback button on any signed-in page (well, you can't, since you can't sign in — so use the contact form on the home page or email support directly). Account recovery typically requires confirming the email associated with the account.
+If you're locked out entirely — new phone, no backup, no other signed-in device — use the built-in recovery flow:
 
-### Backup codes
+1. On the sign-in screen, enter your email and password as usual. You'll get to the "Enter your 6-digit code" prompt.
+2. Below the Verify button, tap **Lost access to your authenticator?**.
+3. Confirm the account email shown and tap **Send reset link**. We email a one-time link to that address.
+4. Open the email within 30 minutes and click the link. Confirm **Yes, remove my MFA** on the page that opens.
+5. Sign in with just your email and password — no code required this time.
+6. Go straight to Profile → Password & Security and enroll a fresh authenticator so your account is protected again.
 
-Authenticator apps like Authy and 1Password sync across devices via your iCloud / cloud account, which is the simplest "backup" — get a new phone, the codes follow you. If you use Google Authenticator (which traditionally didn't sync), the cleanest path is a second authenticator app or a hardware key.
+Only whoever controls the mailbox at that address can complete the reset. The link is single-use and expires after 30 minutes, and there's a hard cap of 3 reset requests per hour to keep the flow from being used to spam your inbox.
+
+### Backup strategies
+
+Even with the email recovery flow in place, an authenticator that syncs across your devices is worth setting up so you don't have to reset every time you replace a phone. **Authy**, **1Password**, and **iCloud Keychain** all sync via your cloud account — get a new phone, sign into the app, your codes follow you. **Google Authenticator** now supports Google-account sync too (turn it on in Settings). Or enroll a second authenticator on a spare device / hardware key as a manual backup.
+
+## Password requirements
+
+Passwords are enforced by our auth provider (Supabase). The current requirement on LocateShoot is: **at least 6 characters**. No forced mix of upper/lowercase, numbers, or symbols — but we strongly recommend a passphrase or password-manager-generated password of at least 12 characters, especially if 2FA isn't enabled on your account.
