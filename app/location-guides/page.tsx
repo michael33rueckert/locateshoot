@@ -8,7 +8,7 @@ import LocationGuideCard from '@/components/LocationGuideCard'
 import GuidePreviewModal from '@/components/GuidePreviewModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import UpgradePrompt from '@/components/UpgradePrompt'
-import PortfolioGuideBanner from '@/components/PortfolioGuideBanner'
+import PortfolioShareButton from '@/components/PortfolioShareButton'
 import DemoGuideCards, { type DemoGuideTemplate } from '@/components/DemoGuideCards'
 import { supabase } from '@/lib/supabase'
 import { buildShareUrl } from '@/lib/custom-domain'
@@ -272,16 +272,22 @@ export default function LocationGuidesPage() {
               (one per city, one per session style) or make them single-use for a specific client.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <Link href="/portfolio" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>← Portfolio</Link>
             <Link href="/location-guides/expired" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>⏱ Expired Guides</Link>
+            <PortfolioShareButton
+              onShare={copyFullPortfolio}
+              onPreview={previewFullPortfolio}
+              onEdit={editFullPortfolio}
+              copyState={fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle'}
+            />
             <button onClick={() => {
               if (!hasStarter(profile?.plan)) {
                 setShowQuotaUpgrade(true)
                 return
               }
               setShowCreate(true)
-            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ New guide</button>
+            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ New guide</button>
           </div>
         </div>
 
@@ -328,26 +334,8 @@ export default function LocationGuidesPage() {
           </div>
         ) : (
           <>
-            {/* Portfolio guide banner — always visible, styled as its
-                own thing so it doesn't look like "just another guide"
-                in the grid below. Search still applies to the custom
-                guides only; the banner stays put regardless of
-                search since it's the one guide the photographer
-                always has. */}
-            <PortfolioGuideBanner
-              photographerName={profile?.full_name ?? ''}
-              locationCount={portfolio.length}
-              coverPhotoUrl={fullPortfolioGuide?.cover_photo_url ?? null}
-              hasLink={!!fullPortfolioGuide}
-              onShare={copyFullPortfolio}
-              onEdit={editFullPortfolio}
-              onPreview={previewFullPortfolio}
-              pickCount={fullPortfolioGuide?.pick_count ?? 0}
-              copyState={fullPortfolioGuide && copiedId === fullPortfolioGuide.id ? 'copied' : 'idle'}
-            />
-
-            {/* Custom guides — grid below the banner. Portfolio guide
-                filtered out (banner replaces it). */}
+            {/* Portfolio share moved to the toolbar as a primary
+                action button. Grid below shows only custom guides. */}
             {filtered.length === 0 && !q ? (
               // No custom guides + no active search → new user. Show
               // demo cards to explain what a custom guide IS and let

@@ -10,8 +10,9 @@ import UpgradePrompt from '@/components/UpgradePrompt'
 import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
 import { hasStarter, freePortfolioLocationCap } from '@/lib/plan'
-import { shareSingleLocation } from '@/lib/portfolio-share'
+import { shareFullPortfolio, shareSingleLocation } from '@/lib/portfolio-share'
 import { shareOrCopy } from '@/lib/share'
+import PortfolioShareButton from '@/components/PortfolioShareButton'
 
 // Dedicated full-screen portfolio view. Reads the same portfolio_locations rows
 // that the Dashboard's portfolio section does, so edits in either place stay in
@@ -57,6 +58,24 @@ export default function PortfolioPage() {
   // the same state.
   const [copyLinkBusyId, setCopyLinkBusyId] = useState<string | null>(null)
   const [copyLinkDoneId, setCopyLinkDoneId] = useState<string | null>(null)
+  // "Share portfolio" flash state — mirrors the copyState pattern the
+  // guide + location share buttons use.
+  const [portfolioCopied, setPortfolioCopied] = useState(false)
+
+  async function copyFullPortfolio() {
+    if (!profile) { setToast('⚠ Profile not loaded'); return }
+    const r = await shareFullPortfolio({ id: profile.id, full_name: profile.full_name, custom_domain: profile.custom_domain, custom_domain_verified: profile.custom_domain_verified })
+    if (!r.ok) { setToast(`⚠ ${r.error}`); return }
+    const share = await shareOrCopy({ url: r.url, title: 'My Portfolio' })
+    if (share.method === 'clipboard') {
+      setPortfolioCopied(true)
+      setToast('📋 Portfolio link copied!')
+      setTimeout(() => setPortfolioCopied(false), 1800)
+    } else if (share.method === 'failed') {
+      setToast('⚠ Could not share — please copy manually')
+    }
+    // Native share sheet → no toast; the sheet is the feedback.
+  }
 
   async function copySingleLocationLink(loc: { id: string; name: string }) {
     if (!profile) return
@@ -289,15 +308,19 @@ export default function PortfolioPage() {
                 opening the Add modal — saves them filling out a form
                 they'd hit a wall on saving. Same gate as the dashboard's
                 portfolio section. */}
+            <PortfolioShareButton
+              onShare={copyFullPortfolio}
+              copyState={portfolioCopied ? 'copied' : 'idle'}
+            />
             <button onClick={() => {
               if (!hasStarter(profile?.plan) && locs.length >= freePortfolioLocationCap()) {
                 setShowCapUpgrade(true)
                 return
               }
               setShowAdd(true)
-            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
+            }} style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add new location</button>
             <Link href="/explore" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>+ Add from Explore</Link>
-            <Link href="/location-guides" style={{ padding: '10px 18px', borderRadius: 6, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>📚 Location Guides</Link>
+            <Link href="/location-guides" style={{ padding: '10px 18px', borderRadius: 6, background: 'white', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>📚 Location Guides</Link>
           </div>
         </div>
 
