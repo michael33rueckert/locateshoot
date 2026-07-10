@@ -16,6 +16,15 @@ export default function MfaGate() {
   const [error,       setError]       = useState('')
   const [loading,     setLoading]     = useState(false)
 
+  // "Lost access?" reset flow — sends a reset link to the account
+  // email. Kept collapsed by default so the primary path (type your
+  // code) stays uncluttered.
+  const [showReset,     setShowReset]     = useState(false)
+  const [resetBusy,     setResetBusy]     = useState(false)
+  const [resetSent,     setResetSent]     = useState(false)
+  const [resetError,    setResetError]    = useState('')
+  const [resetEmail,    setResetEmail]    = useState<string | null>(null)
+
   async function check() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setNeeded(false); return }
@@ -30,6 +39,7 @@ export default function MfaGate() {
     const totp = factors?.totp?.find(f => f.status === 'verified')
     if (!totp) { setNeeded(false); return }
     setFactorId(totp.id)
+    setResetEmail(user.email ?? null)
     setNeeded(true)
   }
 
@@ -61,6 +71,25 @@ export default function MfaGate() {
   async function bailOut() {
     await supabase.auth.signOut()
     window.location.href = '/'
+  }
+
+  async function sendResetLink() {
+    setResetBusy(true); setResetError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Session lost — sign in again.')
+      const res = await fetch('/api/mfa-reset/request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.message ?? 'Could not send reset email.')
+      setResetSent(true)
+    } catch (err: any) {
+      setResetError(err?.message ?? 'Could not send reset email.')
+    } finally {
+      setResetBusy(false)
+    }
   }
 
   if (!needed) return null
@@ -118,6 +147,60 @@ export default function MfaGate() {
         >
           {loading ? 'Verifying…' : 'Verify'}
         </button>
+
+        {/* Recovery panel — collapsed by default. Expands into a
+            confirmation card that fires the reset email off to the
+            account address. Deliberately quiet visually so it doesn't
+            compete with the primary code-entry path. */}
+        {!showReset ? (
+          <div style={{ textAlign: 'center', marginBottom: '.75rem' }}>
+            <button
+              onClick={() => setShowReset(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,.55)', fontFamily: 'inherit', fontSize: 12, padding: 0, textDecoration: 'underline' }}
+            >
+              Lost access to your authenticator?
+            </button>
+          </div>
+        ) : (
+          <div style={{ padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', marginBottom: '.75rem' }}>
+            {resetSent ? (
+              <>
+                <div style={{ fontSize: 13, color: '#f5f0e8', fontWeight: 600, marginBottom: 6 }}>Check your email</div>
+                <div style={{ fontSize: 12, color: 'rgba(245,240,232,.55)', lineHeight: 1.55 }}>
+                  We sent a reset link to <strong style={{ color: '#f5f0e8' }}>{resetEmail ?? 'your account address'}</strong>. Click it within 30 minutes to clear MFA. Then sign in with your password.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: '#f5f0e8', fontWeight: 600, marginBottom: 6 }}>Email a reset link?</div>
+                <div style={{ fontSize: 12, color: 'rgba(245,240,232,.55)', lineHeight: 1.55, marginBottom: 10 }}>
+                  We&apos;ll send a one-time link to <strong style={{ color: '#f5f0e8' }}>{resetEmail ?? 'your account address'}</strong> that removes MFA from your account. Only whoever controls that inbox can use it.
+                </div>
+                {resetError && (
+                  <div style={{ padding: '7px 10px', background: 'rgba(181,75,42,.15)', border: '1px solid rgba(181,75,42,.3)', borderRadius: 5, fontSize: 12, color: '#ff9b7b', marginBottom: 10, lineHeight: 1.5 }}>
+                    {resetError}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={sendResetLink}
+                    disabled={resetBusy}
+                    style={{ flex: 1, padding: '9px', borderRadius: 6, background: '#b54b2a', color: 'white', border: 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, cursor: resetBusy ? 'default' : 'pointer', opacity: resetBusy ? 0.6 : 1 }}
+                  >
+                    {resetBusy ? 'Sending…' : 'Send reset link'}
+                  </button>
+                  <button
+                    onClick={() => { setShowReset(false); setResetError('') }}
+                    disabled={resetBusy}
+                    style={{ padding: '9px 14px', borderRadius: 6, background: 'transparent', color: 'rgba(245,240,232,.6)', border: '1px solid rgba(255,255,255,.15)', fontFamily: 'inherit', fontSize: 12, cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         <div style={{ textAlign: 'center' }}>
           <button
