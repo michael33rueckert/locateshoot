@@ -55,7 +55,8 @@ export default function PortfolioGuideBanner({
     <div style={{
       position: 'relative',
       display: 'flex',
-      alignItems: 'stretch',
+      flexWrap: 'wrap',
+      alignItems: 'center',
       gap: 16,
       padding: 16,
       background: 'linear-gradient(135deg, rgba(196,146,42,.08), rgba(196,146,42,.02))',
@@ -77,10 +78,12 @@ export default function PortfolioGuideBanner({
         }
       </div>
 
-      {/* Middle — copy + metrics. flex:1 so it grows and pushes the
-          action buttons to the right. min-width:0 lets long
-          photographer names truncate instead of blowing out the row. */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
+      {/* Middle — copy + metrics. flex-basis lets the middle keep
+          growing next to the cover on wide viewports but shrink
+          enough on mobile that the row can wrap the action buttons
+          below cleanly. min-width:0 lets long photographer names
+          truncate instead of blowing out the row. */}
+      <div style={{ flex: '1 1 200px', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
           <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--ink)', background: 'var(--gold)', padding: '3px 9px', borderRadius: 4 }}>
             📚 Portfolio Guide
@@ -140,12 +143,25 @@ export default function PortfolioGuideBanner({
       </div>
 
       <style>{`
-        /* On phones, wrap the actions to a second row under the copy
-           so they don't crowd out the photographer's name. Banner
-           becomes column layout — cover on top, copy middle, actions
-           bottom — for the narrowest viewports. */
+        /* On phones, force the action button group to take the full
+           width of the banner. Combined with flex-wrap:wrap on the
+           outer container, that pushes the buttons to their own row
+           BELOW the cover + copy row instead of trying to squeeze
+           beside the photographer name. Buttons themselves stretch
+           equally so they read as a solid CTA row. */
         @media (max-width: 620px) {
-          .portfolio-guide-banner-actions { flex-wrap: wrap; justify-content: flex-start; gap: 6px; width: 100%; }
+          .portfolio-guide-banner-actions {
+            flex-wrap: wrap;
+            flex-basis: 100%;
+            justify-content: stretch;
+            gap: 6px;
+          }
+          .portfolio-guide-banner-actions > button { flex: 1 1 auto; text-align: center; }
+        }
+        @media (max-width: 380px) {
+          /* Below ~380px, drop the Edit label to save row-2 space —
+             users can still hit the button, just no visible label. */
+          .portfolio-guide-banner-actions > button { padding-left: 10px; padding-right: 10px; font-size: 12px; }
         }
       `}</style>
     </div>
