@@ -528,8 +528,8 @@ export default function HomePage() {
             ? <Link href="/dashboard" className="btn btn-gold btn-lg">Go to your dashboard →</Link>
             : (
               <>
-                <button className="btn btn-gold btn-lg"  onClick={() => openModal('signup')}>Create your free account</button>
-                <button className="btn btn-ghost btn-lg" onClick={() => scrollTo('pricing')}>See pricing →</button>
+                <button className="btn btn-gold btn-lg" onClick={() => openModal('signup')}>Create your free account</button>
+                <button className="btn btn-dark btn-lg" onClick={() => scrollTo('pricing')}>See pricing →</button>
               </>
             )}
         </div>
