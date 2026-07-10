@@ -486,10 +486,18 @@ export default function DashboardPage() {
     if (dismissFavoriteId !== id) { setDismissFavoriteId(id); return }
     const previous = clientFavoriteLists
     setClientFavoriteLists(prev => prev.filter(f => f.id !== id))
-    const { error } = await supabase.from('client_favorite_lists').delete().eq('id', id)
+    // Verify the delete actually removed a row — RLS-filtered
+    // deletes return success with empty data, so without the
+    // .select() check the row would reappear on the next refresh.
+    const { data, error } = await supabase.from('client_favorite_lists').delete().eq('id', id).select('id')
     if (error) {
       setClientFavoriteLists(previous)
       setToast('⚠ Could not dismiss — please try again')
+      return
+    }
+    if (!data || data.length === 0) {
+      setClientFavoriteLists(previous)
+      setToast('⚠ Not authorized to dismiss (RLS policy missing)')
       return
     }
     setDismissFavoriteId(null); setToast('Dismissed')
@@ -498,14 +506,28 @@ export default function DashboardPage() {
   // Same pattern for client_picks rows. RLS policy lives in
   // 20260429_client_picks_delete.sql — derived via the share_link
   // since client_picks doesn't carry a denormalized user_id.
+  //
+  // The .select() after .delete() is critical: Supabase returns a
+  // success (no error, empty data) when RLS silently filters the
+  // row out. Without this check the optimistic UI removal made the
+  // pick vanish for the session, then it re-appeared on refresh
+  // because the DB row was never actually deleted. If the RLS
+  // migration hasn't been applied, this surfaces the failure
+  // instead of pretending it worked.
   async function dismissPick(id: string) {
     if (dismissPickId !== id) { setDismissPickId(id); return }
     const previous = recentPicks
     setRecentPicks(prev => prev.filter(p => p.id !== id))
-    const { error } = await supabase.from('client_picks').delete().eq('id', id)
+    const { data, error } = await supabase.from('client_picks').delete().eq('id', id).select('id')
     if (error) {
       setRecentPicks(previous)
       setToast('⚠ Could not dismiss — please try again')
+      return
+    }
+    if (!data || data.length === 0) {
+      // RLS blocked the delete — apply migration 20260429_client_picks_delete.sql.
+      setRecentPicks(previous)
+      setToast('⚠ Not authorized to dismiss (RLS policy missing)')
       return
     }
     setDismissPickId(null); setToast('Dismissed')
@@ -988,7 +1010,15 @@ export default function DashboardPage() {
                               from <strong style={{ fontWeight: 500, color: 'var(--ink-soft)' }}>{guideLabel}</strong>
                             </div>
                           </div>
-                          <div style={{ flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                          {/* Right column — date + dismiss. marginLeft:auto
+                              keeps it flush-right when the row wraps to two
+                              lines on mobile; without it the wrapped column
+                              lands on the left of the new line and the
+                              "Click again to confirm" label looks stranded.
+                              maxWidth caps the "Click again to confirm"
+                              expansion so the button never grows past its
+                              own column boundary. */}
+                          <div style={{ marginLeft: 'auto', flexShrink: 0, textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, maxWidth: '100%' }}>
                             <div>
                               {dateText}<br />
                               <span style={{ fontSize: 11 }}>{timeText}</span>
@@ -1097,6 +1127,7 @@ export default function DashboardPage() {
                               padding: '4px 10px',
                               cursor: 'pointer',
                               flexShrink: 0,
+                              marginLeft: 'auto',
                             }}
                           >
                             {dismissFavoriteId === f.id ? 'Click again to confirm' : '✕ Dismiss'}
