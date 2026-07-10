@@ -47,6 +47,27 @@ export default function PortfolioPage() {
   const [loading,  setLoading]  = useState(true)
   const [search,   setSearch]   = useState('')
   const [filter,   setFilter]   = useState<'all' | 'with-photos' | 'needs-photos'>('all')
+  // Sort order:
+  //   'oldest'  — created_at ascending (default; matches "first added
+  //               shows up first" mental model)
+  //   'newest'  — created_at descending (most recent add on top)
+  //   'name'    — alphabetical by name
+  //   'custom'  — sort_order ascending, the photographer's drag-
+  //               reordered arrangement. Only mode where the reorder
+  //               drag handle is active.
+  // Persisted per-device via localStorage so a photographer's choice
+  // sticks across visits without needing a profile-preferences round-
+  // trip.
+  const [sortMode, setSortMode] = useState<'oldest' | 'newest' | 'name' | 'custom'>('oldest')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const saved = localStorage.getItem('portfolio_sort') as typeof sortMode | null
+    if (saved && ['oldest', 'newest', 'name', 'custom'].includes(saved)) setSortMode(saved)
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('portfolio_sort', sortMode)
+  }, [sortMode])
   const [editing,  setEditing]  = useState<string | null>(null)
   const [showAdd,  setShowAdd]  = useState(false)
   // Toggled when a Free user clicks "+ Add new location" while
@@ -238,15 +259,30 @@ export default function PortfolioPage() {
     return () => clearTimeout(t)
   }, [toast])
 
-  const filtered = locs.filter(l => {
+  const filtered = (() => {
     const q = search.trim().toLowerCase()
-    const matchesSearch = !q || l.name.toLowerCase().includes(q) || (l.city?.toLowerCase().includes(q) ?? false)
-    const matchesFilter =
-      filter === 'all' ? true
-      : filter === 'with-photos' ? l.photo_count > 0
-      : l.photo_count === 0
-    return matchesSearch && matchesFilter
-  })
+    const rows = locs.filter(l => {
+      const matchesSearch = !q || l.name.toLowerCase().includes(q) || (l.city?.toLowerCase().includes(q) ?? false)
+      const matchesFilter =
+        filter === 'all' ? true
+        : filter === 'with-photos' ? l.photo_count > 0
+        : l.photo_count === 0
+      return matchesSearch && matchesFilter
+    })
+    // Sort client-side so the mode can change without a Supabase
+    // round-trip. Base rows already come in sort_order asc from
+    // load() — that ordering is what 'custom' preserves.
+    if (sortMode === 'name') {
+      return [...rows].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    }
+    if (sortMode === 'oldest') {
+      return [...rows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    }
+    if (sortMode === 'newest') {
+      return [...rows].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    }
+    return rows  // 'custom' — already in sort_order
+  })()
 
   const needsPhotosCount = locs.filter(l => l.photo_count === 0).length
 
@@ -390,6 +426,23 @@ export default function PortfolioPage() {
               {f === 'all' ? `All (${locs.length})` : f === 'with-photos' ? 'With photos' : `Needs photos${needsPhotosCount > 0 ? ` (${needsPhotosCount})` : ''}`}
             </button>
           ))}
+          {/* Sort dropdown — native <select> for the smallest possible
+              footprint on mobile + built-in keyboard nav. Preference
+              persists per-device via localStorage. Drag-to-reorder only
+              engages when 'custom' is picked (see canReorder). */}
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-soft)', marginLeft: 'auto' }}>
+            Sort:
+            <select
+              value={sortMode}
+              onChange={e => setSortMode(e.target.value as typeof sortMode)}
+              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--cream-dark)', background: 'white', fontSize: 12, fontFamily: 'inherit', color: 'var(--ink)', cursor: 'pointer' }}
+            >
+              <option value="oldest">Oldest first</option>
+              <option value="newest">Newest first</option>
+              <option value="name">A → Z</option>
+              <option value="custom">Custom (drag to arrange)</option>
+            </select>
+          </label>
         </div>
 
         {/* Grid */}
@@ -416,7 +469,7 @@ export default function PortfolioPage() {
           </div>
         ) : (
           <>
-            {filter === 'all' && !search.trim() && locs.length > 1 && (
+            {sortMode === 'custom' && filter === 'all' && !search.trim() && locs.length > 1 && (
               <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginBottom: 8, fontStyle: 'italic' }}>
                 Press and hold any card, then drag to reorder. The order here is how clients see your portfolio.
               </div>
@@ -436,7 +489,13 @@ export default function PortfolioPage() {
                 const isDragging = reorder.draggingId === loc.id
                 // Only allow reorder drag when the user isn't filtering/searching,
                 // otherwise the drop indexes would be misleading.
-                const canReorder = filter === 'all' && !search.trim() && locs.length > 1
+                // Drag reorder only makes sense when the display order
+                // maps to sort_order — that is, when the user has
+                // explicitly picked 'custom'. In any other sort mode
+                // dragging would move the row on-screen but the row
+                // would snap right back to the sort's natural position
+                // on next render.
+                const canReorder = sortMode === 'custom' && filter === 'all' && !search.trim() && locs.length > 1
                 const bind = canReorder ? reorder.bindItem(loc.id) : {}
                 const isOver = reorder.overId === loc.id && reorder.draggingId && reorder.draggingId !== loc.id
                 // Beyond the Free-plan cap — card stays editable but
