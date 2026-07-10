@@ -708,8 +708,8 @@ export default function DashboardPage() {
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    📚 Location Guides
-                    <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(61,110,140,.1)', color: 'var(--sky)', border: '1px solid rgba(61,110,140,.2)' }}>{1 + customGuides.length}</span>
+                    📚 Custom Location Guides
+                    <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'rgba(61,110,140,.1)', color: 'var(--sky)', border: '1px solid rgba(61,110,140,.2)' }}>{customGuides.length}</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>A curated set of portfolio locations for each city, style, or client — one reusable link per guide.</div>
                 </div>
@@ -736,7 +736,7 @@ export default function DashboardPage() {
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                   <UpgradePrompt
                     feature="custom Location Guides"
-                    description="The Free plan only includes your auto-generated Portfolio guide. Upgrade to Starter or Pro to create custom guides — one per city, theme, client, or session."
+                    description="The Free plan only includes sharing your entire portfolio. Upgrade to Starter or Pro to create custom guides — Example: One for each city, theme client, or session."
                   />
                   <button onClick={() => setShowQuotaUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
                 </div>

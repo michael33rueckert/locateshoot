@@ -288,7 +288,7 @@ export default function LocationGuidesPage() {
           <div style={{ marginBottom: '1.5rem' }}>
             <UpgradePrompt
               feature="custom Location Guides"
-              description="The Free plan only includes your auto-generated Portfolio guide. Upgrade to Starter or Pro to create custom guides — one per city, theme, client, or session."
+              description="The Free plan only includes sharing your entire portfolio. Upgrade to Starter or Pro to create custom guides — Example: One for each city, theme client, or session."
             />
             <button onClick={() => setShowQuotaUpgrade(false)} style={{ marginTop: 8, background: 'transparent', color: 'var(--ink-soft)', border: 'none', padding: 0, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Dismiss</button>
           </div>
