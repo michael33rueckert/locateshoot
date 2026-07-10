@@ -1036,6 +1036,13 @@ export default function DashboardPage() {
                                 borderRadius: 4,
                                 padding: '4px 10px',
                                 cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                // Reserve enough width so the button stays the
+                                // same size across both idle + armed states —
+                                // no visible jump when Dismiss flips to
+                                // "Click again to confirm" on tap.
+                                minWidth: 150,
+                                textAlign: 'center',
                               }}
                             >
                               {isArmed ? 'Click again to confirm' : '✕ Dismiss'}
@@ -1128,6 +1135,9 @@ export default function DashboardPage() {
                               cursor: 'pointer',
                               flexShrink: 0,
                               marginLeft: 'auto',
+                              whiteSpace: 'nowrap',
+                              minWidth: 150,
+                              textAlign: 'center',
                             }}
                           >
                             {dismissFavoriteId === f.id ? 'Click again to confirm' : '✕ Dismiss'}
