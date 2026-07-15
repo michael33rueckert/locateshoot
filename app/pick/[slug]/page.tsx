@@ -300,6 +300,14 @@ export default function ClientPickerPage() {
         setBranding(branding)
         setPickTemplate(tpl ?? null)
 
+        // Honor the photographer's chosen default view. Only "map"
+        // needs an action here — 'list' is already the initial state.
+        // Applied inside the fetch handler (before setLoading(false))
+        // so the loading screen hides the state change and the first
+        // paint of the real UI already reflects the chosen default.
+        // Missing / unrecognized values fall back to list.
+        if (share?.default_client_view === 'map') setMobileMapVisible(true)
+
         // Photographer's recommended picks for this guide. Stored as
         // portfolio_location ids on share_links.highlighted_location_ids
         // — when the migration hasn't landed yet the field is undefined,

@@ -261,25 +261,30 @@ export async function GET(request: Request, context: any) {
   if (slug === 'preview') return handlePreview(request, admin)
 
   // Try with all the optional columns from later migrations
-  // (highlighted_location_ids + pick_template_id). Each falls back
-  // independently so a Supabase missing-column error on one doesn't
-  // block the rest of the page from loading. Both shapes are passed
-  // through to the client, so widen to `any` instead of fighting the
-  // inferred union type.
+  // (highlighted_location_ids + pick_template_id + default_client_view).
+  // Each falls back independently so a Supabase missing-column error
+  // on one doesn't block the rest of the page from loading. Both
+  // shapes are passed through to the client, so widen to `any`
+  // instead of fighting the inferred union type.
   const baseShareCols = 'id,user_id,session_name,message,photographer_name,my_photos_only,expires_at,portfolio_location_ids,location_ids,secret_ids,is_permanent,is_full_portfolio,max_picks,max_pick_distance_miles,expire_on_submit'
   let share: any = null
   let shareErr: any = null
-  // 1: try the full select (both optional columns)
+  // 1: try the full select (all optional columns)
   {
+    const r = await admin.from('share_links').select(`${baseShareCols},highlighted_location_ids,pick_template_id,default_client_view`).eq('slug', slug).single()
+    share = r.data; shareErr = r.error
+  }
+  // 2: drop default_client_view (newest migration)
+  if (shareErr && /default_client_view/.test(shareErr.message ?? '')) {
     const r = await admin.from('share_links').select(`${baseShareCols},highlighted_location_ids,pick_template_id`).eq('slug', slug).single()
     share = r.data; shareErr = r.error
   }
-  // 2: try without pick_template_id (newer migration)
+  // 3: drop pick_template_id
   if (shareErr && /pick_template_id/.test(shareErr.message ?? '')) {
     const r = await admin.from('share_links').select(`${baseShareCols},highlighted_location_ids`).eq('slug', slug).single()
     share = r.data; shareErr = r.error
   }
-  // 3: try without either optional column
+  // 4: drop highlighted_location_ids too
   if (shareErr && /highlighted_location_ids/.test(shareErr.message ?? '')) {
     const r = await admin.from('share_links').select(baseShareCols).eq('slug', slug).single()
     share = r.data; shareErr = r.error

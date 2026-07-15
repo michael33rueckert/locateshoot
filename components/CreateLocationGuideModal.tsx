@@ -141,6 +141,11 @@ export default function CreateLocationGuideModal({
   const [multipick,      setMultipick]      = useState(false)
   const [maxPicks,       setMaxPicks]       = useState(2)
   const [maxMiles,       setMaxMiles]       = useState<string>('')  // input string so the field can be empty
+  // Default view the client sees on open: sidebar/list (default) or
+  // full-screen map. Only visible below the desktop breakpoint on the
+  // client side — non-editorial desktop layouts show both side-by-side
+  // anyway. Persists per-guide on share_links.default_client_view.
+  const [defaultView,    setDefaultView]    = useState<'list' | 'map'>('list')
   // Photo pool for the cover picker — keyed to portfolio_location_id so we can
   // show only photos from locations the photographer has included in the guide.
   const [portfolioPhotos, setPortfolioPhotos] = useState<{ pid: string; url: string }[]>([])
@@ -161,12 +166,12 @@ export default function CreateLocationGuideModal({
     const baseCols = 'message,expires_at,is_permanent,expire_on_submit,cover_photo_url,max_picks,max_pick_distance_miles'
     ;(async () => {
       let { data } = await supabase.from('share_links')
-        .select(`${baseCols},highlighted_location_ids,pick_template_id`)
+        .select(`${baseCols},highlighted_location_ids,pick_template_id,default_client_view`)
         .eq('id', editLink.id)
         .single()
       if (!data) {
-        // Probably one or both migrations haven't landed yet — re-fetch
-        // without the optional columns.
+        // Probably one or more optional-column migrations haven't
+        // landed — re-fetch without them.
         const fb = await supabase.from('share_links').select(baseCols).eq('id', editLink.id).single()
         data = fb.data as any
       }
@@ -186,6 +191,8 @@ export default function CreateLocationGuideModal({
       }
       const hl = (data as any).highlighted_location_ids as string[] | null | undefined
       if (Array.isArray(hl)) setHighlightedIds(hl.slice(0, MAX_HIGHLIGHTS))
+      const dv = (data as any).default_client_view as string | null | undefined
+      if (dv === 'map' || dv === 'list') setDefaultView(dv)
     })()
   }, [editLink])
 
@@ -323,13 +330,13 @@ export default function CreateLocationGuideModal({
         // optional columns from later migrations — strip whichever the
         // server complains about and retry. Saves the rest of the
         // payload either way.
-        const optional = { highlighted_location_ids: validHighlights, pick_template_id: pickTemplateId }
+        const optional = { highlighted_location_ids: validHighlights, pick_template_id: pickTemplateId, default_client_view: defaultView }
         let { data, error: updateErr } = await supabase.from('share_links')
           .update({ ...updatePayload, ...optional })
           .eq('id', editLink.id)
           .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
           .single()
-        if (updateErr && /highlighted_location_ids|pick_template_id/.test(updateErr.message ?? '')) {
+        if (updateErr && /highlighted_location_ids|pick_template_id|default_client_view/.test(updateErr.message ?? '')) {
           console.warn('share_links optional cols missing — saving without them (run latest migrations to enable)', updateErr.message)
           if (validHighlights.length > 0 && /highlighted_location_ids/.test(updateErr.message ?? '')) setHighlightsDropped(true)
           const fb = await supabase.from('share_links').update(updatePayload).eq('id', editLink.id).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
@@ -361,7 +368,7 @@ export default function CreateLocationGuideModal({
         .insert({ ...insertBase, ...optional })
         .select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url')
         .single()
-      if (insertErr && /highlighted_location_ids|pick_template_id/.test(insertErr.message ?? '')) {
+      if (insertErr && /highlighted_location_ids|pick_template_id|default_client_view/.test(insertErr.message ?? '')) {
         console.warn('share_links optional cols missing — creating without them (run latest migrations to enable)', insertErr.message)
         if (validHighlights.length > 0 && /highlighted_location_ids/.test(insertErr.message ?? '')) setHighlightsDropped(true)
         const fb = await supabase.from('share_links').insert(insertBase).select('id,session_name,slug,created_at,portfolio_location_ids,location_ids,is_full_portfolio,expires_at,expire_on_submit,cover_photo_url').single()
@@ -458,6 +465,37 @@ export default function CreateLocationGuideModal({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Default client view — controls what the client sees first
+              when they open the guide on mobile (list of locations or
+              full-screen map). Desktop non-editorial layouts always
+              show both side-by-side, so the setting is a no-op there. */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={labelStyle}>Default view for your client</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {([
+                { value: 'list', icon: '☰', label: 'List',       desc: 'Location cards first.' },
+                { value: 'map',  icon: '🗺', label: 'Map',        desc: 'Full-screen map first.' },
+              ] as const).map(opt => {
+                const active = defaultView === opt.value
+                return (
+                  <label
+                    key={opt.value}
+                    style={{ display: 'flex', gap: 10, padding: '10px 12px', borderRadius: 6, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--gold)' : 'var(--cream-dark)'}`, background: active ? 'rgba(196,146,42,.05)' : 'white', transition: 'all .15s' }}
+                  >
+                    <input type="radio" name="default-view" checked={active} onChange={() => setDefaultView(opt.value)} style={{ marginTop: 3, accentColor: 'var(--gold)' }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 2 }}>{opt.icon} {opt.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>{opt.desc}</div>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 6, lineHeight: 1.5 }}>
+              Applies on mobile — the client can still switch views with the toggle. On desktop, most layouts show list + map together already.
+            </div>
           </div>
 
           {/* Expiration mode (hidden on full-portfolio guides — they're
