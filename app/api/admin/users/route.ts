@@ -25,9 +25,16 @@ export async function GET(request: Request) {
 
   const userIds = (profiles ?? []).map((p: any) => p.id)
 
-  const [portfolioRes, shareLinksRes] = await Promise.all([
+  // Portfolio + share-link counts join public tables. Last-sign-in
+  // lives on auth.users and isn't exposed via the profiles view, so
+  // we pull it from the admin auth API in the same batch. listUsers
+  // returns the current page (1-based); perPage=1000 keeps this to
+  // a single request as long as total users stays under the profiles
+  // cap of 500 above.
+  const [portfolioRes, shareLinksRes, authRes] = await Promise.all([
     admin.from('portfolio_locations').select('user_id').in('user_id', userIds),
     admin.from('share_links').select('user_id').in('user_id', userIds),
+    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ])
 
   const portfolioCounts: Record<string, number> = {}
@@ -38,11 +45,19 @@ export async function GET(request: Request) {
   ;(shareLinksRes.data ?? []).forEach((r: any) => {
     shareCounts[r.user_id] = (shareCounts[r.user_id] ?? 0) + 1
   })
+  // Map auth-user rows back to profile ids so the UI can show a
+  // last-login column. Null means the account has never signed in
+  // (created but not yet confirmed / never logged in).
+  const lastSignInById: Record<string, string | null> = {}
+  ;(authRes?.data?.users ?? []).forEach((u: any) => {
+    lastSignInById[u.id] = u.last_sign_in_at ?? null
+  })
 
   const users = (profiles ?? []).map((p: any) => ({
     ...p,
-    portfolio_count:   portfolioCounts[p.id] ?? 0,
-    share_link_count:  shareCounts[p.id] ?? 0,
+    portfolio_count:    portfolioCounts[p.id] ?? 0,
+    share_link_count:   shareCounts[p.id] ?? 0,
+    last_sign_in_at:    lastSignInById[p.id] ?? null,
   }))
 
   return NextResponse.json({ users })

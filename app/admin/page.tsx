@@ -11,7 +11,7 @@ import LocationEditModal from '@/components/admin/LocationEditModal'
 
 interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
 
-interface AdminUser { id: string; email: string; full_name: string | null; plan: string | null; created_at: string; portfolio_count: number; share_link_count: number }
+interface AdminUser { id: string; email: string; full_name: string | null; plan: string | null; created_at: string; portfolio_count: number; share_link_count: number; last_sign_in_at: string | null }
 
 interface ManagedLocation {
   id: string; name: string; description: string | null;
@@ -352,6 +352,7 @@ export default function AdminPage() {
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Portfolio</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Shares</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Joined</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}>Last login</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500, color: 'var(--ink-soft)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '1px solid var(--cream-dark)' }}></th>
                   </tr>
                 </thead>
@@ -418,6 +419,12 @@ export default function AdminPage() {
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.portfolio_count}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{u.share_link_count}</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--ink-soft)', fontSize: 11, whiteSpace: 'nowrap' }}>{timeAgo(u.created_at)}</td>
+                      <td
+                        style={{ padding: '9px 12px', textAlign: 'right', color: u.last_sign_in_at ? 'var(--ink-soft)' : 'var(--rust)', fontSize: 11, whiteSpace: 'nowrap' }}
+                        title={u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : 'This account has never signed in'}
+                      >
+                        {u.last_sign_in_at ? timeAgo(u.last_sign_in_at) : 'never'}
+                      </td>
                       <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <Link href={`/admin/users/${u.id}`} style={{ padding: '5px 10px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>Manage →</Link>
                       </td>
