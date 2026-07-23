@@ -151,7 +151,7 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)' }} />
               LocateShoot
             </Link>
-            <NotificationBell placement="right" />
+            <span data-tour="notification-bell"><NotificationBell placement="right" /></span>
           </div>
 
           {/* Nav links — scrollable if the list ever outgrows the
@@ -219,7 +219,7 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {rightExtra}
-          {signedIn && <NotificationBell />}
+          {signedIn && <span data-tour="notification-bell"><NotificationBell /></span>}
           {canInstall && (
             <button
               className="nav-links"

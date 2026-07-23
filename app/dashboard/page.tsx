@@ -5,6 +5,7 @@ import Link from 'next/link'
 import PaginationButtons from '@/components/PaginationButtons'
 import { supabase } from '@/lib/supabase'
 import AppNav from '@/components/AppNav'
+import DashboardTour from '@/components/DashboardTour'
 import PortfolioEditModal from '@/components/PortfolioEditModal'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import CreateLocationGuideModal from '@/components/CreateLocationGuideModal'
@@ -51,6 +52,14 @@ const BG_CYCLE = ['bg-1','bg-2','bg-3','bg-4','bg-5','bg-6']
 export default function DashboardPage() {
   const [profile,             setProfile]             = useState<Profile | null>(null)
   const [portfolioLocs,       setPortfolioLocs]        = useState<PortfolioLocation[]>([])
+  // Dashboard product-tour visibility. Fires exactly once the first
+  // time a user lands on /dashboard after finishing the walkthrough
+  // (preferences.onboarded_at set + dashboard_tour_seen_at null), and
+  // on demand via ?tour=1 (Help → Take the dashboard tour). We read
+  // the URL via window.location instead of useSearchParams() so the
+  // dashboard doesn't need a Suspense boundary — it's a fully client-
+  // side page anyway.
+  const [tourOpen,            setTourOpen]             = useState(false)
   const [permanentLinks,      setPermanentLinks]       = useState<PermanentLink[]>([])
   const [recentPicks,         setRecentPicks]          = useState<RecentPick[]>([])
   // Favorited locations from the Explore map — see migration
@@ -129,6 +138,39 @@ export default function DashboardPage() {
     const id = setTimeout(() => setToast(null), 2800)
     return () => clearTimeout(id)
   }, [toast])
+
+  // Dashboard tour trigger. Fires once when profile is loaded if
+  // the user just finished the walkthrough (onboarded_at set) but
+  // has never seen this tour (dashboard_tour_seen_at null), OR any
+  // time ?tour=1 is on the URL (Help → replay). Short delay so
+  // late-hydrating sections (portfolio grid, client selections) have
+  // DOM in place before the tour starts probing anchors.
+  useEffect(() => {
+    if (!profile) return
+    const prefs   = profile.preferences ?? {}
+    const forced  = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tour') === '1'
+    const firstUp = !!prefs.onboarded_at && !prefs.dashboard_tour_seen_at
+    if (!forced && !firstUp) return
+    const t = setTimeout(() => setTourOpen(true), 350)
+    return () => clearTimeout(t)
+  }, [profile])
+
+  const handleTourFinish = useCallback(async () => {
+    setTourOpen(false)
+    if (!profile) return
+    const merged = { ...(profile.preferences ?? {}), dashboard_tour_seen_at: new Date().toISOString() }
+    // Persist so the tour never auto-fires again for this user.
+    // Failure is non-fatal — worst case the tour re-fires on their
+    // next dashboard visit.
+    await supabase.from('profiles').update({ preferences: merged }).eq('id', profile.id)
+    setProfile(p => p ? { ...p, preferences: merged } : p)
+    // Strip ?tour=1 from the URL so a refresh doesn't re-open. Use
+    // history.replaceState directly since we don't need router
+    // navigation semantics.
+    if (typeof window !== 'undefined' && window.location.search.includes('tour=')) {
+      window.history.replaceState({}, '', '/dashboard')
+    }
+  }, [profile])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -704,7 +746,7 @@ export default function DashboardPage() {
                 the first slot, gold-bordered and labeled, with custom
                 guides flowing below in the same grid. Mirrors the portfolio
                 section's "first 6 + View all" pattern when the list grows. */}
-            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+            <div data-tour="custom-guides" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -818,7 +860,7 @@ export default function DashboardPage() {
             </div>
 
             {/* MY PORTFOLIO — primary section */}
-            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+            <div data-tour="my-portfolio" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -828,14 +870,17 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>Your curated locations — shown to clients on Location Guides.</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <PortfolioShareButton
-                    size="sm"
-                    onShare={copyFullPortfolio}
-                    onPreview={previewFullPortfolio}
-                    onEdit={editFullPortfolio}
-                    copyState={fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle'}
-                  />
+                  <span data-tour="share-portfolio" style={{ display: 'inline-flex' }}>
+                    <PortfolioShareButton
+                      size="sm"
+                      onShare={copyFullPortfolio}
+                      onPreview={previewFullPortfolio}
+                      onEdit={editFullPortfolio}
+                      copyState={fullPortfolioPermLink && copiedGuideId === fullPortfolioPermLink.id ? 'copied' : 'idle'}
+                    />
+                  </span>
                   <button
+                    data-tour="add-location"
                     onClick={() => {
                       // Free plan caps portfolio at 5 locations. If they're
                       // at the cap, show the upgrade prompt instead of
@@ -970,7 +1015,7 @@ export default function DashboardPage() {
                 .dash-pick-date { display: none !important; }
               }
             `}</style>
-            <div id="client-picks" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80 }}>
+            <div id="client-picks" data-tour="client-selections" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80 }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   ✓ Client Selections
@@ -1379,6 +1424,8 @@ export default function DashboardPage() {
           {toast}
         </div>
       )}
+
+      <DashboardTour enabled={tourOpen} onFinish={handleTourFinish} />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

@@ -79,6 +79,28 @@ export default function HelpIndexClient({ articles, categories }: Props) {
           </p>
         </div>
 
+        {/* Replay entry point for the dashboard product tour — the
+            auto-fired tour on first sign-in only runs once, so this
+            is the discoverable "take me through it again" surface. */}
+        <Link
+          href="/dashboard?tour=1"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 16px', marginBottom: '1.5rem',
+            background: 'rgba(196,146,42,.08)', border: '1px solid rgba(196,146,42,.28)',
+            borderRadius: 8, textDecoration: 'none', color: 'var(--ink)',
+          }}
+        >
+          <span style={{ fontSize: 20 }}>🧭</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 2 }}>Take the dashboard tour</span>
+            <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.5 }}>
+              A 60-second walkthrough pointing at each part of your dashboard. Great as a refresher or after an update.
+            </span>
+          </span>
+          <span style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 600 }}>Start →</span>
+        </Link>
+
         {/* Search bar — client-side, filters across title + summary +
             category. No fuzzy matching for now; substring is enough
             for a small article set. The AI assistant lives in the
