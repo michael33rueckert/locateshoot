@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import { supabase } from '@/lib/supabase'
 import PasswordRequirements from '@/components/PasswordRequirements'
 import { validatePassword } from '@/lib/password'
@@ -23,9 +24,17 @@ export default function AuthModal({ initialMode, onClose }: Props) {
   const [success,   setSuccess]   = useState('')
   const [mfaCode,     setMfaCode]     = useState('')
   const [mfaFactorId, setMfaFactorId] = useState('')
+  // When a signup attempt matches an existing account, Supabase silently
+  // returns a fake user object with identities=[] (anti-enumeration).
+  // We surface that as a helpful "already registered" panel with Sign
+  // in / Reset password shortcuts — the UX cost of hiding it (users
+  // waiting forever for a confirmation email that will never arrive)
+  // outweighs the small enumeration risk for this app's threat model.
+  // Rate limits + Sentry breadcrumbs are the real defense.
+  const [duplicateEmail, setDuplicateEmail] = useState<string | null>(null)
 
   function switchMode(m: Mode) {
-    setMode(m); setError(''); setSuccess('')
+    setMode(m); setError(''); setSuccess(''); setDuplicateEmail(null)
   }
 
   // After a successful password sign-in, decide whether to challenge for MFA.
@@ -72,7 +81,7 @@ export default function AuthModal({ initialMode, onClose }: Props) {
   }
 
   async function handleSubmit() {
-    setError(''); setSuccess(''); setLoading(true)
+    setError(''); setSuccess(''); setDuplicateEmail(null); setLoading(true)
     try {
       if (mode === 'forgot') {
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
@@ -90,12 +99,28 @@ export default function AuthModal({ initialMode, onClose }: Props) {
           setError('Password doesn\'t meet the requirements — check the checklist below the password field.')
           return
         }
+        const trimmedEmail = email.trim()
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: trimmedEmail,
           password,
           options: { data: { full_name: fullName.trim() } },
         })
         if (error) throw error
+
+        // Supabase's anti-enumeration behavior: when the email is
+        // already registered, signUp() succeeds silently and returns
+        // a user object whose `identities` array is empty. Real new
+        // signups always have at least one identity. Surface the
+        // duplicate to the user (with Sign in / Reset password
+        // shortcuts) instead of leaving them staring at "check your
+        // email" for a message that will never arrive.
+        const isDuplicate = !!data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0
+        if (isDuplicate) {
+          Sentry.addBreadcrumb({ category: 'auth', level: 'info', message: 'signup: duplicate email' })
+          setDuplicateEmail(trimmedEmail)
+          return
+        }
+
         if (data.user) {
           await supabase.from('profiles').upsert({
             id:        data.user.id,
@@ -103,6 +128,7 @@ export default function AuthModal({ initialMode, onClose }: Props) {
             full_name: fullName.trim(),
           })
         }
+        Sentry.addBreadcrumb({ category: 'auth', level: 'info', message: 'signup: created' })
         setSuccess('Account created! Check your email to confirm, then sign in. If you don\'t see it within a minute, check your spam or junk folder.')
         return
       }
@@ -289,6 +315,29 @@ export default function AuthModal({ initialMode, onClose }: Props) {
           {success && (
             <div style={{ padding: '8px 12px', background: 'rgba(74,103,65,.15)', border: '1px solid rgba(74,103,65,.3)', borderRadius: 6, fontSize: 13, color: '#c8e8c4', marginBottom: 10, lineHeight: 1.5 }}>
               {success}
+            </div>
+          )}
+          {/* Duplicate-email panel — replaces the generic "check your
+              email" success message when the account already exists. */}
+          {duplicateEmail && (
+            <div style={{ padding: '12px 14px', background: 'rgba(196,146,42,.1)', border: '1px solid rgba(196,146,42,.3)', borderRadius: 6, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, color: '#f5f0e8', lineHeight: 1.55, marginBottom: 10 }}>
+                An account already exists for <strong style={{ color: '#c4922a' }}>{duplicateEmail}</strong>.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => { switchMode('login');  setPassword('') }}
+                  style={{ flex: 1, padding: '9px', borderRadius: 6, background: '#c4922a', color: '#1a1612', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Sign in instead
+                </button>
+                <button
+                  onClick={() => { switchMode('forgot'); setPassword('') }}
+                  style={{ flex: 1, padding: '9px', borderRadius: 6, background: 'transparent', color: 'rgba(245,240,232,.85)', border: '1px solid rgba(255,255,255,.2)', fontFamily: 'inherit', fontSize: 13, cursor: 'pointer' }}
+                >
+                  Reset password
+                </button>
+              </div>
             </div>
           )}
 
