@@ -218,16 +218,24 @@ export default function ExpiredGuidesPage() {
       <AppNav />
 
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '2rem 1.25rem 4rem' }}>
-        <Link href="/location-guides" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none', marginBottom: '1rem' }}>
-          ← Back to Location Guides
+        <Link href="/dashboard" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none', marginBottom: '1rem' }}>
+          ← Back to Dashboard
         </Link>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(26px,5vw,38px)', fontWeight: 900, color: 'var(--ink)', marginBottom: 6 }}>
-            ⏱ Expired Location Guides
-          </h1>
-          <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, maxWidth: 640, lineHeight: 1.6 }}>
-            Guides that hit their expiration date or were single-use links that a client already submitted. Reactivate to make the same URL work again, duplicate to send a fresh URL to a new client with the same setup, or delete to clean up.
-          </p>
+        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(26px,5vw,38px)', fontWeight: 900, color: 'var(--ink)', marginBottom: 6 }}>
+              ⏱ Expired Location Guides
+            </h1>
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, maxWidth: 640, lineHeight: 1.6 }}>
+              Guides that hit their expiration date or were single-use links that a client already submitted. Reactivate to make the same URL work again, duplicate to send a fresh URL to a new client with the same setup, or delete to clean up.
+            </p>
+          </div>
+          <Link
+            href="/location-guides"
+            style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 6, background: 'white', color: 'var(--ink)', border: '1px solid var(--cream-dark)', fontSize: 13, fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}
+          >
+            📚 Live Location Guides →
+          </Link>
         </div>
 
         {loading ? (
