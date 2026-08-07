@@ -57,7 +57,13 @@ export async function POST(request: Request) {
 
   const stripe = getStripe()
   const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? new URL(request.url).origin
-  const returnUrl = `${appOrigin}/profile#billing`
+  // Success returns to /profile#billing so the fresh plan lands where
+  // the user was managing it. Cancel returns to /dashboard — bailing
+  // out of checkout means they're not committing to an upgrade, so
+  // dropping them back at the Profile page reads as "you can try
+  // again"; the dashboard is the natural home base instead.
+  const successUrl = `${appOrigin}/profile?checkout=success#billing`
+  const cancelUrl  = `${appOrigin}/dashboard?checkout=cancel`
 
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -84,8 +90,8 @@ export async function POST(request: Request) {
     // Card required up front even for the Pro trial — Stripe will
     // honor trial_period_days but still collect payment details now.
     payment_method_collection: 'always',
-    success_url: `${returnUrl}?checkout=success`,
-    cancel_url:  `${returnUrl}?checkout=cancel`,
+    success_url: successUrl,
+    cancel_url:  cancelUrl,
     allow_promotion_codes: true,
     // Tax handling stays Stripe's call by default — flip on once the
     // photographer has Tax configured in their Stripe account.
