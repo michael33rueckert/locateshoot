@@ -1048,7 +1048,7 @@ export default function DashboardPage() {
                 .dash-pick-date { display: none !important; }
               }
             `}</style>
-            <div id="client-picks" data-tour="client-selections" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80 }}>
+            <div id="client-picks" data-tour="client-selections" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', scrollMarginTop: 80, order: 3 }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                 <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
                   ✓ Client Selections
@@ -1153,7 +1153,7 @@ export default function DashboardPage() {
                 they marked + their question/comment if they wrote one,
                 with a mailto link to reply directly. */}
             {clientFavoriteLists.length > 0 && (
-              <div id="client-favorites" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem', scrollMarginTop: 80 }}>
+              <div id="client-favorites" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem', scrollMarginTop: 80, order: 4 }}>
                 <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     💜 Client Favorites
@@ -1249,7 +1249,7 @@ export default function DashboardPage() {
                 as two parallel logs (clients picked X, you bookmarked
                 Y). Each row is a Link that deep-links into the Explore
                 detail panel via /explore?focus=<id>. */}
-            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem' }}>
+            <div style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', marginTop: '1.5rem', order: 5 }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1371,7 +1371,7 @@ export default function DashboardPage() {
                 : `Up to ${freePortfolioLocationCap()} portfolio locations and your auto-generated Portfolio Location Guide.`
               const ctaLabel  = hasStarter(profile?.plan) ? 'Manage subscription →' : 'Upgrade your plan →'
               return (
-                <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1rem 1.25rem', order: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 16 }}>{planIcon}</span>
                     <div style={{ fontSize: 13, fontWeight: 600, color: hasPro(profile?.plan) ? 'var(--gold)' : 'var(--cream)' }}>{planLabel}</div>
