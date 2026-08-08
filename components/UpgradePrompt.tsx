@@ -79,8 +79,25 @@ export default function UpgradePrompt({ feature, description, variant = 'card', 
         body: JSON.stringify({ tier, cadence }),
       })
       const data = await res.json()
-      if (data.alreadyPro) {
-        router.refresh(); return
+      // Server returns { alreadyPaid: true } when the caller already
+      // has a Stripe subscription — Stripe forbids a second checkout
+      // on the same customer, so we bounce them to the Customer
+      // Portal to switch tiers or cadence instead. (Previously this
+      // branch checked `data.alreadyPro`, a field that never existed,
+      // so Starter users hitting Pro upgrade fell through to the
+      // generic "Could not start checkout" error.)
+      if (data.alreadyPaid) {
+        const portalRes = await fetch('/api/billing-portal', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+        const portalData = await portalRes.json()
+        if (portalRes.ok && portalData.url) {
+          window.location.href = portalData.url
+          return
+        }
+        setError(portalData.message ?? 'Could not open billing portal.')
+        return
       }
       if (!res.ok || !data.url) {
         setError(data.message ?? 'Could not start checkout.')
@@ -173,7 +190,10 @@ export default function UpgradePrompt({ feature, description, variant = 'card', 
             {proPrice}<span style={{ fontSize: 14, fontWeight: 400, color: 'var(--ink-soft)' }}>/mo</span>
           </div>
           <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 12 }}>
-            {yearly ? 'Billed $250/year' : 'Billed monthly'} · 14-day free trial
+            {/* Starter users switching to Pro don't get a fresh trial —
+                Stripe treats it as a plan change with prorated billing. */}
+            {yearly ? 'Billed $250/year' : 'Billed monthly'}
+            {currentPlan === 'starter' ? ' · prorated from Starter' : ' · 14-day free trial'}
           </div>
           <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 12px', flex: 1 }}>
             {PRO_FEATURES.map(f => (
@@ -184,7 +204,11 @@ export default function UpgradePrompt({ feature, description, variant = 'card', 
             ))}
           </ul>
           <button onClick={() => startCheckout('pro', yearly ? 'yearly' : 'monthly')} disabled={busyTier !== null} style={{ width: '100%', padding: '10px', borderRadius: 4, background: 'var(--ink)', color: 'var(--cream)', border: 'none', fontSize: 13, fontWeight: 600, cursor: busyTier ? 'default' : 'pointer', fontFamily: 'inherit', opacity: busyTier === 'pro' ? 0.6 : 1 }}>
-            {busyTier === 'pro' ? 'Loading…' : 'Start 14-day Pro trial'}
+            {busyTier === 'pro'
+              ? 'Loading…'
+              : currentPlan === 'starter'
+                ? 'Switch to Pro'
+                : 'Start 14-day Pro trial'}
           </button>
         </div>
       </div>
