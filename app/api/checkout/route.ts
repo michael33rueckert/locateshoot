@@ -38,16 +38,9 @@ export async function POST(request: Request) {
 
   const { data: profile } = await db
     .from('profiles')
-    .select('plan,stripe_customer_id,email,full_name')
+    .select('plan,stripe_customer_id,stripe_subscription_id,email,full_name')
     .eq('id', user.id)
     .single()
-
-  // Already on a paid tier — kick to billing portal instead so they
-  // manage the existing subscription rather than starting a duplicate.
-  // (Switching tiers happens through the portal's "switch plan" flow.)
-  if ((hasStarter(profile?.plan) || hasPro(profile?.plan)) && profile?.stripe_customer_id) {
-    return NextResponse.json({ alreadyPaid: true })
-  }
 
   let priceId: string
   try { priceId = getPriceId(tier, cadence) }
@@ -57,6 +50,59 @@ export async function POST(request: Request) {
 
   const stripe = getStripe()
   const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? new URL(request.url).origin
+
+  // Already on a paid tier with an active subscription — Stripe forbids
+  // a second checkout on the same customer, so route them into the
+  // Customer Portal with a subscription_update_confirm flow that jumps
+  // straight to the "confirm plan change" screen. One tap on their end
+  // (Confirm) instead of the 4-click "Manage → Change plan → pick →
+  // Update" walk through the generic portal.
+  if ((hasStarter(profile?.plan) || hasPro(profile?.plan)) && profile?.stripe_customer_id && profile?.stripe_subscription_id) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(profile.stripe_subscription_id)
+      const item = sub.items?.data?.[0]
+      if (!item) throw new Error('subscription has no items')
+
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: profile.stripe_customer_id,
+        return_url: `${appOrigin}/profile?checkout=success#billing`,
+        flow_data: {
+          type: 'subscription_update_confirm',
+          subscription_update_confirm: {
+            subscription: profile.stripe_subscription_id,
+            items: [{ id: item.id, price: priceId, quantity: 1 }],
+          },
+          after_completion: {
+            type: 'redirect',
+            redirect: { return_url: `${appOrigin}/profile?checkout=success#billing` },
+          },
+        },
+      })
+      return NextResponse.json({ url: portalSession.url })
+    } catch (e: any) {
+      // Portal flow can fail if the subscription is canceled / past_due /
+      // in a state Stripe can't update. Fall back to a plain portal
+      // session so the user can still self-serve; we surface the fallback
+      // rather than a 500 so the UI doesn't dead-end.
+      console.warn('[checkout] portal flow failed, falling back to generic portal:', e?.message)
+      try {
+        const portalSession = await stripe.billingPortal.sessions.create({
+          customer: profile.stripe_customer_id,
+          return_url: `${appOrigin}/profile?checkout=success#billing`,
+        })
+        return NextResponse.json({ url: portalSession.url })
+      } catch (e2: any) {
+        return NextResponse.json({ error: 'portal_failed', message: e2?.message ?? 'Could not open the billing portal.' }, { status: 500 })
+      }
+    }
+  }
+
+  // Paid tier flagged but subscription id missing (rare — mid-checkout
+  // state, or a webhook race). Fall back to the alreadyPaid signal so
+  // the client can open a plain portal via /api/billing-portal.
+  if ((hasStarter(profile?.plan) || hasPro(profile?.plan)) && profile?.stripe_customer_id) {
+    return NextResponse.json({ alreadyPaid: true })
+  }
   // Success returns to /profile#billing so the fresh plan lands where
   // the user was managing it. Cancel returns to /dashboard — bailing
   // out of checkout means they're not committing to an upgrade, so
