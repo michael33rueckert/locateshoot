@@ -60,6 +60,13 @@ export default function DashboardPage() {
   // dashboard doesn't need a Suspense boundary — it's a fully client-
   // side page anyway.
   const [tourOpen,            setTourOpen]             = useState(false)
+  // Auto-flip explainer modal — fires exactly once when the user
+  // creates their FIRST custom guide, to explain that the dashboard
+  // just rearranged (Custom Guides moved to the top, Portfolio moved
+  // just below). Set by the create-guide onCreated handler when the
+  // pre-creation count was 0, dismissed by the user clicking Got it,
+  // never re-shown thanks to preferences.saw_layout_flip_notice.
+  const [layoutFlipNoticeOpen, setLayoutFlipNoticeOpen] = useState(false)
   const [permanentLinks,      setPermanentLinks]       = useState<PermanentLink[]>([])
   const [recentPicks,         setRecentPicks]          = useState<RecentPick[]>([])
   // Favorited locations from the Explore map — see migration
@@ -170,6 +177,18 @@ export default function DashboardPage() {
     if (typeof window !== 'undefined' && window.location.search.includes('tour=')) {
       window.history.replaceState({}, '', '/dashboard')
     }
+  }, [profile])
+
+  const dismissLayoutFlipNotice = useCallback(async () => {
+    setLayoutFlipNoticeOpen(false)
+    if (!profile) return
+    const merged = { ...(profile.preferences ?? {}), saw_layout_flip_notice: new Date().toISOString() }
+    // Persist so this notice never fires again for this user (in
+    // case they clear their session and later create another first
+    // guide via some edge path). Fire-and-forget — failure just
+    // means it could theoretically re-fire once, which is fine.
+    await supabase.from('profiles').update({ preferences: merged }).eq('id', profile.id)
+    setProfile(p => p ? { ...p, preferences: merged } : p)
   }, [profile])
 
   const loadData = useCallback(async () => {
@@ -746,7 +765,7 @@ export default function DashboardPage() {
                 the first slot, gold-bordered and labeled, with custom
                 guides flowing below in the same grid. Mirrors the portfolio
                 section's "first 6 + View all" pattern when the list grows. */}
-            <div data-tour="custom-guides" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+            <div data-tour="custom-guides" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', order: customGuides.length > 0 ? 1 : 2 }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -874,7 +893,7 @@ export default function DashboardPage() {
             </div>
 
             {/* MY PORTFOLIO — primary section */}
-            <div data-tour="my-portfolio" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
+            <div data-tour="my-portfolio" style={{ background: 'white', borderRadius: 10, border: '1px solid var(--cream-dark)', overflow: 'hidden', order: customGuides.length > 0 ? 2 : 1 }}>
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1380,9 +1399,18 @@ export default function DashboardPage() {
           onPortfolioChanged={loadData}
           onClose={() => { setShowCreatePermanent(false); setPreselectAllPortfolio(false); setDemoPrefill(null) }}
           onCreated={(link) => {
+            // Was this their first custom guide? If so, the auto-flip
+            // moves Custom Guides to the top on the next render, so
+            // show the explainer modal (once per user, gated on
+            // preferences.saw_layout_flip_notice below).
+            const hadZeroCustomBefore = customGuides.length === 0
             setPermanentLinks(prev => [{ ...link, picks: [], expanded: false }, ...prev])
             setDemoPrefill(null)
             setToast('📚 Guide created!')
+            if (hadZeroCustomBefore && !link.is_full_portfolio) {
+              const prefs = profile?.preferences ?? {}
+              if (!prefs.saw_layout_flip_notice) setLayoutFlipNoticeOpen(true)
+            }
           }}
         />
       )}
@@ -1440,6 +1468,33 @@ export default function DashboardPage() {
       )}
 
       <DashboardTour enabled={tourOpen} onFinish={handleTourFinish} />
+
+      {/* First-guide explainer — fires exactly once, when the user
+          creates their first custom guide and the dashboard auto-
+          flips Custom Location Guides above My Portfolio. */}
+      {layoutFlipNoticeOpen && (
+        <>
+          <div onClick={dismissLayoutFlipNotice} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.6)', backdropFilter: 'blur(6px)', zIndex: 9700 }} />
+          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 12, width: 460, maxWidth: '94vw', padding: '1.5rem', zIndex: 9800, boxShadow: '0 24px 64px rgba(0,0,0,.35)' }}>
+            <div style={{ fontSize: 34, marginBottom: 8 }}>📚</div>
+            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 8, lineHeight: 1.2 }}>
+              Nice — your first Location Guide is live.
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, margin: '0 0 8px' }}>
+              We moved <strong style={{ color: 'var(--ink)' }}>Custom Location Guides</strong> to the top of your dashboard so it&apos;s one tap to grab a link and share it with a client — especially handy on your phone.
+            </p>
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, margin: '0 0 1.25rem' }}>
+              Your <strong style={{ color: 'var(--ink)' }}>Portfolio</strong> is just below it — same place, same content, just a scroll away.
+            </p>
+            <button
+              onClick={dismissLayoutFlipNotice}
+              style={{ width: '100%', padding: '11px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Got it
+            </button>
+          </div>
+        </>
+      )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
