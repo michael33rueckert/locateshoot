@@ -20,6 +20,13 @@ export interface DemoGuideTemplate {
 
 export const DEMO_GUIDE_TEMPLATES: DemoGuideTemplate[] = [
   {
+    key: 'city-area',
+    session_name: 'Downtown Kansas City',
+    message: 'Here are my go-to spots around downtown for portrait and engagement sessions — a mix of urban textures, historic architecture, and quiet greenery. Pick whichever feels right for your session.',
+    emoji: '🏙',
+    hint: 'A city or area you shoot in often — one reusable link',
+  },
+  {
     key: 'engagement',
     session_name: 'Sarah & Mike — engagement session',
     message: 'Hey! I picked a few spots I think will work great for your engagement shoot. Take a look and let me know which one you love. Excited for the shoot!',
@@ -32,13 +39,6 @@ export const DEMO_GUIDE_TEMPLATES: DemoGuideTemplate[] = [
     message: 'Here are my favorite spring maternity spots — soft light, wildflowers, and cherry blossoms. Pick whichever feels right for your session.',
     emoji: '🌸',
     hint: 'Seasonal or theme-based, sent to multiple clients',
-  },
-  {
-    key: 'golden-hour',
-    session_name: 'Downtown golden hour',
-    message: 'A curated list of downtown spots that shine at golden hour. Great for engagement, senior, or portrait sessions.',
-    emoji: '🌇',
-    hint: 'Themed / repeat-use, permanent link for your workflow',
   },
 ]
 

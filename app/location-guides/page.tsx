@@ -288,7 +288,7 @@ export default function LocationGuidesPage() {
         </div>
 
         {showQuotaUpgrade && (
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div id="upgrade-quota-prompt" style={{ marginBottom: '1.5rem', scrollMarginTop: 80 }}>
             <UpgradePrompt
               feature="custom Location Guides"
               description="The Free plan only includes sharing your entire portfolio. Upgrade to Starter or Pro to create custom guides — Example: One for each city, theme client, or session."
@@ -339,7 +339,15 @@ export default function LocationGuidesPage() {
               <DemoGuideCards
                 canCreate={hasStarter(profile?.plan)}
                 onPickTemplate={t => {
-                  if (!hasStarter(profile?.plan)) { setShowQuotaUpgrade(true); return }
+                  if (!hasStarter(profile?.plan)) {
+                    setShowQuotaUpgrade(true)
+                    // One frame later, scroll the just-mounted upgrade
+                    // prompt into view.
+                    requestAnimationFrame(() => {
+                      document.getElementById('upgrade-quota-prompt')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    })
+                    return
+                  }
                   setDemoPrefill(t); setShowCreate(true)
                 }}
               />

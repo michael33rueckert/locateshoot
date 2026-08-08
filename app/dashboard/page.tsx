@@ -775,7 +775,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               {showQuotaUpgrade && (
-                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)' }}>
+                <div id="upgrade-quota-prompt" style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', scrollMarginTop: 80 }}>
                   <UpgradePrompt
                     feature="custom Location Guides"
                     description="The Free plan only includes sharing your entire portfolio. Upgrade to Starter or Pro to create custom guides — Example: One for each city, theme client, or session."
@@ -812,7 +812,18 @@ export default function DashboardPage() {
                         <DemoGuideCards
                           canCreate={isProUser}
                           onPickTemplate={t => {
-                            if (!isProUser) { setShowQuotaUpgrade(true); setToast('⭐ Upgrade to Starter to create custom guides'); return }
+                            if (!isProUser) {
+                              setShowQuotaUpgrade(true)
+                              setToast('⭐ Upgrade to Starter to create custom guides')
+                              // Wait one frame for React to mount the
+                              // prompt, then scroll it into view so the
+                              // photographer doesn't have to hunt for
+                              // what changed.
+                              requestAnimationFrame(() => {
+                                document.getElementById('upgrade-quota-prompt')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                              })
+                              return
+                            }
                             setDemoPrefill(t); setShowCreatePermanent(true)
                           }}
                         />
