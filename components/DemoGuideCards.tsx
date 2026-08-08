@@ -44,18 +44,31 @@ export const DEMO_GUIDE_TEMPLATES: DemoGuideTemplate[] = [
 
 interface Props {
   onPickTemplate: (t: DemoGuideTemplate) => void
+  // Whether the viewer's plan actually lets them create a custom
+  // guide. Toggles the CTA copy + intro-banner subtitle between the
+  // "open the editor pre-filled" flow (Starter+) and the "upgrade
+  // to unlock" nudge (Free). Undefined behaves like true to keep
+  // pre-existing callers working, but callers should pass this.
+  canCreate?: boolean
 }
 
-export default function DemoGuideCards({ onPickTemplate }: Props) {
+export default function DemoGuideCards({ onPickTemplate, canCreate = true }: Props) {
+  const ctaLabel = canCreate ? 'Use this example →' : 'Upgrade to use →'
   return (
     <div style={{ marginBottom: 20 }}>
       {/* Intro banner — explains why these cards are here so
           photographers don't confuse them for real guides they can
-          share to a client right now. */}
+          share to a client right now. Subtitle changes based on
+          plan so Free users see the upgrade path and paid users
+          see the "pre-fills the editor" flow. */}
       <div style={{ padding: '12px 14px', background: 'rgba(74,103,65,.06)', border: '1px dashed var(--sage)', borderRadius: 8, marginBottom: 12, fontSize: 13, color: 'var(--ink)', lineHeight: 1.5 }}>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>👋 Get a feel for it — click any example below</div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>👋 Get a feel for it — see the examples below</div>
         <div style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 300 }}>
-          These aren&apos;t live yet. Tap one to open the guide editor pre-filled with a name + intro message you can tweak — pick a few locations from your portfolio, hit save, and you&apos;ll have your first real guide.
+          {canCreate ? (
+            <>These aren&apos;t live yet. Tap one to open the guide editor pre-filled with a name + intro message you can tweak — pick a few locations from your portfolio, hit save, and you&apos;ll have your first real guide.</>
+          ) : (
+            <>Custom guides like these need a paid plan (Starter or Pro). Tap any example to see what an upgrade unlocks.</>
+          )}
         </div>
       </div>
 
@@ -80,15 +93,20 @@ export default function DemoGuideCards({ onPickTemplate }: Props) {
             <div style={{ aspectRatio: '4 / 3', background: 'linear-gradient(135deg, var(--cream-dark), var(--cream))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 52 }}>
               {t.emoji}
             </div>
-            <div style={{ padding: '12px 14px 14px' }}>
+            {/* flex:1 on the content column + marginTop:auto on the
+                CTA pushes the button to the bottom of every card
+                regardless of how many lines the title or hint takes.
+                Grid gives each cell equal height, so all buttons
+                land on the same y-coord. */}
+            <div style={{ flex: 1, padding: '12px 14px 14px', display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 16, fontWeight: 700, color: 'var(--ink)', marginBottom: 4, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                 {t.session_name}
               </div>
               <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginBottom: 12, lineHeight: 1.5 }}>
                 {t.hint}
               </div>
-              <div style={{ padding: '7px 12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
-                Try this template →
+              <div style={{ marginTop: 'auto', padding: '7px 12px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
+                {ctaLabel}
               </div>
             </div>
           </div>

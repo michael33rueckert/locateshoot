@@ -809,10 +809,13 @@ export default function DashboardPage() {
                   <div style={{ position: 'relative' }}>
                     {customGuideCards.length === 0 ? (
                       <div style={{ padding: '1rem 1.25rem' }}>
-                        <DemoGuideCards onPickTemplate={t => {
-                          if (!isProUser) { setShowQuotaUpgrade(true); setToast('⭐ Upgrade to Starter to create custom guides'); return }
-                          setDemoPrefill(t); setShowCreatePermanent(true)
-                        }} />
+                        <DemoGuideCards
+                          canCreate={isProUser}
+                          onPickTemplate={t => {
+                            if (!isProUser) { setShowQuotaUpgrade(true); setToast('⭐ Upgrade to Starter to create custom guides'); return }
+                            setDemoPrefill(t); setShowCreatePermanent(true)
+                          }}
+                        />
                       </div>
                     ) : (
                       <div style={{ padding: '1rem 1.25rem 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12 }}>

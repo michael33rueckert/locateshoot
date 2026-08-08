@@ -261,6 +261,9 @@ export default function LocationGuidesPage() {
       <AppNav />
 
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '2rem 1.25rem 4rem' }}>
+        <Link href="/dashboard" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-soft)', textDecoration: 'none', marginBottom: '1rem' }}>
+          ← Back to Dashboard
+        </Link>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: '1.5rem' }}>
           <div>
             <h1 style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 'clamp(26px,5vw,38px)', fontWeight: 900, color: 'var(--ink)', marginBottom: 6 }}>
@@ -333,7 +336,13 @@ export default function LocationGuidesPage() {
               // No custom guides + no active search → new user. Show
               // demo cards to explain what a custom guide IS and let
               // them create their first one with a click.
-              <DemoGuideCards onPickTemplate={t => { setDemoPrefill(t); setShowCreate(true) }} />
+              <DemoGuideCards
+                canCreate={hasStarter(profile?.plan)}
+                onPickTemplate={t => {
+                  if (!hasStarter(profile?.plan)) { setShowQuotaUpgrade(true); return }
+                  setDemoPrefill(t); setShowCreate(true)
+                }}
+              />
             ) : filtered.length === 0 && q ? (
               <div style={{ background: 'white', borderRadius: 12, border: '1px solid var(--cream-dark)', padding: '2.5rem 1.5rem', textAlign: 'center' }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
