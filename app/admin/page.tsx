@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin'
 import AppNav from '@/components/AppNav'
 import LocationEditModal from '@/components/admin/LocationEditModal'
+import LocationScannerPanel from '@/components/admin/LocationScannerPanel'
 
 interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
 
@@ -570,6 +571,11 @@ export default function AdminPage() {
             )
           })()}
         </div>
+
+        {/* AI SCANNER — bulk-seeds new locations by (city × category).
+            Sits next to Quality Audit since both are AI-powered bulk
+            ops on the locations table; scanner writes, audit reads. */}
+        <LocationScannerPanel />
 
         {/* QUALITY AUDIT — replaces the old AI scanner. Runs Claude
             against all published locations to surface suspected

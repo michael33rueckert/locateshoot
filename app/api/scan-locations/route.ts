@@ -2,6 +2,21 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminEmail } from '@/lib/admin'
 
+// AI-powered location scanner. One request = one (city, category) combo.
+// The admin UI at /admin loops over city × category combinations client-side,
+// showing progress per combo. Structured this way so each request comfortably
+// fits under Vercel's 60s serverless function cap (Claude web-search calls run
+// ~20-30s, plus ~5s for Google geocode verification per result).
+//
+// Previously this handler accepted arrays and looped internally, with inline
+// setTimeout pauses of 12s and 30s between iterations. That guaranteed a
+// timeout on any request with more than one category or more than one city;
+// even single-city multi-category requests hit the cap. Not resurrecting.
+//
+// Rate limiting: no retry-on-429 loop here — a 65s wait would blow the
+// function budget by itself. On 429 we return the error and let the caller
+// pace its next request.
+
 function getServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +45,8 @@ interface ScannedLocation {
   rating: number
 }
 
-const SCAN_CATEGORIES = [
+// The 8 scan categories. The UI reads this and exposes them as a checklist.
+export const SCAN_CATEGORIES = [
   {
     name: 'Parks & Nature',
     prompt: (city: string) => `Find 15 real photoshoot locations in ${city} that are parks, nature areas, trails, gardens, botanical gardens, arboretums, nature preserves, greenways, or outdoor green spaces. Include city parks, county parks, state parks nearby, riverside parks, lake parks, woodland areas, and hiking trails. Be very specific — name the exact park section, trail name, or garden area, not just the park name.`,
@@ -64,6 +80,8 @@ const SCAN_CATEGORIES = [
     prompt: (city: string) => `Find 15 real photoshoot locations in ${city} that are interesting residential neighborhoods, colorful streets, charming commercial districts, or areas with character — tree-lined streets, painted Victorian homes, arts districts, or bohemian neighborhoods.`,
   },
 ]
+
+export const SCAN_CATEGORY_NAMES = SCAN_CATEGORIES.map(c => c.name)
 
 // ── Fuzzy deduplication ───────────────────────────────────────────────────────
 
@@ -145,41 +163,16 @@ function sanitizeLocation(loc: ScannedLocation): ScannedLocation {
   }
 }
 
-// ── Retry on 429 ─────────────────────────────────────────────────────────────
+// ── POST handler — one city × one category per request ──────────────────────
 
-async function scanWithRetry(city: string, categoryPrompt: string, maxRetries = 3): Promise<ScannedLocation[]> {
-  let lastError: Error | null = null
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await scanCityCategory(city, categoryPrompt)
-    } catch (err: any) {
-      lastError = err
-      if (err.message?.includes('429')) {
-        const waitMs = attempt * 65000
-        console.log(`Rate limited — waiting ${waitMs / 1000}s (attempt ${attempt}/${maxRetries})`)
-        await new Promise(r => setTimeout(r, waitMs))
-      } else {
-        throw err
-      }
-    }
-  }
-  throw lastError ?? new Error('Max retries exceeded')
-}
-
-// ── POST handler ──────────────────────────────────────────────────────────────
-
-// Vercel Hobby caps serverless functions at 60s. One city × one category
-// comfortably fits; multi-category scans are broken up client-side.
+// Vercel Hobby caps serverless functions at 60s; one (city, category) combo
+// comfortably fits inside that. The admin UI loops client-side.
 export const maxDuration = 60
 
 export async function POST(request: Request) {
   try {
-    const supabase    = getServiceClient()
+    const supabase = getServiceClient()
 
-    // Admin-only endpoint — burns Anthropic credits and writes to the
-    // shared `locations` table. Without auth, anyone could trigger
-    // scans by passing any userId in the body. Verify the bearer
-    // token belongs to a real user AND that user is the admin.
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -188,125 +181,107 @@ export async function POST(request: Request) {
     if (!authUser || !isAdminEmail(authUser.email)) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
-    // Use the verified auth user's id rather than trusting the body.
     const userId = authUser.id
 
-    const body        = await request.json().catch(() => ({}))
-    const cities: string[]     = body.cities     ?? []
-    const categories: string[] = body.categories  ?? SCAN_CATEGORIES.map(c => c.name)
+    const body       = await request.json().catch(() => ({}))
+    const city: string     = typeof body.city === 'string' ? body.city.trim() : ''
+    const category: string = typeof body.category === 'string' ? body.category : ''
+    if (!city)     return NextResponse.json({ error: 'city_required' }, { status: 400 })
+    if (!category) return NextResponse.json({ error: 'category_required' }, { status: 400 })
 
-    if (!cities.length)   return NextResponse.json({ error: 'No cities provided' }, { status: 400 })
+    const categoryDef = SCAN_CATEGORIES.find(c => c.name === category)
+    if (!categoryDef) return NextResponse.json({ error: 'unknown_category', message: `No category named "${category}"` }, { status: 400 })
 
-    const allInserted: string[] = []
-    const allErrors:   string[] = []
-    let   totalScanned = 0
+    // Preload existing locations in this city so we can fuzzy-dedup without
+    // a per-candidate DB round-trip. We still do an exact-match check per
+    // candidate as belt-and-suspenders — the fuzzy match uses normalized
+    // names and can miss identical-but-punctuation-different pairs.
+    const citySlug = city.split(',')[0].trim()
+    const { data: existingInCity } = await supabase
+      .from('locations')
+      .select('name, city')
+      .ilike('city', `%${citySlug}%`)
+    const existingSet: { name: string; city: string }[] = existingInCity ?? []
 
-    const selectedCategories = SCAN_CATEGORIES.filter(c => categories.includes(c.name))
+    let locations: ScannedLocation[]
+    try {
+      locations = await scanCityCategory(city, categoryDef.prompt(city))
+    } catch (err: any) {
+      const msg = err?.message ?? 'scan_failed'
+      const status = /429/.test(msg) ? 429 : 500
+      return NextResponse.json({ error: 'scan_failed', message: msg }, { status })
+    }
 
-    for (const city of cities) {
-      // Load existing locations for this city into memory for fuzzy dedup
-      const citySlug = city.split(',')[0].trim()
-      const { data: existingInCity } = await supabase
+    const inserted: string[] = []
+    const skipped:  string[] = []
+    const errors:   string[] = []
+
+    for (const rawLoc of locations) {
+      const loc = sanitizeLocation(rawLoc)
+
+      if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
+        skipped.push(`similar: ${loc.name}`)
+        continue
+      }
+      const { data: exactMatch } = await supabase
         .from('locations')
-        .select('name, city')
-        .ilike('city', `%${citySlug}%`)
-      const existingSet: { name: string; city: string }[] = existingInCity ?? []
-      console.log(`\nLoaded ${existingSet.length} existing locations for ${city}`)
-
-      for (const category of selectedCategories) {
-        try {
-          console.log(`Scanning [${category.name}] in ${city}…`)
-          totalScanned++
-
-          const locations = await scanWithRetry(city, category.prompt(city))
-          console.log(`  → Claude returned ${locations.length} locations`)
-
-          for (const rawLoc of locations) {
-            const loc = sanitizeLocation(rawLoc)
-
-            // Fuzzy dedup check against in-memory set
-            const isFuzzyDup = existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))
-            if (isFuzzyDup) {
-              allErrors.push(`Similar exists: ${loc.name}`)
-              continue
-            }
-
-            // Exact DB check as fallback
-            const { data: exactMatch } = await supabase
-              .from('locations')
-              .select('id')
-              .ilike('name', loc.name)
-              .ilike('city', loc.city)
-              .maybeSingle()
-            if (exactMatch) {
-              allErrors.push(`Duplicate: ${loc.name}`)
-              continue
-            }
-
-            // Verify coordinates with Google
-            const verified = await verifyCoordinates(loc.name, loc.city, loc.state)
-            if (verified) { loc.latitude = verified.lat; loc.longitude = verified.lng }
-            await new Promise(r => setTimeout(r, 200))
-
-            // Insert
-            const { error: insertErr } = await supabase.from('locations').insert({
-              name:              loc.name,
-              city:              loc.city,
-              state:             loc.state,
-              latitude:          loc.latitude,
-              longitude:         loc.longitude,
-              description:       loc.description,
-              access_type:       loc.access_type,
-              category:          loc.category || category.name,
-              tags:              loc.tags,
-              best_time:         loc.best_time,
-              parking_info:      loc.parking_info,
-              permit_required:   loc.permit_required ?? false,
-              permit_notes:      loc.permit_notes,
-              permit_fee:        loc.permit_fee,
-              permit_website:    loc.permit_website,
-              permit_certainty:  loc.permit_certainty,
-              permit_scanned_at: new Date().toISOString(),
-              quality_score:     loc.quality_score,
-              rating:            loc.rating,
-              status:            'published',
-              source:            'ai_scanner',
-              added_by:          userId,
-            })
-
-            if (insertErr) {
-              allErrors.push(`Error: ${loc.name} — ${insertErr.message}`)
-            } else {
-              allInserted.push(`${loc.name} (${category.name})`)
-              existingSet.push({ name: loc.name, city: loc.city })
-            }
-          }
-
-          await new Promise(r => setTimeout(r, 12000))
-
-        } catch (catErr: any) {
-          allErrors.push(`[${category.name}] ${city}: ${catErr.message}`)
-        }
+        .select('id')
+        .ilike('name', loc.name)
+        .ilike('city', loc.city)
+        .maybeSingle()
+      if (exactMatch) {
+        skipped.push(`duplicate: ${loc.name}`)
+        continue
       }
 
-      if (cities.indexOf(city) < cities.length - 1) {
-        console.log('\nPausing 30s between cities…')
-        await new Promise(r => setTimeout(r, 30000))
+      const verified = await verifyCoordinates(loc.name, loc.city, loc.state)
+      if (verified) { loc.latitude = verified.lat; loc.longitude = verified.lng }
+
+      const { error: insertErr } = await supabase.from('locations').insert({
+        name:              loc.name,
+        city:              loc.city,
+        state:             loc.state,
+        latitude:          loc.latitude,
+        longitude:         loc.longitude,
+        description:       loc.description,
+        access_type:       loc.access_type,
+        category:          loc.category || category,
+        tags:              loc.tags,
+        best_time:         loc.best_time,
+        parking_info:      loc.parking_info,
+        permit_required:   loc.permit_required ?? false,
+        permit_notes:      loc.permit_notes,
+        permit_fee:        loc.permit_fee,
+        permit_website:    loc.permit_website,
+        permit_certainty:  loc.permit_certainty,
+        permit_scanned_at: new Date().toISOString(),
+        quality_score:     loc.quality_score,
+        rating:            loc.rating,
+        status:            'published',
+        source:            'ai_scanner',
+        added_by:          userId,
+      })
+
+      if (insertErr) {
+        errors.push(`${loc.name}: ${insertErr.message}`)
+      } else {
+        inserted.push(loc.name)
+        existingSet.push({ name: loc.name, city: loc.city })
       }
     }
 
     return NextResponse.json({
-      success:   true,
-      inserted:  allInserted.length,
-      errors:    allErrors.length,
-      scans:     totalScanned,
-      locations: allInserted,
-      errorList: allErrors,
+      ok:       true,
+      city,
+      category,
+      scanned:  locations.length,
+      inserted,
+      skipped,
+      errors,
     })
-
   } catch (err: any) {
-    console.error('Scanner error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    console.error('scan-locations handler error:', err)
+    return NextResponse.json({ error: 'internal', message: err?.message ?? 'Unknown error' }, { status: 500 })
   }
 }
 
@@ -353,9 +328,15 @@ Respond ONLY with a raw JSON array, no markdown fences:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 6000,
-      tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
+      // Sonnet 5 replaces the legacy sonnet-4-6. New tokenizer (~30% more
+      // tokens for the same text) means the old 6000 max_tokens ceiling
+      // truncated some responses; 8000 gives comfortable headroom.
+      model:      'claude-sonnet-5',
+      max_tokens: 8000,
+      // web_search_20260209 includes dynamic filtering — Claude filters
+      // search results server-side before they hit the context window,
+      // producing more accurate scans with fewer irrelevant hits.
+      tools:      [{ type: 'web_search_20260209', name: 'web_search' }],
       messages:   [{ role: 'user', content: prompt }],
     }),
   })
