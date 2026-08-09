@@ -156,13 +156,20 @@ export async function scanCityCategory(city: string, categoryPrompt: string): Pr
 
 ${categoryPrompt}
 
+QUALITY OVER QUANTITY:
+- Only include locations that are genuinely photogenic and specifically recognized as good photo spots by photographers, wedding vendors, or online photography communities. If a spot is just "a place in the city" without visual distinction, skip it.
+- Skip generic or non-distinctive venues: chain restaurants, ordinary strip malls, unremarkable office parks, generic subdivisions, plain intersections, gas stations, big-box stores.
+- If ${city} is a smaller city and only 3-5 truly excellent locations exist in this category, return only those 3-5. Do NOT pad the list to reach 10 by including mediocre entries — a shorter list of great spots is far more useful than a longer list diluted with weak ones.
+- Do NOT inflate quality_score or rating to justify including a location. If a spot would honestly score below 60/100 or below 3.3/5, leave it out entirely — the server rejects those anyway.
+- Prefer locations you can find corroboration for (a wedding-venue listing, a "best photo spots in [city]" article, a local photographer's blog, a real Instagram tag) over places you're inferring might be photogenic.
+
 For each location, use web search to find and return ALL of these fields:
 - name: exact specific name (under 150 chars)
 - city: city name
 - state: 2-letter state abbreviation (e.g. "MO")
 - latitude: number
 - longitude: number
-- description: vivid 2-3 sentence description of what makes it photogenic
+- description: vivid 2-3 sentence description of what makes it photogenic — describe the actual visual features that make it work (light quality, textures, backdrops, seasonal appeal), not just what the place is
 - access_type: "public" or "private"
 - category: category name
 - tags: array from this list — Golden Hour, Sunrise, Sunset, Forest, Urban, Waterfront, Historic, Architecture, Nature, Meadow, Creek, Industrial, Rustic, Romantic, Dramatic, Colorful, Editorial, Wedding, Family, Portrait, Fashion, Boho, Gardens, Cemetery, Bridge, Mural, Alley, Barn, Ranch, Vineyard, Campus
@@ -173,10 +180,22 @@ For each location, use web search to find and return ALL of these fields:
 - permit_fee: permit cost in USD as a number, or null if free or not found
 - permit_website: the EXACT URL of the official page where you found permit information (parks dept, city govt, etc). null if not found. Do NOT make up URLs.
 - permit_certainty: "verified" = found official govt/parks page confirming requirements. "likely" = found strong indirect evidence permits needed. "unknown" = could not find specific permit info.
-- quality_score: integer 0-100
-- rating: one decimal 0.0-5.0
+- quality_score: integer 0-100 (see rubric)
+- rating: one decimal 0.0-5.0 (see rubric)
 
-RULES:
+QUALITY_SCORE RUBRIC (be honest — do not inflate):
+- 90-100: iconic, must-see spots widely referenced in "best photo locations" lists for the region. Few cities have more than 2-3 of these.
+- 75-89: excellent, distinctive spots regularly used by local wedding/portrait photographers.
+- 60-74: solid, useful spots that add variety to a portfolio but aren't must-visit.
+- Below 60: do not include.
+
+RATING RUBRIC (be honest — do not inflate):
+- 4.5-5.0: photographers actively seek this out and plan sessions around it.
+- 3.8-4.4: photographers use this happily when it fits the session mood.
+- 3.3-3.7: usable but not distinctive; a fallback rather than a first choice.
+- Below 3.3: do not include.
+
+OTHER RULES:
 - Only include real verified locations that exist
 - For permit_website provide the actual URL you found — never fabricate one
 - rating MUST be 0.0-5.0, quality_score MUST be 0-100 integer
@@ -234,7 +253,14 @@ Respond ONLY with a raw JSON array, no markdown fences:
       typeof loc.latitude  === 'number' &&
       typeof loc.longitude === 'number' &&
       Math.abs(loc.latitude)  <= 90 &&
-      Math.abs(loc.longitude) <= 180
+      Math.abs(loc.longitude) <= 180 &&
+      // Quality floor — matches the rubric in the prompt above. Deliberately
+      // gentle rather than strict so a small city can still contribute
+      // 1-3 locations per category. A stricter cutoff (say 70/3.8) starves
+      // small-town coverage; a much looser one (say 50/2.5) lets weak
+      // spots slip through. Adjust after watching real scan output.
+      (typeof loc.quality_score === 'number' ? loc.quality_score : 0) >= 60 &&
+      (typeof loc.rating        === 'number' ? loc.rating        : 0) >= 3.3
     )
   } catch {
     return []
