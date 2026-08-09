@@ -1,30 +1,17 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { isAdminEmail } from '@/lib/admin'
-
-// AI-powered location scanner. One request = one (city, category) combo.
-// The admin UI at /admin loops over city × category combinations client-side,
-// showing progress per combo. Structured this way so each request comfortably
-// fits under Vercel's 60s serverless function cap (Claude web-search calls run
-// ~20-30s, plus ~5s for Google geocode verification per result).
+// Server-only utilities shared between /api/scan-locations/query and
+// /api/scan-locations/commit. Do NOT import from client code — this
+// module reads ANTHROPIC_API_KEY and NEXT_PUBLIC_GOOGLE_PLACES_KEY
+// (the latter is public but shipped to the client for its Explore
+// map already, so no leak).
 //
-// Previously this handler accepted arrays and looped internally, with inline
-// setTimeout pauses of 12s and 30s between iterations. That guaranteed a
-// timeout on any request with more than one category or more than one city;
-// even single-city multi-category requests hit the cap. Not resurrecting.
-//
-// Rate limiting: no retry-on-429 loop here — a 65s wait would blow the
-// function budget by itself. On 429 we return the error and let the caller
-// pace its next request.
+// The two-endpoint split exists because Vercel Hobby caps serverless
+// functions at 60s. The full old scanner (Claude call + geocode + DB
+// writes) sometimes crossed that cap on a single (city, category).
+// Split, each endpoint fits well under 60s:
+//   query  — one Claude call, ~20-40s
+//   commit — 10 parallel geocodes + serial inserts, ~2-5s
 
-function getServiceClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-}
-
-interface ScannedLocation {
+export interface ScannedLocation {
   name: string
   city: string
   state: string
@@ -45,7 +32,6 @@ interface ScannedLocation {
   rating: number
 }
 
-// The 8 scan categories. The UI reads this and exposes them as a checklist.
 export const SCAN_CATEGORIES = [
   {
     name: 'Parks & Nature',
@@ -85,7 +71,7 @@ export const SCAN_CATEGORY_NAMES = SCAN_CATEGORIES.map(c => c.name)
 
 // ── Fuzzy deduplication ───────────────────────────────────────────────────────
 
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ')
@@ -94,7 +80,7 @@ function normalizeName(name: string): string {
     .trim()
 }
 
-function isSimilarLocation(
+export function isSimilarLocation(
   name1: string, city1: string,
   name2: string, city2: string,
 ): boolean {
@@ -121,7 +107,7 @@ function isSimilarLocation(
 
 // ── Coordinate verification ───────────────────────────────────────────────────
 
-async function verifyCoordinates(
+export async function verifyCoordinates(
   name: string, city: string, state: string
 ): Promise<{ lat: number; lng: number } | null> {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY
@@ -141,7 +127,7 @@ async function verifyCoordinates(
 
 // ── Sanitize ──────────────────────────────────────────────────────────────────
 
-function sanitizeLocation(loc: ScannedLocation): ScannedLocation {
+export function sanitizeLocation(loc: ScannedLocation): ScannedLocation {
   return {
     ...loc,
     rating:           Math.min(5.0, Math.max(0, Math.round((loc.rating ?? 4.0) * 10) / 10)),
@@ -163,152 +149,9 @@ function sanitizeLocation(loc: ScannedLocation): ScannedLocation {
   }
 }
 
-// ── POST handler — one city × one category per request ──────────────────────
-
-// Vercel Hobby caps serverless functions at 60s; one (city, category) combo
-// comfortably fits inside that. The admin UI loops client-side.
-export const maxDuration = 60
-
-export async function POST(request: Request) {
-  try {
-    const supabase = getServiceClient()
-
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    }
-    const { data: { user: authUser } } = await supabase.auth.getUser(authHeader.slice(7))
-    if (!authUser || !isAdminEmail(authUser.email)) {
-      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    }
-    const userId = authUser.id
-
-    const body       = await request.json().catch(() => ({}))
-    const city: string     = typeof body.city === 'string' ? body.city.trim() : ''
-    const category: string = typeof body.category === 'string' ? body.category : ''
-    if (!city)     return NextResponse.json({ error: 'city_required' }, { status: 400 })
-    if (!category) return NextResponse.json({ error: 'category_required' }, { status: 400 })
-
-    const categoryDef = SCAN_CATEGORIES.find(c => c.name === category)
-    if (!categoryDef) return NextResponse.json({ error: 'unknown_category', message: `No category named "${category}"` }, { status: 400 })
-
-    // Preload existing locations in this city so we can fuzzy-dedup without
-    // a per-candidate DB round-trip. We still do an exact-match check per
-    // candidate as belt-and-suspenders — the fuzzy match uses normalized
-    // names and can miss identical-but-punctuation-different pairs.
-    const citySlug = city.split(',')[0].trim()
-    const { data: existingInCity } = await supabase
-      .from('locations')
-      .select('name, city')
-      .ilike('city', `%${citySlug}%`)
-    const existingSet: { name: string; city: string }[] = existingInCity ?? []
-
-    let locations: ScannedLocation[]
-    try {
-      locations = await scanCityCategory(city, categoryDef.prompt(city))
-    } catch (err: any) {
-      const msg = err?.message ?? 'scan_failed'
-      const status = /429/.test(msg) ? 429 : 500
-      return NextResponse.json({ error: 'scan_failed', message: msg }, { status })
-    }
-
-    const inserted: string[] = []
-    const skipped:  string[] = []
-    const errors:   string[] = []
-
-    // Two-phase processing so the DB + geocode round-trips run in parallel
-    // rather than serial. Previously this was 10 candidates × ~500ms each
-    // sequential (~5s of dead wall-clock time inside the timeout budget).
-    //
-    // Phase 1: fuzzy-dedup against the pre-loaded existingSet (cheap,
-    // in-memory, so serial is fine). Anything that survives goes to Phase 2.
-    const survivors = locations
-      .map(sanitizeLocation)
-      .filter(loc => {
-        if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
-          skipped.push(`similar: ${loc.name}`)
-          return false
-        }
-        return true
-      })
-
-    // Phase 2: exact-match DB check + Google geocode verification, all
-    // candidates in parallel. Each round-trip is independent; Promise.all
-    // fans them out so the total wait is max(each) instead of sum(each).
-    const enriched = await Promise.all(survivors.map(async (loc) => {
-      const [exactMatch, verified] = await Promise.all([
-        supabase.from('locations').select('id').ilike('name', loc.name).ilike('city', loc.city).maybeSingle(),
-        verifyCoordinates(loc.name, loc.city, loc.state),
-      ])
-      if (exactMatch.data) return { loc, duplicate: true }
-      if (verified) { loc.latitude = verified.lat; loc.longitude = verified.lng }
-      return { loc, duplicate: false }
-    }))
-
-    // Phase 3: serial insert. Serial so `existingSet` updates between
-    // inserts protect against two candidates in the same batch that were
-    // similar to each other (rare but possible) from both landing.
-    for (const { loc, duplicate } of enriched) {
-      if (duplicate) {
-        skipped.push(`duplicate: ${loc.name}`)
-        continue
-      }
-      if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
-        skipped.push(`similar-in-batch: ${loc.name}`)
-        continue
-      }
-
-      const { error: insertErr } = await supabase.from('locations').insert({
-        name:              loc.name,
-        city:              loc.city,
-        state:             loc.state,
-        latitude:          loc.latitude,
-        longitude:         loc.longitude,
-        description:       loc.description,
-        access_type:       loc.access_type,
-        category:          loc.category || category,
-        tags:              loc.tags,
-        best_time:         loc.best_time,
-        parking_info:      loc.parking_info,
-        permit_required:   loc.permit_required ?? false,
-        permit_notes:      loc.permit_notes,
-        permit_fee:        loc.permit_fee,
-        permit_website:    loc.permit_website,
-        permit_certainty:  loc.permit_certainty,
-        permit_scanned_at: new Date().toISOString(),
-        quality_score:     loc.quality_score,
-        rating:            loc.rating,
-        status:            'published',
-        source:            'ai_scanner',
-        added_by:          userId,
-      })
-
-      if (insertErr) {
-        errors.push(`${loc.name}: ${insertErr.message}`)
-      } else {
-        inserted.push(loc.name)
-        existingSet.push({ name: loc.name, city: loc.city })
-      }
-    }
-
-    return NextResponse.json({
-      ok:       true,
-      city,
-      category,
-      scanned:  locations.length,
-      inserted,
-      skipped,
-      errors,
-    })
-  } catch (err: any) {
-    console.error('scan-locations handler error:', err)
-    return NextResponse.json({ error: 'internal', message: err?.message ?? 'Unknown error' }, { status: 500 })
-  }
-}
-
 // ── Claude API call with web search ──────────────────────────────────────────
 
-async function scanCityCategory(city: string, categoryPrompt: string): Promise<ScannedLocation[]> {
+export async function scanCityCategory(city: string, categoryPrompt: string): Promise<ScannedLocation[]> {
   const prompt = `You are an expert photography location scout with deep knowledge of ${city}.
 
 ${categoryPrompt}
@@ -349,32 +192,17 @@ Respond ONLY with a raw JSON array, no markdown fences:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      // Sonnet 5 replaces the legacy sonnet-4-6. New tokenizer (~30% more
-      // tokens for the same text) means the old 6000 max_tokens ceiling
-      // truncated some responses; 8000 gives comfortable headroom.
       model:      'claude-sonnet-5',
       max_tokens: 8000,
-      // Two speed knobs, both to keep single-call wall time under the
-      // Vercel serverless timeout:
-      //   1. thinking: disabled — Sonnet 5 defaults to adaptive thinking
-      //      when this field is omitted (behavior change vs Sonnet 4.6).
-      //      For a bulk research prompt that already delegates the
-      //      hard reasoning to web search, thinking adds 15-30s per
-      //      call for marginal accuracy gain.
-      //   2. web_search_20250305 (basic) instead of _20260209 (dynamic
-      //      filtering). Dynamic filtering runs code execution under
-      //      the hood to filter results before they hit the context —
-      //      real accuracy win, but adds a second execution environment
-      //      per call. Prefer the basic tool for latency-bounded batch
-      //      scans; upgrade later if we ever move the scanner to a
-      //      background worker outside the function timeout.
+      // Explicit disable — Sonnet 5 defaults to adaptive thinking when
+      // this field is omitted (a behavior change vs Sonnet 4.6). Adaptive
+      // thinking adds 15-30s to a research prompt that already delegates
+      // to web search; we don't need it here.
       thinking:   { type: 'disabled' },
-      // max_uses caps how many web-search rounds Claude runs before it must
-      // compose the response. Without it, Claude occasionally issues 5-8
-      // rounds when the topic is fuzzy — each round is a full server-side
-      // roundtrip and adds ~5-10s of wall time. Cap at 3 to keep the total
-      // call bounded; the prompt already tells Claude to research first
-      // then compose.
+      // max_uses caps how many web-search rounds Claude runs. Without it
+      // Claude occasionally issues 5-8 rounds on fuzzy topics, each a
+      // ~5-10s server-side roundtrip. 3 rounds is enough for well-known
+      // metros; the prompt already primes it to research then compose.
       tools:      [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
       messages:   [{ role: 'user', content: prompt }],
     }),

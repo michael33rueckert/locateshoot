@@ -104,25 +104,51 @@ export default function LocationScannerPanel() {
         if (!selectedCats.has(category))  continue
         if (abort.signal.aborted)         break outer
 
-        setCurrentLabel(`${city} — ${category}`)
+        // Two-phase per combo — Vercel Hobby's 60s function cap doesn't
+        // fit Claude + geocode + DB in one request. Split lets each
+        // half fit comfortably. "Query" is the slow one (~20-40s);
+        // "commit" is fast (~2-5s).
+        setCurrentLabel(`${city} — ${category} · querying Claude…`)
 
         try {
-          const res = await fetch('/api/scan-locations', {
+          // Phase 1 — Claude call, returns candidate array
+          const qRes = await fetch('/api/scan-locations/query', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body:    JSON.stringify({ city, category }),
             signal:  abort.signal,
           })
-          const j = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            setResults(prev => [...prev, { city, category, ok: false, error: j.message ?? j.error ?? `HTTP ${res.status}` }])
+          const qJson = await qRes.json().catch(() => ({}))
+          if (!qRes.ok) {
+            setResults(prev => [...prev, { city, category, ok: false, error: `query: ${qJson.message ?? qJson.error ?? `HTTP ${qRes.status}`}` }])
+            setProgressDone(prev => prev + 1)
+            continue
+          }
+          const candidates = qJson.candidates ?? []
+          if (candidates.length === 0) {
+            setResults(prev => [...prev, { city, category, ok: true, scanned: 0, inserted: [], skipped: [], errors: [] }])
+            setProgressDone(prev => prev + 1)
+            continue
+          }
+
+          // Phase 2 — dedup + geocode + insert
+          setCurrentLabel(`${city} — ${category} · saving ${candidates.length}…`)
+          const cRes = await fetch('/api/scan-locations/commit', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body:    JSON.stringify({ city, category, candidates }),
+            signal:  abort.signal,
+          })
+          const cJson = await cRes.json().catch(() => ({}))
+          if (!cRes.ok) {
+            setResults(prev => [...prev, { city, category, ok: false, error: `commit: ${cJson.message ?? cJson.error ?? `HTTP ${cRes.status}`}` }])
           } else {
             setResults(prev => [...prev, {
               city, category, ok: true,
-              scanned:  j.scanned ?? 0,
-              inserted: j.inserted ?? [],
-              skipped:  j.skipped ?? [],
-              errors:   j.errors ?? [],
+              scanned:  cJson.scanned ?? candidates.length,
+              inserted: cJson.inserted ?? [],
+              skipped:  cJson.skipped ?? [],
+              errors:   cJson.errors ?? [],
             }])
           }
         } catch (err: any) {
