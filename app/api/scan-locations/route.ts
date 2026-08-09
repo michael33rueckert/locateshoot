@@ -49,35 +49,35 @@ interface ScannedLocation {
 export const SCAN_CATEGORIES = [
   {
     name: 'Parks & Nature',
-    prompt: (city: string) => `Find 15 real photoshoot locations in ${city} that are parks, nature areas, trails, gardens, botanical gardens, arboretums, nature preserves, greenways, or outdoor green spaces. Include city parks, county parks, state parks nearby, riverside parks, lake parks, woodland areas, and hiking trails. Be very specific — name the exact park section, trail name, or garden area, not just the park name.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in ${city} that are parks, nature areas, trails, gardens, botanical gardens, arboretums, nature preserves, greenways, or outdoor green spaces. Include city parks, county parks, state parks nearby, riverside parks, lake parks, woodland areas, and hiking trails. Be very specific — name the exact park section, trail name, or garden area, not just the park name.`,
   },
   {
     name: 'Urban & Architecture',
-    prompt: (city: string) => `Find 15 real photoshoot locations in ${city} that feature interesting urban architecture, murals, street art, alleys, bridges, rooftops, downtown streetscapes, neon signs, brick walls, colorful buildings, or industrial areas. Include specific intersections, named murals, specific bridges, and named buildings or districts.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in ${city} that feature interesting urban architecture, murals, street art, alleys, bridges, rooftops, downtown streetscapes, neon signs, brick walls, colorful buildings, or industrial areas. Include specific intersections, named murals, specific bridges, and named buildings or districts.`,
   },
   {
     name: 'Historic & Cultural',
-    prompt: (city: string) => `Find 15 real photoshoot locations in ${city} that are historically significant or culturally interesting — historic districts, old churches, cemeteries, monuments, memorials, museums with interesting exteriors, old train stations, courthouses, libraries, university campuses. Be specific about exact locations.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in ${city} that are historically significant or culturally interesting — historic districts, old churches, cemeteries, monuments, memorials, museums with interesting exteriors, old train stations, courthouses, libraries, university campuses. Be specific about exact locations.`,
   },
   {
     name: 'Waterfront & Water Features',
-    prompt: (city: string) => `Find 15 real photoshoot locations in ${city} near water — rivers, lakes, ponds, creeks, waterfalls, fountains, reservoirs, marinas, docks, riverfronts, lakefronts. Include specific named bodies of water, named waterfalls, named fountains in parks or plazas.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in ${city} near water — rivers, lakes, ponds, creeks, waterfalls, fountains, reservoirs, marinas, docks, riverfronts, lakefronts. Include specific named bodies of water, named waterfalls, named fountains in parks or plazas.`,
   },
   {
     name: 'Fields, Meadows & Open Spaces',
-    prompt: (city: string) => `Find 15 real photoshoot locations in or near ${city} that are open fields, meadows, prairies, farmland, sunflower fields, wildflower areas, open hillsides, or wide-open spaces with big sky views. Include specific named fields, farms that allow photography, and open recreation areas.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in or near ${city} that are open fields, meadows, prairies, farmland, sunflower fields, wildflower areas, open hillsides, or wide-open spaces with big sky views. Include specific named fields, farms that allow photography, and open recreation areas.`,
   },
   {
     name: 'Private Venues & Hidden Gems',
-    prompt: (city: string) => `Find 15 real photoshoot locations in ${city} that are private venues or hidden gems — barns, ranches, vineyards, breweries with interesting exteriors, boutique hotels with rooftops, old warehouses, or unique private properties known among local photographers.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in ${city} that are private venues or hidden gems — barns, ranches, vineyards, breweries with interesting exteriors, boutique hotels with rooftops, old warehouses, or unique private properties known among local photographers.`,
   },
   {
     name: 'Golden Hour & Sunrise Spots',
-    prompt: (city: string) => `Find 15 real photoshoot locations in or near ${city} that are especially well known for golden hour, sunrise, or sunset photography — hilltops, overlooks, open fields, rooftops, lakefronts, or any spot with unobstructed horizon views.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in or near ${city} that are especially well known for golden hour, sunrise, or sunset photography — hilltops, overlooks, open fields, rooftops, lakefronts, or any spot with unobstructed horizon views.`,
   },
   {
     name: 'Neighborhoods & Street Life',
-    prompt: (city: string) => `Find 15 real photoshoot locations in ${city} that are interesting residential neighborhoods, colorful streets, charming commercial districts, or areas with character — tree-lined streets, painted Victorian homes, arts districts, or bohemian neighborhoods.`,
+    prompt: (city: string) => `Find 10 real photoshoot locations in ${city} that are interesting residential neighborhoods, colorful streets, charming commercial districts, or areas with character — tree-lined streets, painted Victorian homes, arts districts, or bohemian neighborhoods.`,
   },
 ]
 
@@ -216,26 +216,47 @@ export async function POST(request: Request) {
     const skipped:  string[] = []
     const errors:   string[] = []
 
-    for (const rawLoc of locations) {
-      const loc = sanitizeLocation(rawLoc)
+    // Two-phase processing so the DB + geocode round-trips run in parallel
+    // rather than serial. Previously this was 10 candidates × ~500ms each
+    // sequential (~5s of dead wall-clock time inside the timeout budget).
+    //
+    // Phase 1: fuzzy-dedup against the pre-loaded existingSet (cheap,
+    // in-memory, so serial is fine). Anything that survives goes to Phase 2.
+    const survivors = locations
+      .map(sanitizeLocation)
+      .filter(loc => {
+        if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
+          skipped.push(`similar: ${loc.name}`)
+          return false
+        }
+        return true
+      })
 
-      if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
-        skipped.push(`similar: ${loc.name}`)
-        continue
-      }
-      const { data: exactMatch } = await supabase
-        .from('locations')
-        .select('id')
-        .ilike('name', loc.name)
-        .ilike('city', loc.city)
-        .maybeSingle()
-      if (exactMatch) {
+    // Phase 2: exact-match DB check + Google geocode verification, all
+    // candidates in parallel. Each round-trip is independent; Promise.all
+    // fans them out so the total wait is max(each) instead of sum(each).
+    const enriched = await Promise.all(survivors.map(async (loc) => {
+      const [exactMatch, verified] = await Promise.all([
+        supabase.from('locations').select('id').ilike('name', loc.name).ilike('city', loc.city).maybeSingle(),
+        verifyCoordinates(loc.name, loc.city, loc.state),
+      ])
+      if (exactMatch.data) return { loc, duplicate: true }
+      if (verified) { loc.latitude = verified.lat; loc.longitude = verified.lng }
+      return { loc, duplicate: false }
+    }))
+
+    // Phase 3: serial insert. Serial so `existingSet` updates between
+    // inserts protect against two candidates in the same batch that were
+    // similar to each other (rare but possible) from both landing.
+    for (const { loc, duplicate } of enriched) {
+      if (duplicate) {
         skipped.push(`duplicate: ${loc.name}`)
         continue
       }
-
-      const verified = await verifyCoordinates(loc.name, loc.city, loc.state)
-      if (verified) { loc.latitude = verified.lat; loc.longitude = verified.lng }
+      if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
+        skipped.push(`similar-in-batch: ${loc.name}`)
+        continue
+      }
 
       const { error: insertErr } = await supabase.from('locations').insert({
         name:              loc.name,
@@ -348,7 +369,13 @@ Respond ONLY with a raw JSON array, no markdown fences:
       //      scans; upgrade later if we ever move the scanner to a
       //      background worker outside the function timeout.
       thinking:   { type: 'disabled' },
-      tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
+      // max_uses caps how many web-search rounds Claude runs before it must
+      // compose the response. Without it, Claude occasionally issues 5-8
+      // rounds when the topic is fuzzy — each round is a full server-side
+      // roundtrip and adds ~5-10s of wall time. Cap at 3 to keep the total
+      // call bounded; the prompt already tells Claude to research first
+      // then compose.
+      tools:      [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
       messages:   [{ role: 'user', content: prompt }],
     }),
   })
