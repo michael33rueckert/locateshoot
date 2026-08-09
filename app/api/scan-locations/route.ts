@@ -333,10 +333,22 @@ Respond ONLY with a raw JSON array, no markdown fences:
       // truncated some responses; 8000 gives comfortable headroom.
       model:      'claude-sonnet-5',
       max_tokens: 8000,
-      // web_search_20260209 includes dynamic filtering — Claude filters
-      // search results server-side before they hit the context window,
-      // producing more accurate scans with fewer irrelevant hits.
-      tools:      [{ type: 'web_search_20260209', name: 'web_search' }],
+      // Two speed knobs, both to keep single-call wall time under the
+      // Vercel serverless timeout:
+      //   1. thinking: disabled — Sonnet 5 defaults to adaptive thinking
+      //      when this field is omitted (behavior change vs Sonnet 4.6).
+      //      For a bulk research prompt that already delegates the
+      //      hard reasoning to web search, thinking adds 15-30s per
+      //      call for marginal accuracy gain.
+      //   2. web_search_20250305 (basic) instead of _20260209 (dynamic
+      //      filtering). Dynamic filtering runs code execution under
+      //      the hood to filter results before they hit the context —
+      //      real accuracy win, but adds a second execution environment
+      //      per call. Prefer the basic tool for latency-bounded batch
+      //      scans; upgrade later if we ever move the scanner to a
+      //      background worker outside the function timeout.
+      thinking:   { type: 'disabled' },
+      tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
       messages:   [{ role: 'user', content: prompt }],
     }),
   })
