@@ -277,7 +277,14 @@ export default function ExplorePage() {
   // Reset button that clears this anchor and reverts to the underlying
   // home / Near-me / no-anchor state.
   const [clickedNearLoc, setClickedNearLoc] = useState<{lat:number;lng:number;name:string}|null>(null)
-  const [showPinSearch,    setShowPinSearch]    = useState(false)
+  // The old pin-search modal (`showPinSearch`) was retired when the main
+  // search bar became autocomplete-driven — the two overlapping searches
+  // were the primary source of "search doesn't move the map" confusion.
+  //
+  // `mapCenter` tracks the map's current center after any pan or zoom
+  // (via ExploreMap's onMapMove callback). "Search this area" appears
+  // when this drifts far enough from the current search anchor.
+  const [mapCenter,        setMapCenter]        = useState<{lat:number;lng:number;zoom:number}|null>(null)
   const [lightboxSrc,      setLightboxSrc]      = useState<string | string[] | null>(null)
   const [lightboxStart,    setLightboxStart]    = useState(0)
   const openLightbox = useCallback((src: string | string[], start = 0) => { setLightboxSrc(src); setLightboxStart(start) }, [])
@@ -581,7 +588,7 @@ export default function ExplorePage() {
   }, [locations])
 
   useEffect(() => {
-    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowFilters(false);setShowPinSearch(false)}}
+    function onKey(e:KeyboardEvent){if(e.key==='Escape'){setDetailLoc(null);setShowFilters(false)}}
     window.addEventListener('keydown',onKey)
     return()=>window.removeEventListener('keydown',onKey)
   }, [])
@@ -629,7 +636,17 @@ export default function ExplorePage() {
     )
   }
 
-  function handlePinSearch(r:AddressResult){setSearchPin({lat:r.lat,lng:r.lng,label:r.label??r.shortLabel??''});setUserLocation({lat:r.lat,lng:r.lng});setShowPinSearch(false);setToast(`📍 Showing locations near ${r.shortLabel}`)}
+  // Autocomplete-suggestion selection from the main search bar. Sets
+  // searchPin (drives the sidebar 50-mile near-sort) AND userLocation
+  // (drives the map's flyTo — the ExploreMap watches userLocation for
+  // viewport changes). Also clears any click-anchor left over from a
+  // previous marker click so the new search takes precedence cleanly.
+  function handleSearchNavigate(r: AddressResult) {
+    setSearchPin({ lat: r.lat, lng: r.lng, label: r.label ?? r.shortLabel ?? '' })
+    setUserLocation({ lat: r.lat, lng: r.lng })
+    setClickedNearLoc(null)
+    setToast(`📍 Showing locations near ${r.shortLabel}`)
+  }
 
   const handleMarkerClick = useCallback((id:any)=>{
     // Look in both arrays — manual portfolio entries (id prefixed
@@ -933,10 +950,10 @@ export default function ExplorePage() {
             {accessFilter==='My Portfolio'?'✓ My Portfolio':'⭐ My Portfolio'}
             {portfolioSources.size>0&&<span style={{padding:'1px 7px',borderRadius:20,fontSize:10,fontWeight:700,background:accessFilter==='My Portfolio'?'rgba(26,22,18,.15)':'rgba(196,146,42,.3)',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--gold)'}}>{portfolioSources.size}</span>}
           </button>}
-          <button onClick={()=>setShowPinSearch(p=>!p)} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${searchPin?'var(--sky)':'var(--cream-dark)'}`,background:searchPin?'rgba(61,110,140,.08)':'white',color:searchPin?'var(--sky)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
-            📍 {searchPin?searchPin.label.split(',')[0]:'Find Locations Near'}
-            {searchPin&&<span onClick={e=>{e.stopPropagation();setSearchPin(null);setUserLocation(null)}} style={{marginLeft:2}}>✕</span>}
-          </button>
+          {/* The "Find Locations Near" pill was a duplicate of the main
+              search bar's autocomplete — search Boise there and the map
+              already flies + narrows. Kept "Near me" alongside since GPS
+              lookup is a distinct intent from typing a place name. */}
           <button onClick={requestLocation} disabled={locLoading} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${locGranted?'var(--sage)':'var(--cream-dark)'}`,background:locGranted?'rgba(74,103,65,.08)':'white',color:locGranted?'var(--sage)':'var(--ink-soft)',cursor:locLoading?'default':'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,opacity:locLoading?.6:1}}>
             {locLoading?'Locating…':locGranted?'✓ Near me':'📡 Near me'}
           </button>
@@ -944,13 +961,6 @@ export default function ExplorePage() {
           {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{t} ✕</span>)}
           {activeFilterCount>0&&<button onClick={clearAllFilters} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:0,fontWeight:500}}>Clear all</button>}
         </div>
-
-        {showPinSearch&&(
-          <div style={{padding:'0 1.5rem 1rem',borderTop:'1px solid var(--cream-dark)'}}>
-            <div style={{fontSize:12,color:'var(--ink-soft)',marginBottom:6,paddingTop:10}}>Search for a city or address to find nearby locations:</div>
-            <AddressSearch onSelect={handlePinSearch} placeholder="e.g. Loose Park, Kansas City…"/>
-          </div>
-        )}
 
         {showFilters&&(
           <div className="explore-filter-panel">
@@ -971,15 +981,18 @@ export default function ExplorePage() {
             The sidebar scrolls as a whole — search/count scroll away naturally. */}
         <div className={`explore-sidebar${mobileMapVisible?' mobile-hidden':''}`}>
 
-          {/* Search — normal flow, no sticky */}
+          {/* Search — Google-Maps-style autocomplete. Type a city, area,
+              or address; suggestions appear; selecting one geocodes +
+              flies the map + re-anchors the sidebar sort to that spot
+              (via the existing searchPin plumbing that drove the old
+              pin-search button). Clearing the input unsets the pin and
+              returns to the default view. */}
           <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',padding:'10px 1.25rem',flexShrink:0}}>
-            <div style={{position:'relative'}}>
-              <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search locations"
-                style={{width:'100%',padding:'8px 32px 8px 12px',border:'1px solid var(--cream-dark)',borderRadius:6,fontFamily:'inherit',fontSize:13,outline:'none',color:'var(--ink)',background:'white'}}/>
-              {searchQuery
-                ?<button onClick={()=>setSearchQuery('')} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:14,color:'var(--ink-soft)',lineHeight:1}}>✕</button>
-                :<span style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:14,color:'var(--ink-soft)',pointerEvents:'none'}}>🔍</span>}
-            </div>
+            <AddressSearch
+              placeholder="Search a city, area, or address…"
+              onSelect={handleSearchNavigate}
+              onClear={() => { setSearchPin(null); setUserLocation(null) }}
+            />
           </div>
 
           {/* Count — normal flow, no sticky */}
@@ -1084,7 +1097,62 @@ export default function ExplorePage() {
               ← List
             </button>
           )}
-          <ExploreMap locations={mapMarkers as ExploreLocation[]} activeId={activeId} userLocation={userLocation} homeLocation={homeLocation} onMarkerClick={handleMarkerClick}/>
+          <ExploreMap
+            locations={mapMarkers as ExploreLocation[]}
+            activeId={activeId}
+            userLocation={userLocation}
+            homeLocation={homeLocation}
+            onMarkerClick={handleMarkerClick}
+            onMapMove={(c, zoom) => setMapCenter({ lat: c.lat, lng: c.lng, zoom })}
+          />
+          {/* "Search this area" button — Google-Maps-style floating pill
+              at top-center of the map. Appears when the user has panned
+              the map more than ~15 miles from the current search anchor
+              (search pin, GPS location, or home city). Clicking it re-
+              anchors the search to the visible map center — same code
+              path as selecting an autocomplete suggestion. */}
+          {(() => {
+            if (!mapCenter) return null
+            // Which point are results currently ranked around?
+            const anchor = searchPin ?? userLocation ?? homeLocation ?? null
+            const showButton = !anchor || distMiles(mapCenter.lat, mapCenter.lng, anchor.lat, anchor.lng) > 15
+            if (!showButton) return null
+            // Only render when the map is actually visible on mobile
+            // (the map column is display:none until "View Map" is tapped).
+            return (
+              <button
+                onClick={() => {
+                  setSearchPin({ lat: mapCenter.lat, lng: mapCenter.lng, label: 'Map area' })
+                  setUserLocation({ lat: mapCenter.lat, lng: mapCenter.lng })
+                  setClickedNearLoc(null)
+                  setToast('📍 Showing locations for this area')
+                }}
+                style={{
+                  position: 'absolute',
+                  top: mobileMapVisible ? 68 : 12,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 18px',
+                  borderRadius: 24,
+                  background: 'white',
+                  color: 'var(--ink)',
+                  border: '1px solid var(--cream-dark)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  boxShadow: '0 4px 12px rgba(26,22,18,.15)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                🔍 Search this area
+              </button>
+            )
+          })()}
           <div style={{position:'absolute',bottom:24,left:16,zIndex:500,background:'white',borderRadius:8,padding:'.75rem 1rem',border:'1px solid var(--cream-dark)',boxShadow:'0 4px 16px rgba(26,22,18,.1)'}}>
             {[{color:'#4a6741',label:'Public'},{color:'#b54b2a',label:'Private'},{color:'#c4922a',label:'Selected'},{color:'#3d6e8c',label:'You'}].map(item=>(
               <div key={item.label} style={{display:'flex',alignItems:'center',gap:7,fontSize:11,color:'var(--ink)',marginBottom:3}}>

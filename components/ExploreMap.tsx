@@ -40,6 +40,10 @@ interface ExploreMapProps {
   // better for users who haven't told us where they shoot yet.
   homeLocation: { lat: number; lng: number } | null
   onMarkerClick: (id: number) => void
+  // Fires on Leaflet's moveend (pan or zoom finished). Parent uses this to
+  // decide whether to show a "Search this area" button. Debounced to
+  // moveend so we don't fire on every intermediate frame during a pan.
+  onMapMove?: (center: { lat: number; lng: number }, zoom: number) => void
 }
 
 // USA-wide framing — center of the contiguous 48, zoomed out enough to show
@@ -54,11 +58,17 @@ export default function ExploreMap({
   userLocation,
   homeLocation,
   onMarkerClick,
+  onMapMove,
 }: ExploreMapProps) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<any>(null)
   const markersRef    = useRef<Record<number, any>>({})
   const userMarkerRef = useRef<any>(null)
+  // Keep the onMapMove callback in a ref so the moveend handler always
+  // sees the latest one without needing to detach/reattach when the
+  // parent passes a new closure.
+  const onMapMoveRef  = useRef(onMapMove)
+  useEffect(() => { onMapMoveRef.current = onMapMove }, [onMapMove])
   // Whether the initial view has already been applied. Without this guard,
   // the home-location effect below would re-center the map every time the
   // photographer pans away — annoying instead of helpful.
@@ -104,6 +114,16 @@ export default function ExploreMap({
       }).addTo(map)
 
       L.control.zoom({ position: 'bottomright' }).addTo(map)
+
+      // moveend fires after pan or zoom settles. Debounced by Leaflet
+      // itself so a drag emits one event, not one per frame. onMapMove
+      // is read from a ref so a caller-provided closure that changes
+      // identity between renders doesn't need to re-init the map.
+      map.on('moveend', () => {
+        if (!onMapMoveRef.current) return
+        const c = map.getCenter()
+        onMapMoveRef.current({ lat: c.lat, lng: c.lng }, map.getZoom())
+      })
 
       mapRef.current = map
     })

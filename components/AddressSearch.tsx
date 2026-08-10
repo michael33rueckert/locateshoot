@@ -11,6 +11,10 @@ export interface AddressResult {
 
 interface AddressSearchProps {
   onSelect: (result: AddressResult) => void
+  // Fires when the user clicks the ✕ button to clear the input. Lets a
+  // parent that's showing "you searched for X" state (like a map center
+  // pin or a chip) unset that state in sync.
+  onClear?: () => void
   placeholder?: string
   autoFocus?: boolean
 }
@@ -47,6 +51,7 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
 
 export default function AddressSearch({
   onSelect,
+  onClear,
   placeholder = 'Search for a place or address…',
   autoFocus = false,
 }: AddressSearchProps) {
@@ -175,6 +180,7 @@ export default function AddressSearch({
 
   function handleClear() {
     setQuery(''); setSuggestions([]); setShowResults(false)
+    onClear?.()
     inputRef.current?.focus()
   }
 
