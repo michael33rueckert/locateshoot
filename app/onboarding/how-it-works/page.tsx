@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation'
 import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
+import CreateLocationGuideModal, { type PortfolioLocationLite } from '@/components/CreateLocationGuideModal'
 import { supabase } from '@/lib/supabase'
+import { hasStarter, hasPro } from '@/lib/plan'
 import { thumbUrl } from '@/lib/image'
 
 // Multi-step walkthrough shown to new photographers (and re-visitable from
@@ -28,9 +30,14 @@ interface Bullet { headline: string; detail: string }
 // modal without leaving the walkthrough). Step 1's "add first location"
 // uses the inline flavor so the photographer doesn't get bounced to the
 // Portfolio page mid-tour.
-type SlideCta = { kind: 'link'; href: string; label: string } | { kind: 'action'; action: 'add-location'; label: string }
+type SlideCta =
+  | { kind: 'link'; href: string; label: string }
+  | { kind: 'action'; action: 'add-location' | 'create-guide' | 'setup-domain'; label: string }
 interface PitchSlide   { kind: 'pitch';   icon: string; title: string; pitch: string }
-interface HowtoSlide   { kind: 'howto';   eyebrow: string; icon: string; title: string; bullets: Bullet[]; cta?: SlideCta }
+// requiresPlan flags a step whose action is gated to a paid tier —
+// renders a small pill next to the eyebrow so free users know why
+// their action button isn't showing up.
+interface HowtoSlide   { kind: 'howto';   eyebrow: string; icon: string; title: string; bullets: Bullet[]; cta?: SlideCta; requiresPlan?: 'starter' | 'pro' }
 interface PickerSlide  { kind: 'picker';  eyebrow: string; icon: string; title: string }
 interface OutroSlide   { kind: 'outro';   icon: string; title: string; pitch: string }
 type Slide = PitchSlide | HowtoSlide | PickerSlide | OutroSlide
@@ -72,7 +79,8 @@ const SLIDES: Slide[] = [
       { headline: '🧭 Multi-pick + distance caps.',
         detail:   'Let them pick 2+ spots for multi-location sessions, with an optional "max miles apart" cap.' },
     ],
-    cta: { kind: 'link', href: '/location-guides', label: 'Create your first guide →' },
+    cta: { kind: 'action', action: 'create-guide', label: 'Create your first guide →' },
+    requiresPlan: 'starter',
   },
   {
     kind:    'howto',
@@ -84,10 +92,11 @@ const SLIDES: Slide[] = [
         detail:   'HoneyBook project pages, Dubsado workflow emails, Calendly confirmations, plain text messages — paste and go.' },
       { headline: 'Get notified the moment they pick.',
         detail:   'Email + push notification on your device. The selection lands on your dashboard automatically.' },
-      { headline: 'Use your own domain. (Pro plan)',
-        detail:   'Pro-only. Set up locations.yourstudio.com in Profile and your Location Guides use it instead of locateshoot.com. Upgrade any time from Profile → Billing.' },
+      { headline: 'Use your own domain.',
+        detail:   'Set up locations.yourstudio.com in Profile and your Location Guides use it instead of locateshoot.com.' },
     ],
-    cta: { kind: 'link', href: '/profile', label: 'Set up your domain →' },
+    cta: { kind: 'action', action: 'setup-domain', label: 'Set up your domain →' },
+    requiresPlan: 'pro',
   },
   {
     kind:    'picker',
@@ -138,6 +147,11 @@ export default function HowItWorksPage() {
   // Picker state — only used on the picker slide but lives at the
   // walkthrough level so back-navigating doesn't reset it.
   const [userId,    setUserId]    = useState<string | null>(null)
+  // Plan + name are used for Step 2/3 gating and to pass through to
+  // CreateLocationGuideModal (which needs the photographer name for
+  // slug generation). Loaded lazily alongside userId.
+  const [plan,             setPlan]             = useState<string | null>(null)
+  const [photographerName, setPhotographerName] = useState<string>('')
   const [pin,       setPin]       = useState<AddressResult | null>(null)
   const [nearby,    setNearby]    = useState<(PublicLocation & { d: number })[]>([])
   const [selected,  setSelected]  = useState<Set<string>>(new Set())
@@ -149,10 +163,21 @@ export default function HowItWorksPage() {
   // add without shoving them off to /portfolio.
   const [showAddLocation, setShowAddLocation] = useState(false)
   const [step1LocationAdded, setStep1LocationAdded] = useState(false)
+  // Step 2 inline "Create guide" — only shown for Starter+ (custom
+  // guides are gated to that tier). Portfolio is fetched lazily when
+  // the button is clicked, matching the /location-guides page shape.
+  const [showCreateGuide,       setShowCreateGuide]       = useState(false)
+  const [step2GuideCreated,     setStep2GuideCreated]     = useState(false)
+  const [guidePortfolio,        setGuidePortfolio]        = useState<PortfolioLocationLite[]>([])
+  const [guidePortfolioLoading, setGuidePortfolioLoading] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setUserId(user.id)
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      setUserId(user.id)
+      const { data: prof } = await supabase.from('profiles').select('plan,full_name').eq('id', user.id).single()
+      setPlan(prof?.plan ?? null)
+      setPhotographerName((prof?.full_name ?? '').trim())
     })
   }, [])
 
@@ -301,6 +326,55 @@ export default function HowItWorksPage() {
     } finally { setSaving(false) }
   }
 
+  // Load the photographer's portfolio (id/name/city/state + one thumb
+  // per location) so CreateLocationGuideModal has real rows to pick
+  // from. Same query shape as /location-guides but photo lookup is
+  // simplified — the tour just needs the picker to render.
+  const loadGuidePortfolio = useCallback(async () => {
+    if (!userId) return
+    setGuidePortfolioLoading(true)
+    try {
+      const { data: rows } = await supabase
+        .from('portfolio_locations')
+        .select('id,source_location_id,name,city,state')
+        .eq('user_id', userId)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: false })
+      if (!rows || rows.length === 0) { setGuidePortfolio([]); return }
+      const pIds = rows.map((p: any) => p.id)
+      const sourceIds = rows.map((p: any) => p.source_location_id).filter(Boolean) as string[]
+      const { data: summary } = await supabase.rpc('portfolio_photo_summary', { pids: pIds })
+      const ownUrl: Record<string, string> = {}
+      ;(summary ?? []).forEach((r: any) => {
+        if (r.portfolio_location_id && r.first_url) ownUrl[r.portfolio_location_id] = r.first_url
+      })
+      const sourceUrl: Record<string, string> = {}
+      if (sourceIds.length > 0) {
+        const { data: srcPhotos } = await supabase
+          .from('location_photos')
+          .select('location_id,url,created_at')
+          .in('location_id', sourceIds)
+          .eq('is_private', false)
+          .order('created_at', { ascending: true })
+        ;(srcPhotos ?? []).forEach((r: any) => {
+          if (r.location_id && r.url && !sourceUrl[r.location_id]) sourceUrl[r.location_id] = r.url
+        })
+      }
+      setGuidePortfolio(rows.map((p: any) => ({
+        id:        p.id,
+        name:      p.name,
+        city:      p.city,
+        state:     p.state,
+        photo_url: ownUrl[p.id] ?? (p.source_location_id ? sourceUrl[p.source_location_id] ?? null : null),
+      })))
+    } finally { setGuidePortfolioLoading(false) }
+  }, [userId])
+
+  async function openCreateGuide() {
+    await loadGuidePortfolio()
+    setShowCreateGuide(true)
+  }
+
   async function skipPicker() {
     setSaving(true)
     try {
@@ -346,8 +420,15 @@ export default function HowItWorksPage() {
           {/* Header — same shape for every slide */}
           <div style={{ textAlign: 'center', marginBottom: slide.kind === 'picker' ? '1.5rem' : '1.5rem' }}>
             {(slide.kind === 'howto' || slide.kind === 'picker') && (
-              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 10 }}>
-                {slide.eyebrow}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)' }}>
+                  {slide.eyebrow}
+                </span>
+                {slide.kind === 'howto' && slide.requiresPlan && (
+                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.25)' }}>
+                    {slide.requiresPlan === 'pro' ? 'Pro plan' : 'Starter or Pro'}
+                  </span>
+                )}
               </div>
             )}
             <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 14, filter: 'drop-shadow(0 2px 6px rgba(26,22,18,.08))' }}>{slide.icon}</div>
@@ -376,29 +457,67 @@ export default function HowItWorksPage() {
                   </li>
                 ))}
               </ul>
-              {slide.cta && (
-                <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-                  {slide.cta.kind === 'action' && slide.cta.action === 'add-location' ? (
-                    <button
-                      onClick={() => setShowAddLocation(true)}
-                      disabled={!userId}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 8, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: userId ? 'pointer' : 'default', fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(196,146,42,.25)', opacity: userId ? 1 : .5 }}
-                    >
-                      {slide.cta.label}
-                    </button>
-                  ) : slide.cta.kind === 'link' ? (
-                    <Link href={slide.cta.href} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--gold)', textDecoration: 'none' }}>
-                      {slide.cta.label}
-                    </Link>
-                  ) : null}
-                </div>
-              )}
-              {/* Step 1 confirmation — appears once they've saved a
-                  location via the inline modal. Nudges them to hit
+              {(() => {
+                // CTA render + plan-gating. Step 2 (create guide) is
+                // Starter+; Step 3 (custom domain) is Pro-only. We hide
+                // the button rather than upsell here — the tour's job is
+                // to show what the product does, not to squeeze the sale
+                // mid-onboarding. Free users still see the bullets that
+                // explain the feature.
+                if (!slide.cta) return null
+                const cta = slide.cta
+                const primary: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 8, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(196,146,42,.25)' }
+                if (cta.kind === 'action' && cta.action === 'add-location') {
+                  return (
+                    <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                      <button onClick={() => setShowAddLocation(true)} disabled={!userId} style={{ ...primary, cursor: userId ? 'pointer' : 'default', opacity: userId ? 1 : .5 }}>{cta.label}</button>
+                    </div>
+                  )
+                }
+                if (cta.kind === 'action' && cta.action === 'create-guide') {
+                  if (!hasStarter(plan)) return null
+                  return (
+                    <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                      <button onClick={openCreateGuide} disabled={!userId || guidePortfolioLoading} style={{ ...primary, cursor: userId && !guidePortfolioLoading ? 'pointer' : 'default', opacity: userId && !guidePortfolioLoading ? 1 : .6 }}>
+                        {guidePortfolioLoading ? 'Loading portfolio…' : cta.label}
+                      </button>
+                    </div>
+                  )
+                }
+                if (cta.kind === 'action' && cta.action === 'setup-domain') {
+                  if (!hasPro(plan)) return null
+                  // Custom-domain setup is a multi-step DNS + verify flow
+                  // that lives on the Profile page — too much to embed
+                  // inline. Opening it in a new tab preserves the guide
+                  // state so the photographer can finish DNS work and
+                  // come back to hit Next.
+                  return (
+                    <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                      <a href="/profile#domain" target="_blank" rel="noopener noreferrer" style={{ ...primary, textDecoration: 'none' }}>{cta.label}</a>
+                      <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 6 }}>Opens Profile in a new tab so this walkthrough stays put.</div>
+                    </div>
+                  )
+                }
+                if (cta.kind === 'link') {
+                  return (
+                    <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                      <Link href={cta.href} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--gold)', textDecoration: 'none' }}>{cta.label}</Link>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+              {/* Step confirmations — appear once they've completed
+                  the corresponding inline action. Nudges them to hit
                   Next so the walkthrough continues. */}
               {slide.eyebrow === 'Step 1' && step1LocationAdded && (
                 <div style={{ marginTop: '1rem', padding: '10px 14px', background: 'rgba(74,103,65,.1)', border: '1px solid rgba(74,103,65,.25)', borderRadius: 8, fontSize: 13, color: 'var(--sage)', textAlign: 'center', fontWeight: 500 }}>
                   ✓ Location added to your portfolio — hit Next to keep going.
+                </div>
+              )}
+              {slide.eyebrow === 'Step 2' && step2GuideCreated && (
+                <div style={{ marginTop: '1rem', padding: '10px 14px', background: 'rgba(74,103,65,.1)', border: '1px solid rgba(74,103,65,.25)', borderRadius: 8, fontSize: 13, color: 'var(--sage)', textAlign: 'center', fontWeight: 500 }}>
+                  ✓ Guide created — hit Next to keep going.
                 </div>
               )}
             </>
@@ -551,6 +670,24 @@ export default function HowItWorksPage() {
           onCreated={() => {
             setShowAddLocation(false)
             setStep1LocationAdded(true)
+          }}
+        />
+      )}
+
+      {/* Inline "create your first guide" modal for Step 2 (Starter+
+          only). Same pattern as Step 1 — closes on save + drops a
+          confirmation banner so the tour keeps flowing. */}
+      {showCreateGuide && userId && (
+        <CreateLocationGuideModal
+          portfolio={guidePortfolio}
+          preselectAll={false}
+          userId={userId}
+          photographerName={photographerName}
+          isPro={hasPro(plan)}
+          onClose={() => setShowCreateGuide(false)}
+          onCreated={() => {
+            setShowCreateGuide(false)
+            setStep2GuideCreated(true)
           }}
         />
       )}
