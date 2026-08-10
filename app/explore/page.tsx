@@ -104,8 +104,12 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
           the scroll-perf reasoning. Same story here: the detail sheet
           scrolls its long content and desktop viewport re-composite
           of a blurred area per frame was making it feel laggy. */}
-      <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,22,18,.5)',zIndex:400}}/>
-      <div style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',willChange:'transform',contain:'layout style',width:'100%',maxWidth:600,background:'white',borderRadius:'16px 16px 0 0',zIndex:500,maxHeight:'90svh',overflowY:'auto',boxShadow:'0 -8px 48px rgba(26,22,18,.25)'}}>
+      {/* Backdrop and sheet z-indexes lifted above the explore filter
+          row (zIndex 1500 — line 943) so on mobile/tablet the filter
+          bar doesn't overlay the top of the location card. Matches the
+          same fix pattern used for other modals in this codebase. */}
+      <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,22,18,.5)',zIndex:1700}}/>
+      <div style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',willChange:'transform',contain:'layout style',width:'100%',maxWidth:600,background:'white',borderRadius:'16px 16px 0 0',zIndex:1800,maxHeight:'90svh',overflowY:'auto',boxShadow:'0 -8px 48px rgba(26,22,18,.25)'}}>
         <div style={{display:'flex',justifyContent:'center',padding:'12px 0 6px'}}><div style={{width:36,height:4,borderRadius:2,background:'var(--sand)'}}/></div>
         <button onClick={onClose} style={{position:'absolute',top:14,right:14,width:32,height:32,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:16,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10}}>✕</button>
 

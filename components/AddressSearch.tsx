@@ -70,6 +70,12 @@ export default function AddressSearch({
   const mapDivRef    = useRef<HTMLDivElement | null>(null)
   const placesService= useRef<any>(null)
   const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Set true when the user hits Enter before predictions have loaded
+  // (i.e. inside the 300ms debounce). When the next getPlacePredictions
+  // response lands, the search callback auto-selects the first result
+  // and clears the flag. Lets a fast typer press Enter and still
+  // navigate, without waiting for autocomplete to visibly render.
+  const pendingEnterSelectRef = useRef(false)
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY
 
@@ -110,9 +116,17 @@ export default function AddressSearch({
           setSuggestions(predictions)
           setShowResults(true)
           setActiveIdx(-1)
+          // If user pressed Enter before predictions arrived, auto-
+          // select the top result now that we have one. Same code path
+          // as clicking the first suggestion.
+          if (pendingEnterSelectRef.current && predictions.length > 0) {
+            pendingEnterSelectRef.current = false
+            handleSelect(predictions[0])
+          }
         } else {
           setSuggestions([])
           setShowResults(false)
+          pendingEnterSelectRef.current = false
         }
       }
     )
@@ -171,11 +185,38 @@ export default function AddressSearch({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    // Enter is handled specially — it works even when no suggestion is
+    // highlighted and even before the autocomplete debounce fires, so
+    // a user who types "Boise, ID" and immediately presses Enter still
+    // navigates. Arrow/Escape are only relevant when the dropdown is
+    // showing.
+    if (e.key === 'Enter') {
+      if (!query.trim()) return
+      // Highlighted a suggestion → select it (existing behavior).
+      if (activeIdx >= 0 && suggestions[activeIdx]) {
+        e.preventDefault()
+        handleSelect(suggestions[activeIdx])
+        return
+      }
+      // Predictions already loaded but nothing highlighted → pick top.
+      if (suggestions.length > 0) {
+        e.preventDefault()
+        handleSelect(suggestions[0])
+        return
+      }
+      // Nothing loaded yet — flush the debounce and mark that when
+      // predictions arrive, the search callback should auto-select
+      // the top result. Covers the fast-typer case.
+      e.preventDefault()
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      pendingEnterSelectRef.current = true
+      search(query)
+      return
+    }
     if (!showResults || suggestions.length === 0) return
-    if (e.key === 'ArrowDown')  { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)) }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)) }
-    else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); handleSelect(suggestions[activeIdx]) }
-    else if (e.key === 'Escape') setShowResults(false)
+    if (e.key === 'ArrowDown')       { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)) }
+    else if (e.key === 'ArrowUp')    { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)) }
+    else if (e.key === 'Escape')     setShowResults(false)
   }
 
   function handleClear() {
