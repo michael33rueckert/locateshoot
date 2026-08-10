@@ -413,8 +413,14 @@ export default function CreateLocationGuideModal({
           modal and promotes it to its own compositing layer so the
           browser doesn't re-paint anything outside it on each scroll
           frame. Big jank reduction on desktop where the viewport is
-          ~10x the pixel count of mobile. */}
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', willChange: 'transform', contain: 'layout style', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflowY: 'auto', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+          ~10x the pixel count of mobile.
+
+          Two layers: the outer clips with border-radius + overflow:
+          hidden so on desktop the scrollbar's top and bottom edges
+          follow the rounded corners instead of squaring them off.
+          The inner div is the actual scroll container. */}
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflow: 'hidden', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: 0, overflowY: 'auto', willChange: 'transform', contain: 'layout style' }}>
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <div>
@@ -822,6 +828,7 @@ export default function CreateLocationGuideModal({
             <button onClick={onClose} style={{ padding: '12px 20px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--sand)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Edit-location overlay. Stacks on top of this modal so the

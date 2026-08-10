@@ -479,8 +479,14 @@ export default function PortfolioEditModal({
       {/* contain: layout style + willChange: transform scopes the
           modal's layout/style recalc + promotes it to its own
           compositing layer, so scroll frames don't ripple through to
-          the sidebar / page underneath. */}
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', willChange: 'transform', contain: 'layout style', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflowY: 'auto', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+          the sidebar / page underneath.
+
+          Two layers: the outer clips with border-radius + overflow:
+          hidden so on desktop the scrollbar's top and bottom edges
+          follow the rounded corners instead of squaring them off.
+          The inner div is the actual scroll container. */}
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflow: 'hidden', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: 0, overflowY: 'auto', willChange: 'transform', contain: 'layout style' }}>
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem', gap: 12 }}>
             <div>
@@ -769,6 +775,7 @@ export default function PortfolioEditModal({
             </>
           )}
         </div>
+      </div>
       </div>
       <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </>
