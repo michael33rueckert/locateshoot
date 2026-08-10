@@ -90,40 +90,86 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
   // Reset gallery to first image when switching locations.
   useEffect(() => { setActivePhoto(0) }, [loc.id])
 
-  // Touch-swipe carousel on the main photo area. Distinguish tap from
-  // swipe by tracking movement — a real swipe suppresses the img's
-  // onClick (which opens the lightbox) via a ref the click handler
-  // reads. Vertical drags fall through so the sheet's scroll still
-  // works when the drag starts on the photo.
-  const touchStartXRef = useRef<number | null>(null)
-  const touchStartYRef = useRef<number | null>(null)
-  const swipedRef      = useRef(false)
+  // Touch-swipe carousel on the main photo area. All photos render in
+  // a horizontal flex track; the resting position is translateX
+  // (-activePhoto * 100%). During a horizontal drag we update the
+  // track's transform imperatively (avoids per-frame re-renders); on
+  // touchend we snap to the next/prev index (or bounce back) with a
+  // CSS transition. Vertical drags fall through so the sheet still
+  // scrolls when the drag starts on the photo.
+  const trackRef            = useRef<HTMLDivElement>(null)
+  const draggingRef         = useRef(false)
+  const isVerticalDragRef   = useRef(false)
+  const dragStartXRef       = useRef(0)
+  const dragStartYRef       = useRef(0)
+  const dragOffsetRef       = useRef(0)
+  const swipedRef           = useRef(false)
+  const REST_TRANSITION     = 'transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1)'
+
   function onPhotoTouchStart(e: React.TouchEvent) {
-    touchStartXRef.current = e.touches[0].clientX
-    touchStartYRef.current = e.touches[0].clientY
-    swipedRef.current = false
+    if (googlePhotos.length <= 1) return
+    dragStartXRef.current   = e.touches[0].clientX
+    dragStartYRef.current   = e.touches[0].clientY
+    dragOffsetRef.current   = 0
+    draggingRef.current     = false
+    isVerticalDragRef.current = false
+    swipedRef.current       = false
   }
   function onPhotoTouchMove(e: React.TouchEvent) {
-    if (touchStartXRef.current == null || touchStartYRef.current == null) return
-    const dx = Math.abs(e.touches[0].clientX - touchStartXRef.current)
-    const dy = Math.abs(e.touches[0].clientY - touchStartYRef.current)
-    // Only claim the gesture when it's clearly horizontal — otherwise
-    // let vertical scrolling of the sheet win.
-    if (dx > 10 && dx > dy) swipedRef.current = true
-  }
-  function onPhotoTouchEnd(e: React.TouchEvent) {
-    if (touchStartXRef.current == null) return
-    const dx = e.changedTouches[0].clientX - touchStartXRef.current
-    if (swipedRef.current && Math.abs(dx) > 40 && googlePhotos.length > 1) {
-      if (dx < 0) setActivePhoto(i => Math.min(i + 1, googlePhotos.length - 1))
-      else        setActivePhoto(i => Math.max(i - 1, 0))
+    if (googlePhotos.length <= 1) return
+    const dx = e.touches[0].clientX - dragStartXRef.current
+    const dy = e.touches[0].clientY - dragStartYRef.current
+
+    // First significant move decides direction. Horizontal → we own
+    // the gesture (photo swipe); vertical → let the sheet scroll.
+    if (!draggingRef.current && !isVerticalDragRef.current) {
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          draggingRef.current = true
+          swipedRef.current   = true
+          if (trackRef.current) trackRef.current.style.transition = 'none'
+        } else {
+          isVerticalDragRef.current = true
+        }
+      }
+      if (!draggingRef.current) return
     }
-    touchStartXRef.current = null
-    touchStartYRef.current = null
+
+    // Rubber-band resistance at the ends so pulling past the first or
+    // last photo feels bounded instead of dead.
+    let offset = dx
+    if (activePhoto === 0 && dx > 0)                            offset = dx * 0.35
+    if (activePhoto === googlePhotos.length - 1 && dx < 0)      offset = dx * 0.35
+
+    dragOffsetRef.current = offset
+    if (trackRef.current) {
+      trackRef.current.style.transform =
+        `translate3d(calc(${-activePhoto * 100}% + ${offset}px), 0, 0)`
+    }
+  }
+  function onPhotoTouchEnd() {
+    if (googlePhotos.length <= 1) return
+    if (!draggingRef.current) return
+
+    const dx        = dragOffsetRef.current
+    const width     = trackRef.current?.parentElement?.offsetWidth ?? 1
+    const threshold = Math.min(60, width * 0.15)
+
+    let next = activePhoto
+    if      (dx < -threshold && activePhoto < googlePhotos.length - 1) next = activePhoto + 1
+    else if (dx >  threshold && activePhoto > 0)                       next = activePhoto - 1
+
+    if (trackRef.current) {
+      trackRef.current.style.transition = REST_TRANSITION
+      trackRef.current.style.transform  = `translate3d(${-next * 100}%, 0, 0)`
+    }
+    if (next !== activePhoto) setActivePhoto(next)
+
+    draggingRef.current   = false
+    dragOffsetRef.current = 0
   }
   function onPhotoClick() {
-    // If the pointer moved enough to count as a swipe, don't also
-    // treat it as a tap that opens the lightbox.
+    // A real swipe should not double-fire as a tap that opens the lightbox.
     if (swipedRef.current) { swipedRef.current = false; return }
     if (googlePhotos.length > 0) onOpenLightbox(googlePhotos.map(p => p.url), activePhoto)
   }
@@ -162,7 +208,34 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
         >
           {googleLoading
             ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
-            :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} onClick={onPhotoClick} draggable={false} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in',userSelect:'none'}}/>
+            :hasGoogle?(
+              <div ref={trackRef} style={{
+                display:'flex',
+                width:'100%',
+                height:'100%',
+                transform:`translate3d(${-activePhoto * 100}%, 0, 0)`,
+                transition:REST_TRANSITION,
+                willChange:'transform',
+              }}>
+                {googlePhotos.map((p, i) => (
+                  <img
+                    key={i}
+                    src={p.url}
+                    alt={loc.name}
+                    onClick={onPhotoClick}
+                    draggable={false}
+                    style={{
+                      flex:'0 0 100%',
+                      width:'100%',
+                      height:'100%',
+                      objectFit:'cover',
+                      cursor:'zoom-in',
+                      userSelect:'none',
+                    }}
+                  />
+                ))}
+              </div>
+            )
             :<div className={loc.bg} style={{position:'absolute',inset:0}}/>}
           <div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>
           {hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
