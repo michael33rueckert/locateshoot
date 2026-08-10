@@ -76,6 +76,12 @@ export default function AddressSearch({
   // and clears the flag. Lets a fast typer press Enter and still
   // navigate, without waiting for autocomplete to visibly render.
   const pendingEnterSelectRef = useRef(false)
+  // Set true right before handleSelect updates `query` with the chosen
+  // description. Without it, the debounced-search effect fires 300ms
+  // later, re-populates suggestions from that description, and the
+  // dropdown pops back up over the map/results the caller just
+  // navigated to. The next debounce tick clears it.
+  const suppressNextSearchRef = useRef(false)
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY
 
@@ -134,6 +140,14 @@ export default function AddressSearch({
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
+    // After a select, we deliberately set `query` to the chosen
+    // description so the input reflects the selection — but we don't
+    // want that write to reopen the dropdown. Swallow exactly the next
+    // debounce tick.
+    if (suppressNextSearchRef.current) {
+      suppressNextSearchRef.current = false
+      return
+    }
     debounceRef.current = setTimeout(() => search(query), 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query, search])
@@ -153,10 +167,16 @@ export default function AddressSearch({
   // This uses the Places API only — no Geocoding API needed
   function handleSelect(prediction: any) {
     if (!placesService.current) return
+    // Prevent the debounced-search effect from re-firing on the
+    // synthetic query write below (which would reopen the dropdown).
+    suppressNextSearchRef.current = true
     setQuery(prediction.description)
     setShowResults(false)
     setSuggestions([])
     setLoading(true)
+    // Also drop focus so the input's onFocus doesn't rehydrate the
+    // dropdown either (e.g. if the user immediately taps the input).
+    inputRef.current?.blur()
 
     placesService.current.getDetails(
       {

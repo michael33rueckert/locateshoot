@@ -90,6 +90,44 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
   // Reset gallery to first image when switching locations.
   useEffect(() => { setActivePhoto(0) }, [loc.id])
 
+  // Touch-swipe carousel on the main photo area. Distinguish tap from
+  // swipe by tracking movement — a real swipe suppresses the img's
+  // onClick (which opens the lightbox) via a ref the click handler
+  // reads. Vertical drags fall through so the sheet's scroll still
+  // works when the drag starts on the photo.
+  const touchStartXRef = useRef<number | null>(null)
+  const touchStartYRef = useRef<number | null>(null)
+  const swipedRef      = useRef(false)
+  function onPhotoTouchStart(e: React.TouchEvent) {
+    touchStartXRef.current = e.touches[0].clientX
+    touchStartYRef.current = e.touches[0].clientY
+    swipedRef.current = false
+  }
+  function onPhotoTouchMove(e: React.TouchEvent) {
+    if (touchStartXRef.current == null || touchStartYRef.current == null) return
+    const dx = Math.abs(e.touches[0].clientX - touchStartXRef.current)
+    const dy = Math.abs(e.touches[0].clientY - touchStartYRef.current)
+    // Only claim the gesture when it's clearly horizontal — otherwise
+    // let vertical scrolling of the sheet win.
+    if (dx > 10 && dx > dy) swipedRef.current = true
+  }
+  function onPhotoTouchEnd(e: React.TouchEvent) {
+    if (touchStartXRef.current == null) return
+    const dx = e.changedTouches[0].clientX - touchStartXRef.current
+    if (swipedRef.current && Math.abs(dx) > 40 && googlePhotos.length > 1) {
+      if (dx < 0) setActivePhoto(i => Math.min(i + 1, googlePhotos.length - 1))
+      else        setActivePhoto(i => Math.max(i - 1, 0))
+    }
+    touchStartXRef.current = null
+    touchStartYRef.current = null
+  }
+  function onPhotoClick() {
+    // If the pointer moved enough to count as a swipe, don't also
+    // treat it as a tap that opens the lightbox.
+    if (swipedRef.current) { swipedRef.current = false; return }
+    if (googlePhotos.length > 0) onOpenLightbox(googlePhotos.map(p => p.url), activePhoto)
+  }
+
   const hasGoogle = googlePhotos.length > 0
   const permitCfg = PERMIT_CFG[loc.permit_certainty ?? 'unknown'] ?? PERMIT_CFG.unknown
 
@@ -116,10 +154,15 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
         {/* Photo area — Google Places photos only. We removed community
             uploads + the Photographer / Add-yours tabs along with the rest
             of the public-contribution surface. */}
-        <div style={{position:'relative',height:'clamp(260px, 44vw, 380px)',background:'#1a1612',overflow:'hidden'}}>
+        <div
+          style={{position:'relative',height:'clamp(260px, 44vw, 380px)',background:'#1a1612',overflow:'hidden',touchAction:'pan-y'}}
+          onTouchStart={onPhotoTouchStart}
+          onTouchMove={onPhotoTouchMove}
+          onTouchEnd={onPhotoTouchEnd}
+        >
           {googleLoading
             ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
-            :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} onClick={()=>onOpenLightbox(googlePhotos.map(p=>p.url), activePhoto)} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in'}}/>
+            :hasGoogle?<img src={googlePhotos[activePhoto].url} alt={loc.name} onClick={onPhotoClick} draggable={false} style={{width:'100%',height:'100%',objectFit:'cover',cursor:'zoom-in',userSelect:'none'}}/>
             :<div className={loc.bg} style={{position:'absolute',inset:0}}/>}
           <div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>
           {hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
