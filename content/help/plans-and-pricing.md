@@ -13,6 +13,7 @@ LocateShoot has three tiers. You can start free and upgrade when you outgrow it;
 - Auto-generated portfolio Location Guide
 - Up to 5 portfolio locations
 - Email when a client picks (sent to you)
+- Client confirmation email with map directions
 - Full access to the location map
 - Search by location and category
 
@@ -23,7 +24,6 @@ No credit card required.
 - Everything in Free
 - **Unlimited Location Guides**
 - **Unlimited portfolio locations**
-- Client confirmation email with map directions
 - Pinterest + blog post links per location
 - Permit info fields (fee, notes, website link)
 

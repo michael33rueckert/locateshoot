@@ -39,7 +39,6 @@ const STARTER_FEATURES = [
   'Everything in Free',
   'Unlimited Location Guides',
   'Unlimited portfolio locations',
-  '✉ Client confirmation email with directions',
   '📌 Pinterest & blog post links per location',
   '📋 Permit info fields on each location',
 ]

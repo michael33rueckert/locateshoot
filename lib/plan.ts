@@ -5,8 +5,9 @@
 //
 //   hasStarter(plan): true for 'starter' and 'pro' — features bundled
 //     into the entry paid tier (unlimited guides + locations, permit
-//     info on share pages, client confirmation email, share analytics,
-//     Pinterest/blog links).
+//     info on share pages, share analytics, Pinterest/blog links).
+//     Note: the client confirmation email is on every tier, not gated
+//     to Starter+; the studio branding on that email is what upgrades.
 //
 //   hasPro(plan): true only for 'pro' — features that justify the
 //     higher-tier price (custom domain, white-label, customizable Pick

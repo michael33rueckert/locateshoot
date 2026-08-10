@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import { supabase } from '@/lib/supabase'
 import { thumbUrl } from '@/lib/image'
 
@@ -23,8 +24,13 @@ import { thumbUrl } from '@/lib/image'
 //   5  outro — you're set
 
 interface Bullet { headline: string; detail: string }
+// CTA is either a link (navigates away) or an inline action (opens a
+// modal without leaving the walkthrough). Step 1's "add first location"
+// uses the inline flavor so the photographer doesn't get bounced to the
+// Portfolio page mid-tour.
+type SlideCta = { kind: 'link'; href: string; label: string } | { kind: 'action'; action: 'add-location'; label: string }
 interface PitchSlide   { kind: 'pitch';   icon: string; title: string; pitch: string }
-interface HowtoSlide   { kind: 'howto';   eyebrow: string; icon: string; title: string; bullets: Bullet[]; cta?: { href: string; label: string } }
+interface HowtoSlide   { kind: 'howto';   eyebrow: string; icon: string; title: string; bullets: Bullet[]; cta?: SlideCta }
 interface PickerSlide  { kind: 'picker';  eyebrow: string; icon: string; title: string }
 interface OutroSlide   { kind: 'outro';   icon: string; title: string; pitch: string }
 type Slide = PitchSlide | HowtoSlide | PickerSlide | OutroSlide
@@ -49,7 +55,7 @@ const SLIDES: Slide[] = [
       { headline: 'Want suggestions? The Explore map shows popular spots near you.',
         detail:   'Once you have one or two manual locations down, the Explore map is a fast way to add more. Tap any pin → "Add to portfolio" copies the basics into your portfolio for you to customize.' },
     ],
-    cta: { href: '/portfolio?add=1', label: 'Add your first location →' },
+    cta: { kind: 'action', action: 'add-location', label: 'Add your first location →' },
   },
   {
     kind:    'howto',
@@ -66,7 +72,7 @@ const SLIDES: Slide[] = [
       { headline: '🧭 Multi-pick + distance caps.',
         detail:   'Let them pick 2+ spots for multi-location sessions, with an optional "max miles apart" cap.' },
     ],
-    cta: { href: '/location-guides', label: 'Create your first guide →' },
+    cta: { kind: 'link', href: '/location-guides', label: 'Create your first guide →' },
   },
   {
     kind:    'howto',
@@ -78,10 +84,10 @@ const SLIDES: Slide[] = [
         detail:   'HoneyBook project pages, Dubsado workflow emails, Calendly confirmations, plain text messages — paste and go.' },
       { headline: 'Get notified the moment they pick.',
         detail:   'Email + push notification on your device. The selection lands on your dashboard automatically.' },
-      { headline: 'Use your own domain.',
-        detail:   'Set up locations.yourstudio.com in Profile and your Location Guides use it instead of locateshoot.com.' },
+      { headline: 'Use your own domain. (Pro plan)',
+        detail:   'Pro-only. Set up locations.yourstudio.com in Profile and your Location Guides use it instead of locateshoot.com. Upgrade any time from Profile → Billing.' },
     ],
-    cta: { href: '/profile', label: 'Set up your domain →' },
+    cta: { kind: 'link', href: '/profile', label: 'Set up your domain →' },
   },
   {
     kind:    'picker',
@@ -138,6 +144,11 @@ export default function HowItWorksPage() {
   const [searching, setSearching] = useState(false)
   const [saving,    setSaving]    = useState(false)
   const [pickerDone, setPickerDone] = useState(false)
+  // Step 1 inline "Add location" modal + a soft confirmation banner
+  // after the photographer saves so the tour visibly acknowledges the
+  // add without shoving them off to /portfolio.
+  const [showAddLocation, setShowAddLocation] = useState(false)
+  const [step1LocationAdded, setStep1LocationAdded] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -367,9 +378,27 @@ export default function HowItWorksPage() {
               </ul>
               {slide.cta && (
                 <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-                  <Link href={slide.cta.href} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--gold)', textDecoration: 'none' }}>
-                    {slide.cta.label}
-                  </Link>
+                  {slide.cta.kind === 'action' && slide.cta.action === 'add-location' ? (
+                    <button
+                      onClick={() => setShowAddLocation(true)}
+                      disabled={!userId}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 22px', borderRadius: 8, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 14, fontWeight: 600, cursor: userId ? 'pointer' : 'default', fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(196,146,42,.25)', opacity: userId ? 1 : .5 }}
+                    >
+                      {slide.cta.label}
+                    </button>
+                  ) : slide.cta.kind === 'link' ? (
+                    <Link href={slide.cta.href} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--gold)', textDecoration: 'none' }}>
+                      {slide.cta.label}
+                    </Link>
+                  ) : null}
+                </div>
+              )}
+              {/* Step 1 confirmation — appears once they've saved a
+                  location via the inline modal. Nudges them to hit
+                  Next so the walkthrough continues. */}
+              {slide.eyebrow === 'Step 1' && step1LocationAdded && (
+                <div style={{ marginTop: '1rem', padding: '10px 14px', background: 'rgba(74,103,65,.1)', border: '1px solid rgba(74,103,65,.25)', borderRadius: 8, fontSize: 13, color: 'var(--sage)', textAlign: 'center', fontWeight: 500 }}>
+                  ✓ Location added to your portfolio — hit Next to keep going.
                 </div>
               )}
             </>
@@ -511,6 +540,20 @@ export default function HowItWorksPage() {
           Revisit this guide anytime from the <strong>Getting Started</strong> link in the menu.
         </div>
       </div>
+
+      {/* Inline "add your first location" modal for Step 1. Stays inside
+          the walkthrough — on save we close it and drop a confirmation
+          banner on the Step 1 card so the tour flow isn't interrupted. */}
+      {showAddLocation && userId && (
+        <AddPortfolioLocationModal
+          userId={userId}
+          onClose={() => setShowAddLocation(false)}
+          onCreated={() => {
+            setShowAddLocation(false)
+            setStep1LocationAdded(true)
+          }}
+        />
+      )}
     </div>
   )
 }

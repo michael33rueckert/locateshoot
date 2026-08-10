@@ -242,9 +242,10 @@ export async function POST(request: Request) {
     }
   }
 
-  // Plan tiers — Starter+ unlocks the client confirmation email and
-  // permit-info-on-shares; Pro additionally unlocks white-label
-  // branding (no LocateShoot footer + studio name in From).
+  // Plan tiers — the client confirmation email itself is on every tier;
+  // Starter+ unlocks permit-info-on-shares and studio-name in the From
+  // line, Pro additionally unlocks white-label branding (no LocateShoot
+  // footer + studio name in From without the "via LocateShoot" hybrid).
   const prefs           = (profile?.preferences as any) ?? {}
   const isPaid          = profile?.plan === 'starter' || profile?.plan === 'pro' || profile?.plan === 'Pro'
   const isPro           = profile?.plan === 'pro' || profile?.plan === 'Pro'
@@ -328,20 +329,18 @@ export async function POST(request: Request) {
     console.error('submit-pick email failure', e)
   }
 
-  // Client confirmation email — Pro feature. Recap of every location
-  // picked with a Get Directions button per spot. Reply-to is the
-  // photographer so any follow-up reply goes straight to them. Skipped
-  // when:
+  // Client confirmation email — available on every tier. Recap of
+  // every location picked with a Get Directions button per spot.
+  // Reply-to is the photographer so any follow-up reply goes straight
+  // to them. Free-tier emails use the shared LocateShoot sender +
+  // footer; Starter/Pro layer on studio branding via the fromName
+  // and white-label branches below. Skipped only when:
   //   - no client email (anonymous pick, can't email anyone)
   //   - no photographer profile (data integrity)
-  //   - photographer is on Free plan (gated to Pro per pricing —
-  //     photographer still gets their own pick notification email above)
-  let clientEmailResult: { ok: boolean; error?: string; skipped?: 'no-email' | 'free-plan' } = { ok: true }
+  let clientEmailResult: { ok: boolean; error?: string; skipped?: 'no-email' } = { ok: true }
   try {
     if (!email) {
       clientEmailResult = { ok: true, skipped: 'no-email' }
-    } else if (!isPaid) {
-      clientEmailResult = { ok: true, skipped: 'free-plan' }
     } else if (email && profile) {
       const subject = names.length === 1
         ? `Your shoot location — ${names[0]}`

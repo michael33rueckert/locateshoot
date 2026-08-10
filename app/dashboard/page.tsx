@@ -1367,8 +1367,8 @@ export default function DashboardPage() {
               const blurb     = plan === 'pro'
                 ? 'Unlimited Location Guides, white-label branding, custom domain, and customizable templates.'
                 : plan === 'starter'
-                ? 'Unlimited Location Guides + portfolio locations, client confirmation emails, permit info, and Pinterest/blog links.'
-                : `Up to ${freePortfolioLocationCap()} portfolio locations and your auto-generated Portfolio Location Guide.`
+                ? 'Unlimited Location Guides + portfolio locations, permit info, and Pinterest/blog links.'
+                : `Up to ${freePortfolioLocationCap()} portfolio locations, your auto-generated Portfolio Location Guide, and client confirmation emails.`
               const ctaLabel  = hasStarter(profile?.plan) ? 'Manage subscription →' : 'Upgrade your plan →'
               return (
                 <div style={{ background: 'var(--ink)', borderRadius: 10, padding: '1rem 1.25rem', order: 6 }}>
