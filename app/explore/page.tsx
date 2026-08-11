@@ -11,6 +11,7 @@ import AuthModal from '@/components/AuthModal'
 import ImageLightbox from '@/components/ImageLightbox'
 import AppNav from '@/components/AppNav'
 import LocationEditModal, { type ManagedLocation } from '@/components/admin/LocationEditModal'
+import LocationPhotosModal from '@/components/admin/LocationPhotosModal'
 import { isAdminEmail } from '@/lib/admin'
 import { thumbUrl } from '@/lib/image'
 import type { ExploreLocation } from '@/components/ExploreMap'
@@ -77,13 +78,55 @@ function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; o
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete }: {
+function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete, onAdminManagePhotos, photoRefreshTick }: {
   loc:any; portfolioId:string|null; isFavorite:boolean; onToggleFavorite:(id:any)=>void; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; onOpenLightbox:(src:string|string[], start?:number)=>void; user:any
   isAdmin:boolean; onAdminEdit:(locId:string)=>void; onAdminDelete:(locId:string)=>Promise<void>
+  onAdminManagePhotos:(locId:string, locName:string)=>void
+  // Bumped by the parent whenever a photo mutation happens (upload or
+  // delete via LocationPhotosModal) so the effect below refetches
+  // without needing the modal to reach into DetailPanel state.
+  photoRefreshTick: number
 }) {
   const isInPortfolio = !!portfolioId
   const router = useRouter()
-  const { photos: googlePhotos, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
+  const { photos: googleRaw, loading: googleLoading } = usePlacePhotos(loc.name, loc.city, loc.lat, loc.lng)
+  // Admin/user uploaded photos live in location_photos and are fetched
+  // separately. They render BEFORE the Google ones in the carousel so
+  // hand-picked studio-quality shots win the primary slot when the
+  // admin has bothered to upload them. Refetch counter bumps when the
+  // admin manages photos so the carousel updates without a page reload.
+  const [userPhotos,       setUserPhotos]       = useState<{ url: string; photographer_name: string | null }[]>([])
+  useEffect(() => {
+    if (!loc?.id) return
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('location_photos')
+        .select('url,photographer_name,storage_path,sort_order,created_at')
+        .eq('location_id', loc.id)
+        .eq('is_private', false)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
+      if (cancelled) return
+      // Filter out the seed rows that point at external:google / external:wiki
+      // — those exist to power sidebar thumbnails without hitting the
+      // Places API on every card, but the DetailPanel already gets the
+      // full Google photo set live via usePlacePhotos so seeded rows
+      // would be duplicates in the carousel.
+      const own = (data ?? []).filter((p: any) => !p.storage_path || !String(p.storage_path).startsWith('external:'))
+      setUserPhotos(own.map((p: any) => ({ url: p.url, photographer_name: p.photographer_name ?? null })))
+    })()
+    return () => { cancelled = true }
+  }, [loc?.id, photoRefreshTick])
+
+  // Carousel source of truth — user uploads first, then Google. Both
+  // paths yield `{url, ...}` so the rest of the panel can treat them
+  // uniformly. The `googleOffset` boundary is how the counter badge
+  // knows which side of the split it's on.
+  const googlePhotos = useMemo(() => ([
+    ...userPhotos.map(p => ({ url: p.url, attribution: p.photographer_name ? `by ${p.photographer_name}` : '' })),
+    ...googleRaw,
+  ]), [userPhotos, googleRaw])
   const [activePhoto, setActivePhoto] = useState(0)
   const [showReport,  setShowReport]  = useState(false)
 
@@ -333,6 +376,7 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
           {isAdmin&&(
             <div style={{padding:'10px 12px',background:'rgba(26,22,18,.04)',border:'1px dashed var(--cream-dark)',borderRadius:6,marginBottom:'1rem',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginRight:'auto'}}>🛠 Admin</span>
+              <button onClick={()=>onAdminManagePhotos(loc.id, loc.name)} style={{padding:'7px 14px',borderRadius:4,border:'1px solid var(--cream-dark)',background:'white',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--ink)'}}>📷 Photos</button>
               <button onClick={()=>onAdminEdit(loc.id)} style={{padding:'7px 14px',borderRadius:4,border:'1px solid var(--cream-dark)',background:'white',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--ink)'}}>Edit</button>
               <button onClick={async()=>{ if(confirm(`Delete ${loc.name}? This removes it from the public map and unlinks any portfolio rows.`)){ await onAdminDelete(loc.id); } }} style={{padding:'7px 14px',borderRadius:4,border:'1px solid rgba(181,75,42,.3)',background:'rgba(181,75,42,.05)',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--rust)'}}>Delete</button>
             </div>
@@ -364,7 +408,13 @@ export default function ExplorePage() {
   const [activeId,       setActiveId]       = useState<any>(null)
   const [detailLoc,      setDetailLoc]      = useState<any>(null)
   const [user,           setUser]           = useState<any>(null)
-  const [adminEditLoc,   setAdminEditLoc]   = useState<ManagedLocation|null>(null)
+  const [adminEditLoc,    setAdminEditLoc]    = useState<ManagedLocation|null>(null)
+  // Admin photo manager — open per-location. Version tick bumps after
+  // any upload/delete so DetailPanel's carousel + the sidebar
+  // thumbnails refetch without needing a page reload.
+  const [adminPhotoLoc,   setAdminPhotoLoc]   = useState<{ id: string; name: string } | null>(null)
+  const [photoRefreshTick, setPhotoRefreshTick] = useState(0)
+  const [adminName,       setAdminName]       = useState<string>('')
   const [authOpen,       setAuthOpen]       = useState<'login'|'signup'|null>(null)
   const [toast,          setToast]          = useState<string|null>(null)
   const [searchQuery,    setSearchQuery]    = useState('')
@@ -419,7 +469,20 @@ export default function ExplorePage() {
     if (mobileMapVisible) setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
   }, [mobileMapVisible])
 
-  useEffect(() => { supabase.auth.getUser().then(({data:{user}})=>setUser(user)) }, [])
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      setUser(user)
+      // Admin's display name — stamped as photographer_name on any
+      // admin-uploaded location photo so downstream code can attribute
+      // it correctly. Falls back to the local-part of the email if
+      // the profile row has no full_name yet.
+      if (user?.email && isAdminEmail(user.email)) {
+        const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+        const nm = (prof?.full_name ?? '').trim() || user.email.split('@')[0]
+        setAdminName(nm)
+      }
+    })
+  }, [])
 
   // Pull the photographer's saved home city from profile preferences. If
   // they set it during onboarding (or later via the Profile page) we'll
@@ -1335,10 +1398,43 @@ export default function ExplorePage() {
           isAdmin={isAdmin}
           onAdminEdit={adminEditLocation}
           onAdminDelete={adminDeleteLocation}
+          onAdminManagePhotos={(id, name) => setAdminPhotoLoc({ id, name })}
+          photoRefreshTick={photoRefreshTick}
         />
       )}
       {adminEditLoc&&(
         <LocationEditModal loc={adminEditLoc} onClose={()=>setAdminEditLoc(null)} onSave={adminSaveLocation}/>
+      )}
+      {adminPhotoLoc && user && (
+        <LocationPhotosModal
+          locationId={adminPhotoLoc.id}
+          locationName={adminPhotoLoc.name}
+          userId={user.id}
+          adminName={adminName || null}
+          onClose={() => setAdminPhotoLoc(null)}
+          onChanged={() => {
+            // Bump the tick so DetailPanel's carousel refetches, and
+            // reload the sidebar photoMap so the list thumbnail picks
+            // up newly-uploaded / newly-deleted photos too.
+            setPhotoRefreshTick(t => t + 1)
+            ;(async () => {
+              const { data } = await supabase
+                .from('location_photos')
+                .select('location_id,url')
+                .eq('location_id', adminPhotoLoc.id)
+                .eq('is_private', false)
+                .order('sort_order', { ascending: true, nullsFirst: false })
+                .order('created_at', { ascending: true })
+              const first = (data ?? [])[0]?.url ?? null
+              setPhotoMap(prev => {
+                const next = { ...prev }
+                if (first) next[adminPhotoLoc.id] = first
+                else delete next[adminPhotoLoc.id]
+                return next
+              })
+            })()
+          }}
+        />
       )}
       {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={()=>setLightboxSrc(null)}/>
