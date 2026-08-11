@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import AppNav from '@/components/AppNav'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import AddPortfolioLocationModal from '@/components/AddPortfolioLocationModal'
 import CreateLocationGuideModal, { type PortfolioLocationLite } from '@/components/CreateLocationGuideModal'
+import DemoGuideCards, { type DemoGuideTemplate } from '@/components/DemoGuideCards'
 import { supabase } from '@/lib/supabase'
 import { hasStarter, hasPro } from '@/lib/plan'
 import { thumbUrl } from '@/lib/image'
@@ -32,12 +32,9 @@ interface Bullet { headline: string; detail: string }
 // Portfolio page mid-tour.
 type SlideCta =
   | { kind: 'link'; href: string; label: string }
-  | { kind: 'action'; action: 'add-location' | 'create-guide' | 'setup-domain'; label: string }
+  | { kind: 'action'; action: 'add-location' | 'setup-domain'; label: string }
 interface PitchSlide   { kind: 'pitch';   icon: string; title: string; pitch: string }
-// requiresPlan flags a step whose action is gated to a paid tier —
-// renders a small pill next to the eyebrow so free users know why
-// their action button isn't showing up.
-interface HowtoSlide   { kind: 'howto';   eyebrow: string; icon: string; title: string; bullets: Bullet[]; cta?: SlideCta; requiresPlan?: 'starter' | 'pro' }
+interface HowtoSlide   { kind: 'howto';   eyebrow: string; icon: string; title: string; bullets: Bullet[]; cta?: SlideCta }
 interface PickerSlide  { kind: 'picker';  eyebrow: string; icon: string; title: string }
 interface OutroSlide   { kind: 'outro';   icon: string; title: string; pitch: string }
 type Slide = PitchSlide | HowtoSlide | PickerSlide | OutroSlide
@@ -68,19 +65,13 @@ const SLIDES: Slide[] = [
     kind:    'howto',
     eyebrow: 'Step 2',
     icon:    '📚',
-    title:   'Bundle locations into a Location Guide.',
+    title:   'Share your locations with clients.',
     bullets: [
-      { headline: '♾ Save for future use.',
-        detail:   'Never expires. Build one per city or theme — "Kansas City Guide", "Golden Hour Guide" — and reuse it for every booking.' },
-      { headline: '📅 Or expire on a date.',
-        detail:   'Use when a client has a deadline to make a decision.' },
-      { headline: '🔂 Or expire after they pick.',
-        detail:   'Single-use. The link burns out the moment the client submits. Great for one-off sessions.' },
-      { headline: '🧭 Multi-pick + distance caps.',
-        detail:   'Let them pick 2+ spots for multi-location sessions, with an optional "max miles apart" cap.' },
+      { headline: 'Free — share your whole portfolio.',
+        detail:   'Every account (including Free) gets an auto-generated Portfolio Location Guide: one always-current link that shows every location in your portfolio. Add up to 5 locations on Free, then paste the link anywhere.' },
+      { headline: 'Starter or Pro — custom guides + unlimited locations.',
+        detail:   'Bundle only the locations that fit a specific shoot into a named guide ("Kansas City Guide", "Sarah & Mike — engagement session", "Spring 2026 maternity locations"). Save for reuse, expire on a date, expire after a single pick, or allow multi-pick with distance caps. Also removes the 5-location cap on your portfolio.' },
     ],
-    cta: { kind: 'action', action: 'create-guide', label: 'Create your first guide →' },
-    requiresPlan: 'starter',
   },
   {
     kind:    'howto',
@@ -90,13 +81,14 @@ const SLIDES: Slide[] = [
     bullets: [
       { headline: 'Anywhere a URL works, the guide works.',
         detail:   'HoneyBook project pages, Dubsado workflow emails, Calendly confirmations, plain text messages — paste and go.' },
-      { headline: 'Get notified the moment they pick.',
-        detail:   'Email + push notification on your device. The selection lands on your dashboard automatically.' },
+      { headline: 'Your client picks from a map or list.',
+        detail:   'Every guide renders as an interactive map + list view. Clients can browse your locations visually — pan the map, tap pins, or scroll the list — then pick the one that fits.' },
+      { headline: 'Everyone gets an email the moment they pick.',
+        detail:   'You get an email + push notification with the pick, and it lands on your dashboard automatically. Your client gets an automatic confirmation email with map directions and any parking notes you added — so they know exactly where to pull up on session day.' },
       { headline: 'Use your own domain.',
-        detail:   'Set up locations.yourstudio.com in Profile and your Location Guides use it instead of locateshoot.com.' },
+        detail:   'Pro plan. Set up locations.yourstudio.com in Profile and your Location Guides use it instead of locateshoot.com — client-facing links look like they came from your studio, not from us.' },
     ],
     cta: { kind: 'action', action: 'setup-domain', label: 'Set up your domain →' },
-    requiresPlan: 'pro',
   },
   {
     kind:    'picker',
@@ -163,13 +155,16 @@ export default function HowItWorksPage() {
   // add without shoving them off to /portfolio.
   const [showAddLocation, setShowAddLocation] = useState(false)
   const [step1LocationAdded, setStep1LocationAdded] = useState(false)
-  // Step 2 inline "Create guide" — only shown for Starter+ (custom
-  // guides are gated to that tier). Portfolio is fetched lazily when
-  // the button is clicked, matching the /location-guides page shape.
+  // Step 2 inline "Create guide" — Starter+ users open the modal
+  // pre-filled from a DemoGuideCards template pick; Free users get
+  // routed to billing since their card CTAs say "Upgrade to use".
+  // Portfolio is fetched lazily when the button is clicked, matching
+  // the /location-guides page shape.
   const [showCreateGuide,       setShowCreateGuide]       = useState(false)
   const [step2GuideCreated,     setStep2GuideCreated]     = useState(false)
   const [guidePortfolio,        setGuidePortfolio]        = useState<PortfolioLocationLite[]>([])
   const [guidePortfolioLoading, setGuidePortfolioLoading] = useState(false)
+  const [guidePrefill,          setGuidePrefill]          = useState<DemoGuideTemplate | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -370,7 +365,16 @@ export default function HowItWorksPage() {
     } finally { setGuidePortfolioLoading(false) }
   }, [userId])
 
-  async function openCreateGuide() {
+  // Called from a DemoGuideCards template click. Free users go to
+  // billing (in a new tab so the tour stays put); Starter+ users get
+  // the guide modal with the demo template's name + message pre-filled
+  // so they can save their first real guide in one edit.
+  async function handleDemoGuidePick(t: DemoGuideTemplate) {
+    if (!hasStarter(plan)) {
+      window.open('/profile#billing', '_blank', 'noopener,noreferrer')
+      return
+    }
+    setGuidePrefill(t)
     await loadGuidePortfolio()
     setShowCreateGuide(true)
   }
@@ -385,8 +389,11 @@ export default function HowItWorksPage() {
 
   return (
     <div style={{ minHeight: '100svh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
-      <AppNav />
-
+      {/* No AppNav — the walkthrough is intentionally full-screen so
+          new photographers focus on the tour and aren't tempted to
+          go poking around the app before they've been oriented. A
+          small back-to-dashboard escape hatch lives at the bottom of
+          the page for those who want out. */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', maxWidth: 800, width: '100%', margin: '0 auto', padding: '2rem 1.25rem 2rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 999, background: 'rgba(196,146,42,.1)', color: 'var(--gold)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em' }}>
@@ -420,15 +427,8 @@ export default function HowItWorksPage() {
           {/* Header — same shape for every slide */}
           <div style={{ textAlign: 'center', marginBottom: slide.kind === 'picker' ? '1.5rem' : '1.5rem' }}>
             {(slide.kind === 'howto' || slide.kind === 'picker') && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)' }}>
-                  {slide.eyebrow}
-                </span>
-                {slide.kind === 'howto' && slide.requiresPlan && (
-                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', background: 'rgba(196,146,42,.12)', color: 'var(--gold)', border: '1px solid rgba(196,146,42,.25)' }}>
-                    {slide.requiresPlan === 'pro' ? 'Pro plan' : 'Starter or Pro'}
-                  </span>
-                )}
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gold)', marginBottom: 10 }}>
+                {slide.eyebrow}
               </div>
             )}
             <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 14, filter: 'drop-shadow(0 2px 6px rgba(26,22,18,.08))' }}>{slide.icon}</div>
@@ -457,6 +457,15 @@ export default function HowItWorksPage() {
                   </li>
                 ))}
               </ul>
+              {/* Step 2 — example custom guide cards. Same component the
+                  dashboard uses when a photographer has zero custom
+                  guides yet; canCreate flips the CTA label and where
+                  clicking lands (billing vs the prefilled modal). */}
+              {slide.eyebrow === 'Step 2' && (
+                <div style={{ marginTop: '1.5rem' }}>
+                  <DemoGuideCards canCreate={hasStarter(plan)} onPickTemplate={handleDemoGuidePick} />
+                </div>
+              )}
               {(() => {
                 // CTA render + plan-gating. Step 2 (create guide) is
                 // Starter+; Step 3 (custom domain) is Pro-only. We hide
@@ -471,16 +480,6 @@ export default function HowItWorksPage() {
                   return (
                     <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
                       <button onClick={() => setShowAddLocation(true)} disabled={!userId} style={{ ...primary, cursor: userId ? 'pointer' : 'default', opacity: userId ? 1 : .5 }}>{cta.label}</button>
-                    </div>
-                  )
-                }
-                if (cta.kind === 'action' && cta.action === 'create-guide') {
-                  if (!hasStarter(plan)) return null
-                  return (
-                    <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-                      <button onClick={openCreateGuide} disabled={!userId || guidePortfolioLoading} style={{ ...primary, cursor: userId && !guidePortfolioLoading ? 'pointer' : 'default', opacity: userId && !guidePortfolioLoading ? 1 : .6 }}>
-                        {guidePortfolioLoading ? 'Loading portfolio…' : cta.label}
-                      </button>
                     </div>
                   )
                 }
@@ -675,8 +674,10 @@ export default function HowItWorksPage() {
       )}
 
       {/* Inline "create your first guide" modal for Step 2 (Starter+
-          only). Same pattern as Step 1 — closes on save + drops a
-          confirmation banner so the tour keeps flowing. */}
+          only). Pre-filled from the demo template the photographer
+          picked so they see the flow with real-looking copy and can
+          save their first guide in one edit. Closes on save + drops
+          a confirmation banner so the tour keeps flowing. */}
       {showCreateGuide && userId && (
         <CreateLocationGuideModal
           portfolio={guidePortfolio}
@@ -684,9 +685,12 @@ export default function HowItWorksPage() {
           userId={userId}
           photographerName={photographerName}
           isPro={hasPro(plan)}
-          onClose={() => setShowCreateGuide(false)}
+          initialSessionName={guidePrefill?.session_name}
+          initialMessage={guidePrefill?.message}
+          onClose={() => { setShowCreateGuide(false); setGuidePrefill(null) }}
           onCreated={() => {
             setShowCreateGuide(false)
+            setGuidePrefill(null)
             setStep2GuideCreated(true)
           }}
         />
