@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminEmail } from '@/lib/admin'
-import { SCAN_CATEGORIES, scanCityCategory, sanitizeLocation } from '@/lib/scan-locations'
+import { SCAN_CATEGORIES, scanCityCategory, sanitizeLocation, isSimilarLocation, distanceMiles } from '@/lib/scan-locations'
 
 // Phase 1 of the two-endpoint scanner (Vercel Hobby forces the split; 60s
 // serverless-function cap doesn't fit Claude + geocode + DB in one call).
@@ -49,7 +49,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'scan_failed', message: msg }, { status })
     }
 
-    return NextResponse.json({ ok: true, city, category, candidates })
+    // Preview dedup check — attach a `conflict` per candidate so the
+    // admin UI can surface a "⚠ likely duplicate of X" flag before
+    // committing. Pool is scoped to the state to keep the query
+    // cheap; commit re-checks with the same logic so nothing sneaks
+    // through even if the admin approves a flagged row.
+    const stateGuess = (candidates[0]?.state ?? '').trim() || city.split(',')[1]?.trim() || ''
+    let existingQuery = supabase
+      .from('locations')
+      .select('id, name, city, state, latitude, longitude')
+      .eq('status', 'published')
+    if (stateGuess) existingQuery = existingQuery.eq('state', stateGuess)
+    else            existingQuery = existingQuery.ilike('city', `%${city.split(',')[0].trim()}%`)
+    const { data: existingRows } = await existingQuery
+    const existing = (existingRows ?? []) as Array<{ id: string; name: string; city: string; state: string | null; latitude: number | null; longitude: number | null }>
+
+    const annotated = candidates.map(c => {
+      // Name-based fuzzy match (same city or same first-city-token).
+      const nameConflict = existing.find(e => isSimilarLocation(c.name, c.city, e.name, e.city))
+      // Proximity match — ~250 ft is close enough that it's almost
+      // certainly the same physical spot, even if the model
+      // returned a different name.
+      const proxConflict = !nameConflict
+        ? existing.find(e =>
+            Number.isFinite(c.latitude) && Number.isFinite(c.longitude)
+            && distanceMiles({ latitude: c.latitude, longitude: c.longitude }, e) < 0.05
+          )
+        : null
+      const hit = nameConflict ?? proxConflict ?? null
+      return {
+        ...c,
+        conflict: hit ? {
+          id:   hit.id,
+          name: hit.name,
+          city: hit.city,
+          reason: nameConflict ? 'similar name' : 'same coordinates',
+        } : null,
+      }
+    })
+
+    return NextResponse.json({ ok: true, city, category, candidates: annotated })
   } catch (err: any) {
     console.error('scan-locations/query error:', err)
     return NextResponse.json({ error: 'internal', message: err?.message ?? 'Unknown error' }, { status: 500 })

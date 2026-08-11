@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isAdminEmail } from '@/lib/admin'
-import { isSimilarLocation, sanitizeLocation, verifyCoordinates, type ScannedLocation } from '@/lib/scan-locations'
+import { isSimilarLocation, sanitizeLocation, verifyCoordinates, distanceMiles, type ScannedLocation } from '@/lib/scan-locations'
 
 // Phase 2 of the two-endpoint scanner. Takes the candidate array from
 // /query, fuzzy-dedups against existing city locations, exact-matches +
@@ -35,24 +35,31 @@ export async function POST(request: Request) {
     if (!city)     return NextResponse.json({ error: 'city_required' }, { status: 400 })
     if (!category) return NextResponse.json({ error: 'category_required' }, { status: 400 })
 
-    // Preload existing locations for this city (fuzzy dedup pool). Same
-    // pattern as before the split.
-    const citySlug = city.split(',')[0].trim()
-    const { data: existingInCity } = await supabase
+    // Preload existing locations for the WHOLE STATE, with coords, so
+    // dedup catches cross-suburb duplicates (e.g. an existing row in
+    // Overland Park would still block a new "same place" row logged
+    // under Kansas City). Also lets us do proximity-based dedup —
+    // any candidate whose geocoded position lands within ~250 ft of
+    // an existing row is treated as the same place regardless of
+    // name. Pool is scoped to state, not global, to keep the query
+    // cheap and avoid false positives from same-named parks in
+    // different metros.
+    const rawCandidatesSanitized = rawCandidates.map(sanitizeLocation)
+    const stateGuess = (rawCandidatesSanitized[0]?.state ?? '').trim() || city.split(',')[1]?.trim() || ''
+    let existingQuery = supabase
       .from('locations')
-      .select('name, city')
-      .ilike('city', `%${citySlug}%`)
-    const existingSet: { name: string; city: string }[] = existingInCity ?? []
+      .select('id, name, city, state, latitude, longitude')
+      .eq('status', 'published')
+    if (stateGuess) existingQuery = existingQuery.eq('state', stateGuess)
+    else            existingQuery = existingQuery.ilike('city', `%${city.split(',')[0].trim()}%`)
+    const { data: existingInState } = await existingQuery
+    const existingSet: { id?: string; name: string; city: string; state?: string | null; latitude: number | null; longitude: number | null }[] = (existingInState ?? []) as any
 
     const inserted: string[] = []
     const skipped:  string[] = []
     const errors:   string[] = []
 
-    // Re-sanitize on receipt as belt-and-suspenders — the query endpoint
-    // already ran sanitize, but the payload came back through the client
-    // so we can't rely on it structurally.
-    const survivors = rawCandidates
-      .map(sanitizeLocation)
+    const survivors = rawCandidatesSanitized
       .filter(loc => {
         if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
           skipped.push(`similar: ${loc.name}`)
@@ -82,6 +89,18 @@ export async function POST(request: Request) {
       }
       if (existingSet.some(e => isSimilarLocation(loc.name, loc.city, e.name, e.city))) {
         skipped.push(`similar-in-batch: ${loc.name}`)
+        continue
+      }
+      // Proximity dedup — geocoded coord landed within ~250 ft of an
+      // existing row. Names may differ (Google Places aliases, mis-
+      // spellings, different marketing names), but two distinct
+      // photoshoot venues that physically overlap doesn't happen.
+      const near = existingSet.find(e =>
+        Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
+        && distanceMiles({ latitude: loc.latitude, longitude: loc.longitude }, e) < 0.05
+      )
+      if (near) {
+        skipped.push(`same-spot as "${near.name}": ${loc.name}`)
         continue
       }
 
@@ -114,7 +133,7 @@ export async function POST(request: Request) {
         errors.push(`${loc.name}: ${insertErr.message}`)
       } else {
         inserted.push(loc.name)
-        existingSet.push({ name: loc.name, city: loc.city })
+        existingSet.push({ name: loc.name, city: loc.city, state: loc.state, latitude: loc.latitude, longitude: loc.longitude })
       }
     }
 

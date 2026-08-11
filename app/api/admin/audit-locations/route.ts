@@ -64,16 +64,27 @@ function nameSimilarity(a: string, b: string): { match: boolean; reason: string 
   const n2 = normalizeName(b)
   if (!n1 || !n2) return { match: false, reason: '' }
   if (n1 === n2) return { match: true, reason: 'identical normalized names' }
-  if (n1.length > 8 && n2.length > 8 && (n1.includes(n2) || n2.includes(n1))) {
+  // Contains check — the previous > 8-char floor was too strict; it
+  // excluded common 6–8 char names ("Old Town", "Loose Park" →
+  // "loose") that get lengthened by a modifier in the duplicate row
+  // ("Old Town Square", "Loose Park Rose Garden"). >= 5 chars keeps
+  // us out of one- or two-letter noise while catching those cases.
+  if (n1.length >= 5 && n2.length >= 5 && (n1.includes(n2) || n2.includes(n1))) {
     return { match: true, reason: 'one name contains the other' }
   }
   const w1 = n1.split(' ').filter(w => w.length > 3)
   const w2 = n2.split(' ').filter(w => w.length > 3)
-  if (w1.length >= 2 && w2.length >= 2) {
-    const common = w1.filter(w => w2.includes(w))
-    const ratio = common.length / Math.min(w1.length, w2.length)
-    if (ratio >= 0.75) return { match: true, reason: `${Math.round(ratio * 100)}% of significant words shared` }
-  }
+  // The previous check required BOTH sides to have >= 2 significant
+  // words, which silently skipped every location whose name reduces
+  // to a single significant word after stopword stripping — a huge
+  // slice of the dataset. Compare whenever both sides have at least
+  // one, and rely on the distance gate in findDuplicates to keep
+  // single-word matches from producing false positives.
+  if (w1.length === 0 || w2.length === 0) return { match: false, reason: '' }
+  const common = w1.filter(w => w2.includes(w))
+  if (common.length === 0) return { match: false, reason: '' }
+  const ratio = common.length / Math.min(w1.length, w2.length)
+  if (ratio >= 0.75) return { match: true, reason: `${Math.round(ratio * 100)}% of significant words shared` }
   return { match: false, reason: '' }
 }
 
@@ -88,37 +99,67 @@ function distanceMiles(a: AuditLocation, b: AuditLocation): number {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)))
 }
 
+function cityKey(l: AuditLocation): string {
+  return (l.city ?? '').toLowerCase().split(',')[0].trim()
+}
+
 function findDuplicates(locs: AuditLocation[]): DuplicateFlag[] {
-  // Bucket by normalized first city token to avoid O(n²) over
-  // thousands of rows. Only compare rows in the same city.
+  // Bucket by state so we compare every row within a state — the
+  // previous city-token bucket missed cross-suburb duplicates (e.g.
+  // "Kansas City" vs "North Kansas City" or "Overland Park" — same
+  // metro, same photoshoot venue, different city field). N per
+  // state is small enough for O(n²) to stay well under the 60s
+  // function budget even for CA / TX-sized buckets.
   const buckets = new Map<string, AuditLocation[]>()
   for (const l of locs) {
-    const cityKey = (l.city ?? '').toLowerCase().split(',')[0].trim()
-    if (!cityKey) continue
-    const list = buckets.get(cityKey) ?? []
+    const key = (l.state ?? '').toLowerCase().trim() || '_none'
+    const list = buckets.get(key) ?? []
     list.push(l)
-    buckets.set(cityKey, list)
+    buckets.set(key, list)
   }
+
   const flags: DuplicateFlag[] = []
   for (const list of buckets.values()) {
     if (list.length < 2) continue
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const a = list[i], b = list[j]
+        const dist = distanceMiles(a, b)
+        const sameCity = cityKey(a) !== '' && cityKey(a) === cityKey(b)
+
+        // Tier 1 — same physical spot (~250 ft or closer), regardless
+        // of name. Two distinct photoshoot venues that close are
+        // essentially impossible in practice, so we flag purely on
+        // proximity here.
+        if (isFinite(dist) && dist < 0.05) {
+          const [primary, duplicate] = a.id < b.id ? [a, b] : [b, a]
+          flags.push({
+            type: 'duplicate',
+            reason: `same spot — ${dist.toFixed(2)}mi apart`,
+            primary,
+            duplicate,
+            distanceMiles: dist,
+          })
+          continue
+        }
+
+        // Tier 2 — fuzzy name match, gated by distance. Distance
+        // budget is tighter when the two rows aren't in the same
+        // city (~800 ft), because a shared common name across
+        // distant places is often coincidence rather than a dupe.
         const sim = nameSimilarity(a.name, b.name)
         if (!sim.match) continue
-        const dist = distanceMiles(a, b)
-        // Names alone aren't enough — two different parks can share
-        // a generic name. Require either matching coords (< 0.5 mi)
-        // or one row missing coords entirely.
-        const closeEnough = dist < 0.5 || !isFinite(dist)
+        const closeEnough = !isFinite(dist)
+          || (sameCity && dist < 0.5)
+          || (!sameCity && dist < 0.15)
         if (!closeEnough) continue
+
         // Older row is "primary" so the dashboard suggests removing
         // the newer duplicate by default.
         const [primary, duplicate] = a.id < b.id ? [a, b] : [b, a]
         flags.push({
           type: 'duplicate',
-          reason: `${sim.reason}${isFinite(dist) ? ` · ${dist.toFixed(2)}mi apart` : ' · one row missing coords'}`,
+          reason: `${sim.reason}${isFinite(dist) ? ` · ${dist.toFixed(2)}mi apart` : ' · one row missing coords'}${sameCity ? '' : ' · different city field'}`,
           primary,
           duplicate,
           distanceMiles: isFinite(dist) ? dist : 0,
@@ -126,7 +167,17 @@ function findDuplicates(locs: AuditLocation[]): DuplicateFlag[] {
       }
     }
   }
-  return flags
+
+  // Collapse — a pair caught by more than one rule (e.g. proximity
+  // AND fuzzy name) should only appear once. Keep the first flag,
+  // which is the more specific proximity reason when both triggered.
+  const seen = new Set<string>()
+  return flags.filter(f => {
+    const key = [f.primary.id, f.duplicate.id].sort().join('|')
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 // ── AI suspicious-entry detection ────────────────────────────────────────────

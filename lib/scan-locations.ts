@@ -94,15 +94,40 @@ export function isSimilarLocation(
 
   if (n1 === n2) return true
 
-  if (n1.length > 8 && n2.length > 8) {
+  // Contains-check floor lowered from > 8 to >= 5 so 6–8 char names
+  // ("Old Town", "Loose Park" → "loose") also compare — those got
+  // silently missed before.
+  if (n1.length >= 5 && n2.length >= 5) {
     if (n1.includes(n2) || n2.includes(n1)) return true
   }
 
   const w1 = n1.split(' ').filter(w => w.length > 3)
   const w2 = n2.split(' ').filter(w => w.length > 3)
-  if (w1.length < 2 || w2.length < 2) return false
+  // Allow single significant word on either side — the two-word
+  // requirement quietly skipped every location whose name reduces
+  // to one word after stopword stripping. Callers gate proximity
+  // separately (see verifyByProximity / findDuplicates) so
+  // single-word matches don't become coincidence hits.
+  if (w1.length === 0 || w2.length === 0) return false
   const common = w1.filter(w => w2.includes(w))
+  if (common.length === 0) return false
   return common.length / Math.min(w1.length, w2.length) >= 0.75
+}
+
+// Haversine distance in miles. Returns Infinity for missing coords
+// so callers can gate on isFinite when they need coord-based checks.
+export function distanceMiles(
+  a: { latitude: number | null; longitude: number | null },
+  b: { latitude: number | null; longitude: number | null },
+): number {
+  if (a.latitude == null || a.longitude == null || b.latitude == null || b.longitude == null) return Infinity
+  const R = 3958.7613
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(b.latitude - a.latitude)
+  const dLng = toRad(b.longitude - a.longitude)
+  const x = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)))
 }
 
 // ── Coordinate verification ───────────────────────────────────────────────────
