@@ -1014,8 +1014,31 @@ export default function ExplorePage() {
       const rest = sorted.filter((l:any) => !trendingIds.has(l.id))
       sorted = [...trending, ...rest]
     }
+    // Searched-for-place-first. When the user searches "Loose Park",
+    // Loose Park itself should be at the top of the sidebar, not
+    // buried under the highest-quality neighbors in the 50-mile
+    // near-radius. Two signals count as "the thing they searched
+    // for": coords within ~500 ft of the geocoded pin, OR a name
+    // match within half a mile (covers the case where our stored
+    // coords disagree with Google's by a couple hundred meters —
+    // large parks whose Google marker sits on an entrance while
+    // our coord sits on the center, etc.). Closest match wins.
+    if (searchPin) {
+      const placeName = (searchPin.label ?? '').split(',')[0].trim().toLowerCase()
+      const scored = sorted
+        .map((l:any, i:number) => ({ l, i, d: distMiles(searchPin.lat, searchPin.lng, l.lat, l.lng) }))
+        .filter(({ l, d }) =>
+          d < 0.1
+          || (placeName.length > 2 && d < 0.5 && (l.name?.toLowerCase() ?? '').includes(placeName))
+        )
+        .sort((a, b) => a.d - b.d)
+      if (scored.length > 0 && scored[0].i > 0) {
+        const top = scored[0].l
+        sorted = [top, ...sorted.filter((l:any) => l.id !== top.id)]
+      }
+    }
     return sorted
-  },[locations,manualPortfolioLocs,portfolioSources,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,strictNearRef,homeLocation,homeOnly,isDefaultState])
+  },[locations,manualPortfolioLocs,portfolioSources,accessFilter,selectedTags,searchQuery,minRating,sortBy,user,photoMap,strictNearRef,homeLocation,homeOnly,isDefaultState,searchPin])
 
   // Map markers — same filters as the sidebar list EXCEPT the
   // near-radius filter. The sidebar narrows to nearby when the user

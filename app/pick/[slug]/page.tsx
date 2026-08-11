@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -136,6 +136,26 @@ export default function ClientPickerPage() {
   const [clientEmail,      setClientEmail]      = useState('')
   const [emailError,       setEmailError]       = useState('')
   const [submitting,       setSubmitting]       = useState(false)
+  // Info gate — the guide is hidden until the client hands over
+  // their first + last name and email. Photographers asked for this
+  // so they always have a way to reach whoever browsed the link,
+  // even when the browser closes without a submission. Persisted per-
+  // slug in sessionStorage so a reload or back-nav doesn't re-prompt.
+  // Photographer preview (?preview=1 from GuidePreviewModal) starts
+  // with the gate already "collected" so they see the real map/list
+  // immediately instead of the info form.
+  const isPreview = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('preview') === '1'
+  }, [])
+  const [infoCollected,    setInfoCollected]    = useState(isPreview)
+  const [infoError,        setInfoError]        = useState('')
+  // Two-step submit — first tap on "Send my choice / picks" flips the
+  // button label to a confirm prompt; a second tap within 5s actually
+  // sends. Prevents accidental submissions on a link the client is
+  // still browsing.
+  const [confirmPending,   setConfirmPending]   = useState(false)
+  const confirmTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Transient banner for non-blocking notices: max-pick reached when
   // they tap a 5th location, submit failed and they should retry, etc.
   // Self-clears via timeout; rendered as a small floating pill near
@@ -175,6 +195,22 @@ export default function ClientPickerPage() {
     const id = setTimeout(() => setPickToast(null), 3200)
     return () => clearTimeout(id)
   }, [pickToast])
+
+  // Restore the client's info from sessionStorage on mount so a
+  // reload or "go back" doesn't re-prompt. Keyed per slug so info
+  // for one guide doesn't leak into another shared in the same tab.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !slug) return
+    try {
+      const raw = sessionStorage.getItem(`pick-info:${slug}`)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (typeof parsed?.firstName === 'string') setClientFirstName(parsed.firstName)
+      if (typeof parsed?.lastName  === 'string') setClientLastName(parsed.lastName)
+      if (typeof parsed?.email     === 'string') setClientEmail(parsed.email)
+      if (parsed?.firstName && parsed?.lastName && parsed?.email) setInfoCollected(true)
+    } catch { /* corrupt storage — treat as no info */ }
+  }, [slug])
   function onDetailHandlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     e.currentTarget.setPointerCapture(e.pointerId)
     detailDragStart.current = e.clientY
@@ -542,13 +578,51 @@ export default function ClientPickerPage() {
     }
   }
 
+  function submitInfoGate() {
+    const first = clientFirstName.trim()
+    const last  = clientLastName.trim()
+    const email = clientEmail.trim()
+    if (!first || !last) { setInfoError('Please enter your first and last name.'); return }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setInfoError('Please enter a valid email.'); return }
+    try {
+      if (typeof window !== 'undefined' && slug) {
+        sessionStorage.setItem(`pick-info:${slug}`, JSON.stringify({ firstName: first, lastName: last, email }))
+      }
+    } catch { /* quota etc. — not fatal, just no session restore */ }
+    setInfoError('')
+    setInfoCollected(true)
+  }
+
+  // Two-step submit for the Send button. First tap flips it to a
+  // "Tap again to confirm" state; a second tap within 5 seconds
+  // actually calls the API. Info is already collected via the
+  // gate, so no email prompt is needed. Preview mode (photographer
+  // previewing their own guide) short-circuits with a toast so
+  // clicking around never records a fake client pick.
   function confirmChoice() {
-    if (chosenIds.length === 0) return
-    setShowEmailPrompt(true)
+    if (chosenIds.length === 0 || submitting) return
+    if (isPreview) {
+      setPickToast('👀 Preview mode — submissions are disabled')
+      return
+    }
+    if (!confirmPending) {
+      setConfirmPending(true)
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = setTimeout(() => setConfirmPending(false), 5000)
+      return
+    }
+    if (confirmTimerRef.current) { clearTimeout(confirmTimerRef.current); confirmTimerRef.current = null }
+    setConfirmPending(false)
+    savePick(clientFirstName.trim(), clientLastName.trim(), clientEmail.trim())
   }
 
   async function submitFavorites(first: string, last: string, email: string, comment: string) {
     if (!shareData || favoritedLocs.length === 0) return
+    if (isPreview) {
+      setPickToast('👀 Preview mode — submissions are disabled')
+      setShowFavoritesPrompt(false)
+      return
+    }
     setFavoritesSubmitting(true)
     try {
       const res = await fetch('/api/submit-favorites', {
@@ -629,9 +703,41 @@ export default function ClientPickerPage() {
   }
 
   if (confirmed && chosenLoc) {
+    // 24 pieces of CSS-only confetti — deterministic-random offsets
+    // per index so re-mounts don't scramble the layout mid-animation.
+    // Duration + delay vary so they don't all land at the same moment.
+    const confettiColors = ['#c4922a', '#4a6741', '#3d6e8c', '#b54b2a', '#d4a545', '#7a9670']
     return (
-      <div style={{ minHeight: '100svh', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-        <div style={{ background: 'white', borderRadius: 16, padding: '2.5rem 2rem', maxWidth: 460, width: '100%', textAlign: 'center' }}>
+      <div style={{ minHeight: '100svh', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', position: 'relative', overflow: 'hidden' }}>
+        {/* Confetti — sits above the dark background but behind the
+            card so it looks like it's raining onto the box. Pointer
+            events off so it never blocks the client from tapping
+            through to the location card / image. */}
+        <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
+          {Array.from({ length: 28 }).map((_, i) => {
+            const left     = (i * 37) % 100                // spread across the width
+            const delay    = ((i * 13) % 20) / 10          // 0.0s – 2.0s
+            const duration = 2.8 + ((i * 17) % 20) / 10    // 2.8s – 4.8s
+            const size     = 6 + (i % 4) * 2                // 6, 8, 10, 12
+            const color    = confettiColors[i % confettiColors.length]
+            const rotate   = (i * 47) % 360
+            return (
+              <span key={i} style={{
+                position: 'absolute',
+                left: `${left}%`,
+                top: '-24px',
+                width: size,
+                height: size * 0.4,
+                background: color,
+                transform: `rotate(${rotate}deg)`,
+                borderRadius: 1,
+                animation: `confetti-fall ${duration}s ${delay}s ease-in forwards`,
+                opacity: 0,
+              }} />
+            )
+          })}
+        </div>
+        <div style={{ background: 'white', borderRadius: 16, padding: '2.5rem 2rem', maxWidth: 460, width: '100%', textAlign: 'center', position: 'relative', zIndex: 2 }}>
           <div style={{ fontSize: 52, marginBottom: '1rem' }}>🎉</div>
           <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 28, fontWeight: 900, color: 'var(--ink)', marginBottom: '.5rem' }}>You&apos;re all set!</div>
           <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.65, marginBottom: '1.5rem' }}>
@@ -654,8 +760,76 @@ export default function ClientPickerPage() {
             </div>
           </div>
         </div>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes confetti-fall {
+            0%   { transform: translateY(0)    rotate(0deg);   opacity: 0; }
+            10%  { opacity: 1; }
+            100% { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+          }
+        `}</style>
         <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={() => setLightboxSrc(null)} />
+      </div>
+    )
+  }
+
+  // Info gate — client must supply first/last name + email before the
+  // guide unlocks. Runs after the confirmed / loading / error early-
+  // returns so an already-submitted or expired link doesn't ask for
+  // info the flow never uses. Info is stashed in sessionStorage so a
+  // reload doesn't re-prompt.
+  if (!infoCollected) {
+    return (
+      <div style={{ minHeight: '100svh', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div style={{ background: 'white', borderRadius: 16, padding: '2.25rem 2rem', maxWidth: 460, width: '100%' }}>
+          <div style={{ fontSize: 36, marginBottom: 10, textAlign: 'center' }}>📍</div>
+          <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 800, color: 'var(--ink)', marginBottom: 6, textAlign: 'center' }}>
+            {shareData?.session_name ?? 'Your location guide'}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: '1.25rem', textAlign: 'center' }}>
+            {shareData?.photographer_name
+              ? <>Enter your name and email to view the locations <strong style={{ fontWeight: 600 }}>{shareData.photographer_name}</strong> put together for you.</>
+              : <>Enter your name and email to view the locations your photographer put together for you.</>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+            <input
+              ref={firstNameRef}
+              value={clientFirstName}
+              onChange={e => { setClientFirstName(e.target.value); setInfoError('') }}
+              onKeyDown={e => { if (e.key === 'Enter') submitInfoGate() }}
+              placeholder="First name"
+              autoComplete="given-name"
+              style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+            />
+            <input
+              value={clientLastName}
+              onChange={e => { setClientLastName(e.target.value); setInfoError('') }}
+              onKeyDown={e => { if (e.key === 'Enter') submitInfoGate() }}
+              placeholder="Last name"
+              autoComplete="family-name"
+              style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
+            />
+          </div>
+          <input
+            ref={emailRef}
+            type="email"
+            value={clientEmail}
+            onChange={e => { setClientEmail(e.target.value); setInfoError('') }}
+            onKeyDown={e => { if (e.key === 'Enter') submitInfoGate() }}
+            placeholder="your@email.com"
+            autoComplete="email"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: `1.5px solid ${infoError ? 'var(--rust)' : 'var(--cream-dark)'}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none', marginBottom: infoError ? 6 : 16 }}
+          />
+          {infoError && <div style={{ fontSize: 12, color: 'var(--rust)', marginBottom: 12, textAlign: 'center' }}>{infoError}</div>}
+          <button
+            onClick={submitInfoGate}
+            style={{ width: '100%', padding: '13px', borderRadius: 8, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+            View my location guide →
+          </button>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>
+            Your info goes only to your photographer — we don&apos;t email you separately or share it.
+          </div>
+        </div>
       </div>
     )
   }
@@ -988,7 +1162,11 @@ export default function ClientPickerPage() {
             transition: 'opacity .2s, box-shadow .2s, transform .2s',
             flexShrink: 0, whiteSpace: 'nowrap',
           }}>
-          {submitting ? 'Sending…' : maxPicks > 1 ? 'Send my picks →' : 'Send my choice →'}
+          {submitting
+            ? 'Sending…'
+            : confirmPending
+              ? '⚠ Tap again to confirm'
+              : maxPicks > 1 ? 'Send my picks →' : 'Send my choice →'}
         </button>
       </div>
 
@@ -1207,49 +1385,11 @@ export default function ClientPickerPage() {
         </>
       )}
 
-      {/* Email prompt */}
-      {showEmailPrompt && (
-        <>
-          <div onClick={() => setShowEmailPrompt(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 600 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 440, maxWidth: '92vw', padding: '2rem', zIndex: 700 }}>
-            <div style={{ fontSize: 36, marginBottom: 12, textAlign: 'center' }}>📍</div>
-            <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 8, textAlign: 'center' }}>Almost done!</div>
-            <div style={{ fontSize: 14, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.6, marginBottom: '1.25rem', textAlign: 'center' }}>
-              Share your details so <strong style={{ fontWeight: 600 }}>{shareData?.photographer_name ?? 'your photographer'}</strong> can confirm the location.
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-              <input
-                ref={firstNameRef}
-                value={clientFirstName}
-                onChange={e => { setClientFirstName(e.target.value); setEmailError('') }}
-                onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
-                placeholder="First name"
-                autoComplete="given-name"
-                style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
-              />
-              <input
-                value={clientLastName}
-                onChange={e => { setClientLastName(e.target.value); setEmailError('') }}
-                onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
-                placeholder="Last name"
-                autoComplete="family-name"
-                style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '12px 14px', border: `1.5px solid var(--cream-dark)`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none' }}
-              />
-            </div>
-            <input ref={emailRef} type="email" value={clientEmail} onChange={e => { setClientEmail(e.target.value); setEmailError('') }}
-              onKeyDown={e => { if (e.key === 'Enter') submitEmail() }}
-              placeholder="your@email.com"
-              autoComplete="email"
-              style={{ width: '100%', padding: '12px 14px', border: `1.5px solid ${emailError ? 'var(--rust)' : 'var(--cream-dark)'}`, borderRadius: 8, fontFamily: 'inherit', fontSize: 15, color: 'var(--ink)', outline: 'none', marginBottom: emailError ? 6 : 16 }} />
-            {emailError && <div style={{ fontSize: 12, color: 'var(--rust)', marginBottom: 12, textAlign: 'center' }}>{emailError}</div>}
-            <button onClick={submitEmail} disabled={submitting}
-              style={{ width: '100%', padding: '13px', borderRadius: 8, background: isGoldAccent ? 'var(--gold)' : accentColor, color: 'var(--gold-text)', border: 'none', fontFamily: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer', marginBottom: 10, opacity: submitting ? 0.7 : 1 }}>
-              {submitting ? 'Sending…' : 'Confirm my choice →'}
-            </button>
-            <button onClick={() => setShowEmailPrompt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--ink-soft)', fontFamily: 'inherit', display: 'block', margin: '0 auto' }}>Go back</button>
-          </div>
-        </>
-      )}
+      {/* Email prompt removed — the info gate at the top of the
+          component collects first/last name + email before the guide
+          is even visible, so the mid-flow email modal is redundant.
+          The two-step "Send my choice → Tap again to confirm" pattern
+          on the bottom bar replaces the modal's confirmation step. */}
 
       {/* Send-favorites modal — separate from the final-pick modal.
           Mirrors the same form fields (first/last/email) plus an

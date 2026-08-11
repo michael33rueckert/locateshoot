@@ -16,6 +16,12 @@ interface Props {
 }
 
 export default function GuidePreviewModal({ url, onClose }: Props) {
+  // Tack ?preview=1 (or &preview=1 for URLs that already have a query
+  // string) onto whatever URL the caller passed. The /pick/[slug]
+  // page checks that flag and skips the client-facing info gate so
+  // the photographer sees their real map/list layout immediately
+  // instead of first being asked for a name + email they don't need.
+  const previewUrl = url.includes('?') ? `${url}&preview=1` : `${url}?preview=1`
   // Default to whichever view the photographer is actually USING the
   // app on. If they're on their phone, "Desktop" mode squeezes a
   // 1280-wide page into a 360px-wide modal — illegible. Mobile-first
@@ -159,7 +165,7 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
         }}>
           {mode === 'desktop' ? (
             <iframe
-              src={url}
+              src={previewUrl}
               title="Location Guide preview (desktop)"
               style={{ width: '100%', height: '100%', border: 'none', background: 'white' }}
             />
@@ -197,7 +203,7 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
                 transform: `scale(${phoneScale})`,
               }}>
                 <iframe
-                  src={url}
+                  src={previewUrl}
                   title="Location Guide preview (mobile)"
                   style={{ width: '100%', height: '100%', border: 'none' }}
                 />
