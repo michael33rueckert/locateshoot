@@ -140,7 +140,7 @@ export default function AdminPage() {
     if (!token) { setAuditRunning(false); return }
     let batchIndex = 0
     let totalBatches = 1
-    let failedCount = 0
+    let lastError: string | null = null
     setAuditProgress({ done: 0, total: 1 })
     while (batchIndex < totalBatches) {
       try {
@@ -149,7 +149,23 @@ export default function AdminPage() {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) {
-          failedCount++
+          // Try to pull the server's own error message out of the
+          // response body — most of our routes return
+          // { error, message } — before falling back to the HTTP
+          // status. Without this the toast was hiding real failures
+          // behind a generic "Audit hit an error" that couldn't be
+          // debugged without opening DevTools.
+          let msg = `HTTP ${res.status}`
+          try {
+            const body = await res.json()
+            if (body?.message) msg = body.message
+            else if (body?.error) msg = body.error
+          } catch {
+            const text = await res.text().catch(() => '')
+            if (text) msg = text.slice(0, 200)
+          }
+          console.error(`Audit batch ${batchIndex} failed:`, msg)
+          lastError = msg
           break
         }
         const data: AuditBatchResult = await res.json()
@@ -158,15 +174,16 @@ export default function AdminPage() {
         if (data.incorrect.length > 0) setAuditIncorrect(prev => [...prev, ...data.incorrect])
         batchIndex++
         setAuditProgress({ done: batchIndex, total: totalBatches })
-      } catch {
-        failedCount++
+      } catch (err: any) {
+        console.error(`Audit batch ${batchIndex} threw:`, err)
+        lastError = err?.message ?? 'network error'
         break
       }
     }
     setAuditProgress(null)
     setAuditRunning(false)
     setAuditDone(true)
-    if (failedCount > 0) setToast('⚠ Audit hit an error — partial results shown')
+    if (lastError) setToast(`⚠ Audit error: ${lastError}`)
     else setToast('✓ Audit complete')
   }
 

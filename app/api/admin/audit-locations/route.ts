@@ -265,54 +265,76 @@ ${JSON.stringify(items)}`
 // ── Route ────────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
-  // Bearer auth + admin-email gate, same shape as scan-locations.
-  const auth = request.headers.get('authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
-  if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  try {
+    // Bearer auth + admin-email gate, same shape as scan-locations.
+    const auth = request.headers.get('authorization') ?? ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+    if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
-  const { data: u } = await admin.auth.getUser(token)
-  if (!u?.user?.email || !isAdminEmail(u.user.email)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    )
+    const { data: u } = await admin.auth.getUser(token)
+    if (!u?.user?.email || !isAdminEmail(u.user.email)) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
+
+    // Optional ?batch= controls which AI batch to process. Lets the
+    // client step through the table 50 rows at a time without blowing
+    // the 60s function timeout. Duplicate detection is local and fast,
+    // so it always runs on the full list and is returned on batch=0.
+    const url = new URL(request.url)
+    const batchIndex = Math.max(0, parseInt(url.searchParams.get('batch') ?? '0', 10) || 0)
+    const BATCH_SIZE = 50
+
+    const { data: rows, error } = await admin
+      .from('locations')
+      .select('id,name,city,state,latitude,longitude,description,category')
+      .eq('status', 'published')
+      .order('created_at', { ascending: true })
+      .limit(2000)
+    if (error) return NextResponse.json({ error: 'query_failed', message: error.message }, { status: 500 })
+
+    const all: AuditLocation[] = (rows ?? []) as AuditLocation[]
+    const totalBatches = Math.max(1, Math.ceil(all.length / BATCH_SIZE))
+
+    // Local duplicates: only computed on batch=0 and shipped once,
+    // since they're cheap and depend on the FULL set, not a slice.
+    // Wrapped so a bug in the dedup pass can't take out the whole
+    // audit — the AI incorrect-flag pass is independent and worth
+    // returning even if this throws.
+    let duplicates: DuplicateFlag[] = []
+    if (batchIndex === 0) {
+      try {
+        duplicates = findDuplicates(all)
+      } catch (dupErr: any) {
+        console.error('audit-locations: findDuplicates threw', dupErr)
+      }
+    }
+
+    // AI flags: just this slice.
+    const start = batchIndex * BATCH_SIZE
+    const slice = all.slice(start, start + BATCH_SIZE)
+    let incorrect: IncorrectFlag[] = []
+    if (slice.length > 0) {
+      try {
+        incorrect = await flagSuspiciousBatch(slice)
+      } catch (aiErr: any) {
+        console.error('audit-locations: flagSuspiciousBatch threw', aiErr)
+      }
+    }
+
+    return NextResponse.json({
+      batchIndex,
+      totalBatches,
+      totalLocations: all.length,
+      batchSize: slice.length,
+      duplicates,
+      incorrect,
+    })
+  } catch (err: any) {
+    console.error('audit-locations: unhandled error', err)
+    return NextResponse.json({ error: 'internal', message: err?.message ?? 'Unknown error' }, { status: 500 })
   }
-
-  // Optional ?batch= controls which AI batch to process. Lets the
-  // client step through the table 50 rows at a time without blowing
-  // the 60s function timeout. Duplicate detection is local and fast,
-  // so it always runs on the full list and is returned on batch=0.
-  const url = new URL(request.url)
-  const batchIndex = Math.max(0, parseInt(url.searchParams.get('batch') ?? '0', 10) || 0)
-  const BATCH_SIZE = 50
-
-  const { data: rows, error } = await admin
-    .from('locations')
-    .select('id,name,city,state,latitude,longitude,description,category')
-    .eq('status', 'published')
-    .order('created_at', { ascending: true })
-    .limit(2000)
-  if (error) return NextResponse.json({ error: 'query_failed', message: error.message }, { status: 500 })
-
-  const all: AuditLocation[] = (rows ?? []) as AuditLocation[]
-  const totalBatches = Math.max(1, Math.ceil(all.length / BATCH_SIZE))
-
-  // Local duplicates: only computed on batch=0 and shipped once,
-  // since they're cheap and depend on the FULL set, not a slice.
-  const duplicates = batchIndex === 0 ? findDuplicates(all) : []
-
-  // AI flags: just this slice.
-  const start = batchIndex * BATCH_SIZE
-  const slice = all.slice(start, start + BATCH_SIZE)
-  const incorrect = slice.length > 0 ? await flagSuspiciousBatch(slice) : []
-
-  return NextResponse.json({
-    batchIndex,
-    totalBatches,
-    totalLocations: all.length,
-    batchSize: slice.length,
-    duplicates,
-    incorrect,
-  })
 }
