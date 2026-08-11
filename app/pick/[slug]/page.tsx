@@ -150,12 +150,6 @@ export default function ClientPickerPage() {
   }, [])
   const [infoCollected,    setInfoCollected]    = useState(isPreview)
   const [infoError,        setInfoError]        = useState('')
-  // Two-step submit — first tap on "Send my choice / picks" flips the
-  // button label to a confirm prompt; a second tap within 5s actually
-  // sends. Prevents accidental submissions on a link the client is
-  // still browsing.
-  const [confirmPending,   setConfirmPending]   = useState(false)
-  const confirmTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Transient banner for non-blocking notices: max-pick reached when
   // they tap a 5th location, submit failed and they should retry, etc.
   // Self-clears via timeout; rendered as a small floating pill near
@@ -593,26 +587,17 @@ export default function ClientPickerPage() {
     setInfoCollected(true)
   }
 
-  // Two-step submit for the Send button. First tap flips it to a
-  // "Tap again to confirm" state; a second tap within 5 seconds
-  // actually calls the API. Info is already collected via the
-  // gate, so no email prompt is needed. Preview mode (photographer
-  // previewing their own guide) short-circuits with a toast so
-  // clicking around never records a fake client pick.
+  // Info is already collected up front via the gate and the client
+  // has to first select a spot before this button even lights up —
+  // so a tap on "Send my choice" submits directly. Preview mode
+  // (photographer previewing their own guide) short-circuits with a
+  // toast so clicking around never records a fake client pick.
   function confirmChoice() {
     if (chosenIds.length === 0 || submitting) return
     if (isPreview) {
       setPickToast('👀 Preview mode — submissions are disabled')
       return
     }
-    if (!confirmPending) {
-      setConfirmPending(true)
-      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
-      confirmTimerRef.current = setTimeout(() => setConfirmPending(false), 5000)
-      return
-    }
-    if (confirmTimerRef.current) { clearTimeout(confirmTimerRef.current); confirmTimerRef.current = null }
-    setConfirmPending(false)
     savePick(clientFirstName.trim(), clientLastName.trim(), clientEmail.trim())
   }
 
@@ -1162,11 +1147,7 @@ export default function ClientPickerPage() {
             transition: 'opacity .2s, box-shadow .2s, transform .2s',
             flexShrink: 0, whiteSpace: 'nowrap',
           }}>
-          {submitting
-            ? 'Sending…'
-            : confirmPending
-              ? '⚠ Tap again to confirm'
-              : maxPicks > 1 ? 'Send my picks →' : 'Send my choice →'}
+          {submitting ? 'Sending…' : maxPicks > 1 ? 'Send my picks →' : 'Send my choice →'}
         </button>
       </div>
 
