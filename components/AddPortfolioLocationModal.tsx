@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import MapCoordPicker from '@/components/MapCoordPicker'
 import { validateImageUpload } from '@/lib/upload-validate'
 import { compressImageIfNeeded } from '@/lib/image-compress'
 
@@ -254,6 +255,22 @@ export default function AddPortfolioLocationModal({
                 <button onClick={() => setPin(null)} style={{ fontSize: 11, color: 'var(--rust)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Clear</button>
               </div>
             )}
+
+            {/* Map picker — either fine-tune an address-search hit or
+                drop a pin somewhere Google doesn't know about (private
+                venues, remote overlooks, an unnamed field). Drag the
+                marker or tap the map to update the coordinates. */}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Or drop a pin on the map</div>
+              <MapCoordPicker
+                lat={pin?.lat ?? null}
+                lng={pin?.lng ?? null}
+                onChange={(la, ln) => setPin(prev => prev
+                  ? { ...prev, lat: la, lng: ln }
+                  : { lat: la, lng: ln, label: `Custom pin (${la.toFixed(5)}, ${ln.toFixed(5)})`, shortLabel: 'Custom pin' })}
+                height={240}
+              />
+            </div>
           </div>
 
           <div style={{ marginBottom: '1rem' }}>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import MapCoordPicker from '@/components/MapCoordPicker'
 
 // Admin-only edit form for a public location row. Used from the admin
 // dashboard's location list and from the explore-page detail panel when
@@ -79,6 +80,16 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
           <div>
             <label style={lbl}>Longitude</label>
             <input style={inp} type="number" step="any" value={f.longitude ?? ''} onChange={e => upd('longitude', e.target.value === '' ? null : parseFloat(e.target.value))} />
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lbl}>Pick on map</label>
+            <MapCoordPicker
+              lat={f.latitude}
+              lng={f.longitude}
+              onChange={(la, ln) => setF(p => ({ ...p, latitude: la, longitude: ln }))}
+              height={260}
+            />
           </div>
 
           <div>

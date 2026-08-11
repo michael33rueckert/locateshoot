@@ -955,10 +955,21 @@ export default function ExplorePage() {
     if (!res.ok) { setToast(`⚠ ${j.error ?? 'Update failed'}`); return }
     setAdminEditLoc(null)
     setToast('✓ Saved')
-    // Refresh the detail panel + the loaded markers so the change is visible.
-    setLocations(prev => prev.map(l => String(l.id) === String(adminEditLoc.id) ? { ...l, ...j.location } : l))
+    // Refresh the detail panel + the loaded markers so the change is
+    // visible. The DB row uses latitude/longitude but the client-side
+    // shape uses lat/lng — a plain spread merged the DB values in as
+    // new keys but left the existing lat/lng untouched, so coordinate
+    // edits looked like they didn't save until the page was reloaded.
+    // Remap explicitly here.
+    const remap = (base: any) => ({
+      ...base,
+      ...j.location,
+      lat: j.location.latitude  ?? base.lat,
+      lng: j.location.longitude ?? base.lng,
+    })
+    setLocations(prev => prev.map(l => String(l.id) === String(adminEditLoc.id) ? remap(l) : l))
     if (detailLoc && String(detailLoc.id) === String(adminEditLoc.id)) {
-      setDetailLoc((prev: any) => prev ? { ...prev, ...j.location, name: j.location.name ?? prev.name } : prev)
+      setDetailLoc((prev: any) => prev ? { ...remap(prev), name: j.location.name ?? prev.name } : prev)
     }
   }
   async function adminDeleteLocation(locId: string) {

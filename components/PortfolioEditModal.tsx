@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import ImageLightbox from '@/components/ImageLightbox'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
+import MapCoordPicker from '@/components/MapCoordPicker'
 import { thumbUrl } from '@/lib/image'
 import { useReorderDrag } from '@/hooks/useReorderDrag'
 import { validateImageUpload } from '@/lib/upload-validate'
@@ -514,6 +515,19 @@ export default function PortfolioEditModal({
                     </div>
                   </div>
                 )}
+                {/* Same map picker used in Add — lets the photographer
+                    drag the pin off the address hit onto the actual
+                    photoshoot spot (e.g. the overlook rather than the
+                    park entrance Google returned). */}
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Or drop a pin on the map</div>
+                  <MapCoordPicker
+                    lat={lat}
+                    lng={lng}
+                    onChange={(la, ln) => { setLat(la); setLng(ln); setPinLabel(`Custom pin (${la.toFixed(5)}, ${ln.toFixed(5)})`) }}
+                    height={240}
+                  />
+                </div>
               </div>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={labelStyle}>Name *</label>
