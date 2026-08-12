@@ -9,6 +9,7 @@ import { isAdminEmail } from '@/lib/admin'
 import AppNav from '@/components/AppNav'
 import LocationEditModal from '@/components/admin/LocationEditModal'
 import LocationScannerPanel from '@/components/admin/LocationScannerPanel'
+import AddLocationModal, { type NewLocation } from '@/components/admin/AddLocationModal'
 
 interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
 
@@ -82,6 +83,7 @@ export default function AdminPage() {
   const [locStatus,      setLocStatus]      = useState<'all'|'published'|'pending'>('all')
   const [locsLoading,    setLocsLoading]    = useState(false)
   const [editingLoc,     setEditingLoc]     = useState<ManagedLocation | null>(null)
+  const [addLocOpen,     setAddLocOpen]     = useState(false)
   const [deletingLocId,  setDeletingLocId]  = useState<string | null>(null)
   // 10 rows per page on the Locations + Users tables — anything
   // past that turns the panel into a scrolling wall.
@@ -254,6 +256,24 @@ export default function AdminPage() {
     setAllLocs(prev => prev.map(l => l.id === editingLoc.id ? { ...l, ...(j.location as ManagedLocation) } : l))
     setEditingLoc(null)
     setToast('✓ Saved')
+  }
+
+  async function createLocation(payload: NewLocation) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Not signed in')
+    const res = await fetch('/api/admin/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(payload),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(j?.message ?? j?.error ?? `HTTP ${res.status}`)
+    // Prepend into the managed table + bump the count chip so the new
+    // row is visible without a reload.
+    setAllLocs(prev => [j.location as ManagedLocation, ...prev])
+    setLocationCount(n => n + 1)
+    setAddLocOpen(false)
+    setToast('✓ Location added to the map')
   }
 
   async function deleteLocation(id: string) {
@@ -506,7 +526,10 @@ export default function AdminPage() {
               📍 Locations
               <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, background: 'var(--cream-dark)', color: 'var(--ink-soft)' }}>{filteredAllLocs.length} / {allLocs.length}</span>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Edit or delete any location. Deleting also clears its photos & detaches portfolio references.</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>Edit or delete any location. Deleting also clears its photos & detaches portfolio references.</div>
+              <button onClick={() => setAddLocOpen(true)} style={{ padding: '7px 14px', borderRadius: 4, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>+ Add location</button>
+            </div>
           </div>
 
           <div style={{ padding: '0.75rem 1.25rem', display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
@@ -727,6 +750,9 @@ export default function AdminPage() {
 
       {editingLoc && (
         <LocationEditModal loc={editingLoc} onClose={() => setEditingLoc(null)} onSave={saveEditingLoc} />
+      )}
+      {addLocOpen && (
+        <AddLocationModal onClose={() => setAddLocOpen(false)} onCreate={createLocation} />
       )}
 
       {toast && (

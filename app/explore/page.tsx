@@ -12,6 +12,7 @@ import ImageLightbox from '@/components/ImageLightbox'
 import AppNav from '@/components/AppNav'
 import LocationEditModal, { type ManagedLocation } from '@/components/admin/LocationEditModal'
 import LocationPhotosModal from '@/components/admin/LocationPhotosModal'
+import AddLocationModal, { type NewLocation } from '@/components/admin/AddLocationModal'
 import { isAdminEmail } from '@/lib/admin'
 import { thumbUrl } from '@/lib/image'
 import type { ExploreLocation } from '@/components/ExploreMap'
@@ -415,6 +416,7 @@ export default function ExplorePage() {
   const [adminPhotoLoc,   setAdminPhotoLoc]   = useState<{ id: string; name: string } | null>(null)
   const [photoRefreshTick, setPhotoRefreshTick] = useState(0)
   const [adminName,       setAdminName]       = useState<string>('')
+  const [adminAddOpen,    setAdminAddOpen]    = useState(false)
   const [authOpen,       setAuthOpen]       = useState<'login'|'signup'|null>(null)
   const [toast,          setToast]          = useState<string|null>(null)
   const [searchQuery,    setSearchQuery]    = useState('')
@@ -972,6 +974,46 @@ export default function ExplorePage() {
       setDetailLoc((prev: any) => prev ? { ...remap(prev), name: j.location.name ?? prev.name } : prev)
     }
   }
+  async function adminCreateLocation(payload: NewLocation) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('Not signed in')
+    const res = await fetch('/api/admin/locations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(payload),
+    })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(j?.message ?? j?.error ?? `HTTP ${res.status}`)
+    const row = j.location
+    // Merge into the loaded set so it appears immediately without a
+    // full reload. Client shape uses lat/lng; DB returns
+    // latitude/longitude — remap explicitly (same bug we fixed on
+    // adminSaveLocation).
+    const mapped: any = {
+      ...row,
+      id:            row.id,
+      lat:           row.latitude,
+      lng:           row.longitude,
+      access:        row.access_type ?? 'public',
+      rating:        row.rating != null ? String(row.rating) : '—',
+      ratingNum:     row.rating ?? null,
+      qualityScore:  row.quality_score ?? 0,
+      tags:          row.tags ?? [],
+      saves:         0,
+      favoriteCount: 0,
+      bg:            BG_CYCLE[Math.floor(Math.random() * BG_CYCLE.length)],
+      createdAt:     row.created_at,
+      source:        row.source,
+      permit_certainty: row.permit_certainty,
+      permit_fee:    row.permit_fee,
+      permit_notes:  row.permit_notes,
+      permit_website:row.permit_website,
+    }
+    setLocations(prev => [mapped, ...prev])
+    setAdminAddOpen(false)
+    setToast('✓ Added to the map')
+  }
+
   async function adminDeleteLocation(locId: string) {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
@@ -1446,6 +1488,33 @@ export default function ExplorePage() {
             })()
           }}
         />
+      )}
+      {adminAddOpen && (
+        <AddLocationModal
+          onClose={() => setAdminAddOpen(false)}
+          onCreate={adminCreateLocation}
+        />
+      )}
+      {/* Admin-only floating "add" button. Same z-index tier as the
+          toast so it clears the DetailPanel + filters, but sits
+          bottom-left instead of bottom-right so it doesn't compete
+          with the toast, "View Map" pill, or scroll-back buttons. */}
+      {isAdmin && (
+        <button
+          onClick={() => setAdminAddOpen(true)}
+          title="Add a new location (admin)"
+          style={{
+            position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0) + 1.5rem)', left: '1.5rem',
+            width: 52, height: 52, borderRadius: 26,
+            background: 'var(--gold)', color: 'var(--ink)',
+            border: '1px solid rgba(26,22,18,.15)',
+            boxShadow: '0 8px 24px rgba(0,0,0,.25)',
+            fontSize: 24, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontFamily: 'inherit',
+            zIndex: 9998,
+          }}
+        >+</button>
       )}
       {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={()=>setLightboxSrc(null)}/>
