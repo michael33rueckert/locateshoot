@@ -192,7 +192,7 @@ export default function HomePage() {
           <div className="hero-eyebrow">Built for working photographers</div>
           <h1 className="hero-title">Let clients <em>pick the spot</em> in one tap.</h1>
           <p className="hero-sub">
-            Send one link. They pick a location. You get the email. No more 20-message chains.
+            Send one link. They pick a location. You get the email — they get one with directions to the spot. No more 20-message chains.
           </p>
           <div className="hero-actions">
             {user ? (
@@ -216,7 +216,7 @@ export default function HomePage() {
           <div className="section-eyebrow" style={{ justifyContent: 'center' }}>The time-saver</div>
           <h2 className="section-title">Booking a session? <em>Send one link.</em></h2>
           <p className="section-sub" style={{ margin: '0 auto' }}>
-            Let your client choose the location. You focus on the shoot.
+            Let your client choose the location — they get a confirmation email with directions to it. You focus on the shoot.
           </p>
         </div>
 
