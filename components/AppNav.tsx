@@ -242,9 +242,10 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
           {/* Full-screen backdrop below the dropdown so any tap on the
               page underneath closes the menu — without this the menu
               only collapses when the user lands precisely on the X
-              button or on a link inside the panel. Sits below the menu
-              (z-index 499 vs 500) but above page content. */}
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 60, left: 0, right: 0, bottom: 0, zIndex: 499, background: 'transparent' }} />
+              button or on a link inside the panel. Sits just below the
+              menu (999 vs 1000) but above per-page overlays like the
+              Explore filter bar (900). */}
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 60, left: 0, right: 0, bottom: 0, zIndex: 999, background: 'transparent' }} />
           <div className="mobile-menu" onClick={() => setOpen(false)}>
             {signedIn && LINKS.map(l => (
               <Link

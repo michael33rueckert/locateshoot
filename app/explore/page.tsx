@@ -232,10 +232,11 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
           the scroll-perf reasoning. Same story here: the detail sheet
           scrolls its long content and desktop viewport re-composite
           of a blurred area per frame was making it feel laggy. */}
-      {/* Backdrop and sheet z-indexes lifted above the explore filter
-          row (zIndex 1500 — line 943) so on mobile/tablet the filter
-          bar doesn't overlay the top of the location card. Matches the
-          same fix pattern used for other modals in this codebase. */}
+      {/* Backdrop and sheet z-indexes lifted above the AppNav topbar
+          (1500), the mobile menu drawer (1000), and the explore
+          filter row (900) so on mobile/tablet nothing overlays the
+          top of the location card. Matches the same fix pattern used
+          for other modals in this codebase. */}
       <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(26,22,18,.5)',zIndex:1700}}/>
       <div style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',willChange:'transform',contain:'layout style',width:'100%',maxWidth:600,background:'white',borderRadius:'16px 16px 0 0',zIndex:1800,maxHeight:'90svh',overflowY:'auto',boxShadow:'0 -8px 48px rgba(26,22,18,.25)'}}>
         <div style={{display:'flex',justifyContent:'center',padding:'12px 0 6px'}}><div style={{width:36,height:4,borderRadius:2,background:'var(--sand)'}}/></div>
@@ -1192,14 +1193,15 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {/* Filter bar — position:relative + high z-index so the AddressSearch
-          dropdown (and any future overlays anchored to this row) paints
-          ABOVE Leaflet's internal panes (popups peak at z-index 700,
-          controls at 800). Without an explicit stacking context here,
-          the dropdown ends up competing with map content in document
-          order and gets covered up on mobile when the filter row's
-          children extend below the bar's bottom edge into the map area. */}
-      <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',flexShrink:0,position:'relative',zIndex:1500,isolation:'isolate'}}>
+      {/* Filter bar — position:relative + isolation:isolate creates a
+          stacking context so the AddressSearch dropdown (and any
+          future overlays anchored to this row) paints ABOVE Leaflet's
+          internal panes (popups peak at z-index 700, controls at 800).
+          zIndex must clear Leaflet (>800) but stay below the mobile
+          menu drawer (bumped to 1000 in globals.css) and the AppNav
+          topbar (1500) so opening the hamburger doesn't paint under
+          this bar. DetailPanel modal (1700+) still sits on top. */}
+      <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',flexShrink:0,position:'relative',zIndex:900,isolation:'isolate'}}>
         <div className="explore-filter-row" style={{padding:'8px 1.5rem',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <button onClick={()=>setShowFilters(p=>!p)} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${showFilters||activeFilterCount>0?'var(--gold)':'var(--cream-dark)'}`,background:showFilters||activeFilterCount>0?'rgba(196,146,42,.08)':'white',color:showFilters||activeFilterCount>0?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
             ⚙ Filters & Sort

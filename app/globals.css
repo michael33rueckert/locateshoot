@@ -1090,7 +1090,11 @@ body {
   top: 60px; left: 0; right: 0;
   background: rgba(26,22,18,.98);
   border-bottom: 1px solid rgba(255,255,255,.1);
-  z-index: 500;
+  /* Sits above per-page overlays like the Explore filter bar (z:900)
+     so opening the hamburger on tablet/mobile doesn't paint under
+     content that started below the topbar. Still below the DetailPanel
+     modal (1700+) and toasts (9999+). */
+  z-index: 1000;
   padding: 1rem 1.5rem;
   display: flex;
   flex-direction: column;
