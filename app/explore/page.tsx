@@ -1353,10 +1353,33 @@ export default function ExplorePage() {
 
         {/* Map */}
         <div className={`explore-map-col${mobileMapVisible?' mobile-visible':''}`}>
+          {/* On mobile map view the sidebar is hidden, which also
+              hid the AddressSearch bar that normally lives inside it.
+              Bring it back as a floating overlay at the top of the
+              map, sharing a flex row with the "← List" back button
+              so they don't collide. Non-mobile viewports show the
+              sidebar directly and skip this overlay. */}
           {mobileMapVisible&&(
-            <button onClick={()=>setMobileMapVisible(false)} style={{position:'absolute',top:12,left:12,zIndex:500,display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:20,background:'rgba(26,22,18,.9)',color:'var(--cream)',border:'1px solid rgba(255,255,255,.15)',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit',backdropFilter:'blur(4px)'}}>
-              ← List
-            </button>
+            <div style={{position:'absolute',top:12,left:12,right:12,zIndex:500,display:'flex',gap:8,alignItems:'flex-start',pointerEvents:'none'}}>
+              <button
+                onClick={()=>setMobileMapVisible(false)}
+                style={{pointerEvents:'auto',display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:20,background:'rgba(26,22,18,.9)',color:'var(--cream)',border:'1px solid rgba(255,255,255,.15)',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit',backdropFilter:'blur(4px)',flexShrink:0,height:38}}
+              >
+                ← List
+              </button>
+              {/* filter:drop-shadow follows the actual input shape
+                  (unlike box-shadow, which needs a background) so the
+                  shadow hugs the input's own rounded border instead
+                  of drawing a phantom rectangle around a transparent
+                  wrapper. Keeps the AddressSearch native look. */}
+              <div style={{pointerEvents:'auto',flex:1,minWidth:0,filter:'drop-shadow(0 4px 12px rgba(0,0,0,.22))'}}>
+                <AddressSearch
+                  placeholder="Search a city, area, or address…"
+                  onSelect={handleSearchNavigate}
+                  onClear={() => { setSearchPin(null); setUserLocation(null) }}
+                />
+              </div>
+            </div>
           )}
           <ExploreMap
             locations={mapMarkers as ExploreLocation[]}
