@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import MapCoordPicker from '@/components/MapCoordPicker'
+import CategoryPicker from '@/components/admin/CategoryPicker'
 
 // Admin-only edit form for a public location row. Used from the admin
 // dashboard's location list and from the explore-page detail panel when
@@ -112,7 +113,7 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
 
           <div>
             <label style={lbl}>Category</label>
-            <input style={inp} value={f.category ?? ''} onChange={e => upd('category', e.target.value || null)} />
+            <CategoryPicker value={f.category} onChange={v => upd('category', v)} />
           </div>
           <div>
             <label style={lbl}>Tags (comma-separated)</label>

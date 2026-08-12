@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import AddressSearch, { type AddressResult } from '@/components/AddressSearch'
 import MapCoordPicker from '@/components/MapCoordPicker'
+import CategoryPicker from '@/components/admin/CategoryPicker'
 
 // Admin-only "Add a new location" modal. Fields mirror LocationEditModal
 // so a row created here is fully-formed and doesn't need a follow-up
@@ -163,7 +164,7 @@ export default function AddLocationModal({ onClose, onCreate }: {
 
           <div>
             <label style={lbl}>Category</label>
-            <input style={inp} value={f.category ?? ''} onChange={e => upd('category', e.target.value || null)} placeholder="e.g. Parks & Nature" />
+            <CategoryPicker value={f.category} onChange={v => upd('category', v)} />
           </div>
           <div>
             <label style={lbl}>Tags (comma-separated)</label>
