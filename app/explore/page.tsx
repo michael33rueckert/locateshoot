@@ -840,7 +840,13 @@ export default function ExplorePage() {
     const loc = locations.find((l:any) => String(l.id) === String(id))
               ?? manualPortfolioLocs.find((l:any) => String(l.id) === String(id))
     if(loc){
-      setDetailLoc(loc); setActiveId(id); setMobileMapVisible(false)
+      // Do NOT flip mobileMapVisible here — the DetailPanel is a fixed
+      // bottom-sheet overlay (z 1700+) that renders on top of both
+      // list and map, so switching underlying views on marker tap
+      // just meant that closing the sheet dumped the user into list
+      // view even though they'd started on the map. Leave whichever
+      // view they were on intact.
+      setDetailLoc(loc); setActiveId(id)
       // Re-anchor the sidebar around this location — shows other spots
       // in the same area, making the map a click-to-explore tool. The
       // banner above the list lets the user reset to their previous
