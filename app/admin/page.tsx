@@ -10,6 +10,8 @@ import AppNav from '@/components/AppNav'
 import LocationEditModal from '@/components/admin/LocationEditModal'
 import LocationScannerPanel from '@/components/admin/LocationScannerPanel'
 import AddLocationModal, { type NewLocation } from '@/components/admin/AddLocationModal'
+import AutoScanConfigPanel from '@/components/admin/AutoScanConfigPanel'
+import PendingScanReviewOverlay from '@/components/admin/PendingScanReviewOverlay'
 
 interface PendingLocation { id: string; name: string; city: string; state: string; description: string | null; access_type: string; tags: string[]; created_at: string; latitude: number | null; longitude: number | null }
 
@@ -84,6 +86,10 @@ export default function AdminPage() {
   const [locsLoading,    setLocsLoading]    = useState(false)
   const [editingLoc,     setEditingLoc]     = useState<ManagedLocation | null>(null)
   const [addLocOpen,     setAddLocOpen]     = useState(false)
+  // Auto-scanner review — count of ai_scanner_auto rows still in
+  // pending status, and whether the fullscreen swipe overlay is open.
+  const [autoScanPending, setAutoScanPending] = useState(0)
+  const [reviewOpen,      setReviewOpen]      = useState(false)
   const [deletingLocId,  setDeletingLocId]  = useState<string | null>(null)
   // 10 rows per page on the Locations + Users tables — anything
   // past that turns the panel into a scrolling wall.
@@ -232,6 +238,32 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => { if (ready) loadAllLocations() }, [ready, loadAllLocations])
+
+  // Refresh the auto-scanner pending count whenever the review
+  // overlay closes (the admin just cleared some) and once on mount.
+  const loadAutoScanPending = useCallback(async () => {
+    const { count } = await supabase
+      .from('locations')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .eq('source', 'ai_scanner_auto')
+    setAutoScanPending(count ?? 0)
+  }, [])
+  useEffect(() => { if (ready) loadAutoScanPending() }, [ready, loadAutoScanPending])
+
+  // Auto-open the review overlay when the push-notification landing
+  // URL includes ?review=scanner. Strip the param on open so a
+  // refresh doesn't re-trigger it after the admin closes the
+  // overlay.
+  useEffect(() => {
+    if (!ready || typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('review') !== 'scanner') return
+    setReviewOpen(true)
+    params.delete('review')
+    const qs = params.toString()
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
+  }, [ready])
 
   const filteredAllLocs = allLocs.filter(l => {
     if (locStatus !== 'all' && l.status !== locStatus) return false
@@ -612,6 +644,21 @@ export default function AdminPage() {
           })()}
         </div>
 
+        {/* AUTO-SCAN CONFIG — daily cron settings + Tinder-style
+            review of pending picks. Config panel is always visible;
+            the review banner appears only when there's a queue. */}
+        <AutoScanConfigPanel />
+
+        {autoScanPending > 0 && (
+          <div style={{ background: 'rgba(196,146,42,.12)', border: '1px solid rgba(196,146,42,.35)', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold)' }}>🤖 {autoScanPending} scanner pick{autoScanPending === 1 ? '' : 's'} waiting</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>Swipe left to delete, right to publish to the Explore map.</div>
+            </div>
+            <button onClick={() => setReviewOpen(true)} style={{ padding: '10px 22px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Review →</button>
+          </div>
+        )}
+
         {/* AI SCANNER — bulk-seeds new locations by (city × category).
             Sits next to Quality Audit since both are AI-powered bulk
             ops on the locations table; scanner writes, audit reads. */}
@@ -753,6 +800,9 @@ export default function AdminPage() {
       )}
       {addLocOpen && (
         <AddLocationModal onClose={() => setAddLocOpen(false)} onCreate={createLocation} />
+      )}
+      {reviewOpen && (
+        <PendingScanReviewOverlay onClose={() => { setReviewOpen(false); loadAutoScanPending(); loadAllLocations() }} />
       )}
 
       {toast && (
