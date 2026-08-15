@@ -112,7 +112,17 @@ export default function PendingScanReviewOverlay({ onClose }: { onClose: () => v
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.85)', zIndex: 8000 }} />
-      <div style={{ position: 'fixed', inset: 0, zIndex: 8001, display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}>
+      {/* Layout budget (100dvh, not 100vh, so the mobile URL bar
+          isn't counted when it's hidden — that's what was letting
+          the buttons drift under the browser chrome on iPad).
+            header  ≈ 60
+            gap     ≈ 20
+            buttons ≈ 100 (68px circle + safe-area + padding)
+            gap     ≈ 20
+          → card gets height min(600, 100dvh - 220) with its own
+          padding-bottom on the card area so the shadow doesn't
+          bleed onto the button row. */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 8001, display: 'flex', flexDirection: 'column', pointerEvents: 'none', height: '100dvh' }}>
 
         {/* Header */}
         <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, pointerEvents: 'auto' }}>
@@ -125,8 +135,9 @@ export default function PendingScanReviewOverlay({ onClose }: { onClose: () => v
           <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 20, background: 'rgba(255,255,255,.1)', color: 'var(--cream)', border: '1px solid rgba(255,255,255,.15)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Close</button>
         </div>
 
-        {/* Card area */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 16px 12px', minHeight: 0 }}>
+        {/* Card area — padding-bottom is large enough that the card's
+            drop-shadow doesn't visually crowd the button row below. */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 16px 24px', minHeight: 0 }}>
           {loading ? null
             : total === 0 ? (
               <div style={{ pointerEvents: 'auto', textAlign: 'center', color: 'var(--cream)' }}>
@@ -146,9 +157,11 @@ export default function PendingScanReviewOverlay({ onClose }: { onClose: () => v
             : current ? <ReviewCard key={current.id} loc={current} busy={busy} onDecide={decide} /> : null}
         </div>
 
-        {/* Buttons */}
+        {/* Buttons — flex-shrink:0 + explicit top padding guarantees
+            the row lives below the card and never gets covered by
+            the card's shadow, on any viewport. */}
         {current && (
-          <div style={{ padding: '0 16px calc(env(safe-area-inset-bottom, 0) + 20px)', display: 'flex', gap: 14, justifyContent: 'center', pointerEvents: 'auto' }}>
+          <div style={{ flexShrink: 0, padding: '16px 16px calc(env(safe-area-inset-bottom, 0) + 20px)', display: 'flex', gap: 14, justifyContent: 'center', pointerEvents: 'auto' }}>
             <button
               onClick={() => decide('reject')}
               disabled={busy}
@@ -249,15 +262,21 @@ function ReviewCard({ loc, busy, onDecide }: { loc: PendingLoc; busy: boolean; o
         background: 'white', borderRadius: 16, overflow: 'hidden',
         boxShadow: '0 20px 60px rgba(0,0,0,.5)',
         touchAction: 'pan-y',
-        maxHeight: 'calc(100vh - 220px)',
+        // Explicit height (not just maxHeight) so a portrait tablet
+        // doesn't grow the card until it eats the decision buttons.
+        // 100dvh (not 100vh) ignores the collapsible mobile URL bar.
+        height: 'min(620px, calc(100dvh - 220px))',
         display: 'flex', flexDirection: 'column',
       }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      {/* Photo */}
-      <div style={{ position: 'relative', background: '#1a1612', aspectRatio: '4 / 3', flexShrink: 0 }}>
+      {/* Photo — fixed pixel height (not aspect-ratio) so a portrait-
+          orientation Google photo can't push the card taller than
+          the layout budget. object-fit:cover crops whatever comes
+          in to fit the frame consistently. */}
+      <div style={{ position: 'relative', background: '#1a1612', height: 'clamp(220px, 38dvh, 300px)', flexShrink: 0 }}>
         {photosLoading ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 26, height: 26, border: '2px solid rgba(255,255,255,.2)', borderTop: '2px solid rgba(255,255,255,.7)', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
