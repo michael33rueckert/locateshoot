@@ -241,13 +241,17 @@ export default function AdminPage() {
 
   // Refresh the auto-scanner pending count whenever the review
   // overlay closes (the admin just cleared some) and once on mount.
+  // Uses the service-role /api/admin/pending-scans?countOnly=1 route
+  // so RLS on `locations` (which is written for published rows) can't
+  // hide pending scanner picks from the count.
   const loadAutoScanPending = useCallback(async () => {
-    const { count } = await supabase
-      .from('locations')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending')
-      .eq('source', 'ai_scanner_auto')
-    setAutoScanPending(count ?? 0)
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) return
+    const res = await fetch('/api/admin/pending-scans?countOnly=1', { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) return
+    const j = await res.json().catch(() => ({}))
+    setAutoScanPending(typeof j?.count === 'number' ? j.count : 0)
   }, [])
   useEffect(() => { if (ready) loadAutoScanPending() }, [ready, loadAutoScanPending])
 
@@ -649,15 +653,30 @@ export default function AdminPage() {
             the review banner appears only when there's a queue. */}
         <AutoScanConfigPanel />
 
-        {autoScanPending > 0 && (
-          <div style={{ background: 'rgba(196,146,42,.12)', border: '1px solid rgba(196,146,42,.35)', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold)' }}>🤖 {autoScanPending} scanner pick{autoScanPending === 1 ? '' : 's'} waiting</div>
-              <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>Swipe left to delete, right to publish to the Explore map.</div>
+        {/* Always visible — even at 0 pending the admin has a stable
+            entry point + a refresh button, so a scan that ran but
+            skipped every candidate as a duplicate isn't invisible. */}
+        <div style={{ background: autoScanPending > 0 ? 'rgba(196,146,42,.12)' : 'var(--ink)', border: `1px solid ${autoScanPending > 0 ? 'rgba(196,146,42,.35)' : 'rgba(255,255,255,.08)'}`, borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: autoScanPending > 0 ? 'var(--gold)' : 'var(--cream)' }}>
+              🤖 {autoScanPending} scanner pick{autoScanPending === 1 ? '' : 's'} waiting
             </div>
-            <button onClick={() => setReviewOpen(true)} style={{ padding: '10px 22px', borderRadius: 6, background: 'var(--gold)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Review →</button>
+            <div style={{ fontSize: 12, color: autoScanPending > 0 ? 'var(--ink-soft)' : 'rgba(245,240,232,.55)', marginTop: 2 }}>
+              {autoScanPending > 0
+                ? 'Swipe left to delete, right to publish to the Explore map.'
+                : 'New candidates from the daily auto scan will land here.'}
+            </div>
           </div>
-        )}
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={loadAutoScanPending} title="Refresh pending count" style={{ padding: '10px 14px', borderRadius: 6, background: 'transparent', color: autoScanPending > 0 ? 'var(--ink)' : 'rgba(245,240,232,.7)', border: `1px solid ${autoScanPending > 0 ? 'var(--cream-dark)' : 'rgba(255,255,255,.15)'}`, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>↻</button>
+            <button
+              onClick={() => setReviewOpen(true)}
+              disabled={autoScanPending === 0}
+              style={{ padding: '10px 22px', borderRadius: 6, background: autoScanPending > 0 ? 'var(--gold)' : 'rgba(196,146,42,.3)', color: 'var(--ink)', border: 'none', fontSize: 13, fontWeight: 600, cursor: autoScanPending > 0 ? 'pointer' : 'default', fontFamily: 'inherit' }}>
+              Review →
+            </button>
+          </div>
+        </div>
 
         {/* AI SCANNER — bulk-seeds new locations by (city × category).
             Sits next to Quality Audit since both are AI-powered bulk

@@ -43,18 +43,21 @@ export default function PendingScanReviewOverlay({ onClose }: { onClose: () => v
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    // Only AI-scanner-auto rows — user-submitted pendings go through
-    // the existing single-row approve/reject buttons on /admin.
-    const { data, error: e } = await supabase
-      .from('locations')
-      .select('id,name,city,state,latitude,longitude,description,category,quality_score,rating,tags,best_time,parking_info,created_at')
-      .eq('status', 'pending')
-      .eq('source', 'ai_scanner_auto')
-      .order('created_at', { ascending: true })
-      .limit(500)
+    // Fetch through the service-role admin endpoint so RLS on
+    // `locations` (written for published rows) can't hide pending
+    // scanner picks from the queue.
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) { setError('Not signed in'); setLoading(false); return }
+    const res = await fetch('/api/admin/pending-scans', { headers: { Authorization: `Bearer ${token}` } })
     setLoading(false)
-    if (e) { setError(e.message); return }
-    const rows = (data ?? []) as PendingLoc[]
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      setError(j?.error ?? `HTTP ${res.status}`)
+      return
+    }
+    const json = await res.json()
+    const rows = (json?.rows ?? []) as PendingLoc[]
     setQueue(rows)
     setTotal(rows.length)
     setDone(0)
