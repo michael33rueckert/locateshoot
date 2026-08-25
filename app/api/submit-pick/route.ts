@@ -160,6 +160,13 @@ export async function POST(request: Request) {
     description: string | null
     best_time: string | null
     parking_info: string | null
+    // Free / paid flag + separate parking coord. Renders a "🅿️ Free"
+    // or "💰 Paid" badge inline with the parking block, and — when
+    // coords exist — a "Directions to parking" button that goes to
+    // the pin rather than the shoot spot.
+    parking_type: 'free' | 'paid' | null
+    parking_lat: number | null
+    parking_lng: number | null
     permit_required: boolean | null
     permit_notes: string | null
     pinterest_url: string | null
@@ -178,17 +185,22 @@ export async function POST(request: Request) {
     let portfolioRows: any[] = []
     {
       // Newest column set first: includes session_links from
-      // 20260428_session_links migration.
-      const r = await admin.from('portfolio_locations').select(`${baseCols},pinterest_url,blog_url,session_links`).in('id', ids)
+      // 20260428_session_links migration + parking_type/lat/lng from
+      // the parking-pin migration. Falls back stepwise so an older
+      // schema still returns the base data.
+      const r = await admin.from('portfolio_locations').select(`${baseCols},parking_type,parking_latitude,parking_longitude,pinterest_url,blog_url,session_links`).in('id', ids)
       if (r.error) {
-        // Drop session_links and retry — covers Supabase instances
-        // that haven't run the migration yet.
-        const r2 = await admin.from('portfolio_locations').select(`${baseCols},pinterest_url,blog_url`).in('id', ids)
-        if (r2.error) {
-          const fb = await admin.from('portfolio_locations').select(baseCols).in('id', ids)
-          portfolioRows = fb.data ?? []
+        const r15 = await admin.from('portfolio_locations').select(`${baseCols},pinterest_url,blog_url,session_links`).in('id', ids)
+        if (r15.error) {
+          const r2 = await admin.from('portfolio_locations').select(`${baseCols},pinterest_url,blog_url`).in('id', ids)
+          if (r2.error) {
+            const fb = await admin.from('portfolio_locations').select(baseCols).in('id', ids)
+            portfolioRows = fb.data ?? []
+          } else {
+            portfolioRows = r2.data ?? []
+          }
         } else {
-          portfolioRows = r2.data ?? []
+          portfolioRows = r15.data ?? []
         }
       } else {
         portfolioRows = r.data ?? []
@@ -202,6 +214,9 @@ export async function POST(request: Request) {
         description: p.description,
         best_time: p.best_time,
         parking_info: p.parking_info,
+        parking_type: (p.parking_type === 'free' || p.parking_type === 'paid') ? p.parking_type : null,
+        parking_lat:  typeof p.parking_latitude  === 'number' ? p.parking_latitude  : null,
+        parking_lng:  typeof p.parking_longitude === 'number' ? p.parking_longitude : null,
         permit_required: p.permit_required,
         permit_notes: p.permit_notes,
         pinterest_url: p.pinterest_url ?? null,
@@ -220,11 +235,23 @@ export async function POST(request: Request) {
     // link shape). Look those up directly.
     const missing = ids.filter(id => !locDetails[id])
     if (missing.length > 0) {
-      const { data: pubRows } = await admin
+      // Try with parking cols first; fall back to base cols if the
+      // migration hasn't been run on the public locations table.
+      let pubRows: any[] = []
+      const r = await admin
         .from('locations')
-        .select('id,name,city,state,latitude,longitude,description,best_time,parking_info,permit_required,permit_notes')
+        .select('id,name,city,state,latitude,longitude,description,best_time,parking_info,parking_type,parking_latitude,parking_longitude,permit_required,permit_notes')
         .in('id', missing)
-      ;(pubRows ?? []).forEach((p: any) => {
+      if (r.error) {
+        const r2 = await admin
+          .from('locations')
+          .select('id,name,city,state,latitude,longitude,description,best_time,parking_info,permit_required,permit_notes')
+          .in('id', missing)
+        pubRows = r2.data ?? []
+      } else {
+        pubRows = r.data ?? []
+      }
+      pubRows.forEach((p: any) => {
         locDetails[p.id] = {
           id: p.id, name: p.name,
           city: p.city, state: p.state,
@@ -232,6 +259,9 @@ export async function POST(request: Request) {
           description: p.description,
           best_time: p.best_time,
           parking_info: p.parking_info,
+          parking_type: (p.parking_type === 'free' || p.parking_type === 'paid') ? p.parking_type : null,
+          parking_lat:  typeof p.parking_latitude  === 'number' ? p.parking_latitude  : null,
+          parking_lng:  typeof p.parking_longitude === 'number' ? p.parking_longitude : null,
           permit_required: p.permit_required,
           permit_notes: p.permit_notes,
           pinterest_url: null,
@@ -394,15 +424,24 @@ export async function POST(request: Request) {
             ${cityLine ? `<div style="font-size:13px; color:#6b5f52; margin:0 0 12px;">📍 ${escapeHtml(cityLine)}</div>` : '<div style="margin-bottom:12px;"></div>'}
             ${d?.description ? `<p style="font-size:14px; line-height:1.65; color:#3a3229; margin:0 0 12px; font-weight:300;">${escapeHtml(d.description)}</p>` : ''}
             ${facts.length > 0 ? `<div style="font-size:13px; line-height:1.7; color:#3a3229; margin:0 0 14px;">${facts.join('<br>')}</div>` : ''}
-            ${d?.parking_info ? `
+            ${(d?.parking_info || d?.parking_type || (d?.parking_lat != null && d?.parking_lng != null)) ? `
               <div style="margin:0 0 14px; padding:12px 14px; background:#f6efe0; border-left:3px solid ${brandAccent}; border-radius:6px;">
-                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#8a7e70; margin:0 0 4px;">🅿 Parking</div>
-                <div style="font-size:14px; line-height:1.55; color:#1a1612; font-weight:300;">${escapeHtml(d.parking_info)}</div>
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#8a7e70; margin:0 0 6px;">
+                  🅿 Parking${d?.parking_type === 'free' ? ` <span style="color:#4a6741;">· Free</span>` : d?.parking_type === 'paid' ? ` <span style="color:#b54b2a;">· Paid</span>` : ''}
+                </div>
+                ${d?.parking_info ? `<div style="font-size:14px; line-height:1.55; color:#1a1612; font-weight:300;">${escapeHtml(d.parking_info)}</div>` : ''}
+                ${(d?.parking_lat != null && d?.parking_lng != null) ? `
+                  <div style="margin-top:8px;">
+                    <a href="https://www.google.com/maps/dir/?api=1&destination=${d.parking_lat},${d.parking_lng}" style="display:inline-block;padding:7px 14px;background:white;color:#3d6e8c;text-decoration:none;border:1px solid ${brandAccent};border-radius:4px;font-size:12px;font-weight:600;">
+                      🅿 Directions to parking
+                    </a>
+                  </div>
+                ` : ''}
               </div>
             ` : ''}
             <div>
               <a href="${dirUrl}" style="display:inline-block;padding:10px 18px;background:${brandAccent};color:#1a1612;text-decoration:none;border-radius:4px;font-size:13px;font-weight:600;">
-                🗺 Get Directions
+                🗺 Get Directions to the location
               </a>
             </div>
             ${links.length > 0 ? `<div style="margin-top:12px; display:flex; gap:14px; flex-wrap:wrap;">${links.join('')}</div>` : ''}

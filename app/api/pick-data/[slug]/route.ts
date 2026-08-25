@@ -99,29 +99,42 @@ async function handlePreview(request: Request, admin: SupabaseClient): Promise<N
   // missing-column errors so an unmigrated Supabase doesn't break
   // the preview entirely.
   const baseCols = 'id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,hide_google_photos'
+  const parkingCols = 'parking_type,parking_latitude,parking_longitude'
   let portfolioRows: any[] = []
   {
+    // Newest: base + parking + link cols. Falls back by dropping the
+    // most recent migration each step.
     const r = await admin
       .from('portfolio_locations')
-      .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
+      .select(`${baseCols},${parkingCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
       .eq('user_id', user.id)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
     if (r.error) {
-      const r2 = await admin
+      const noParking = await admin
         .from('portfolio_locations')
-        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links`)
+        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
         .eq('user_id', user.id)
+        .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
-      if (r2.error) {
-        const r3 = await admin
+      if (noParking.error) {
+        const r2 = await admin
           .from('portfolio_locations')
-          .select(baseCols)
+          .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links`)
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-        portfolioRows = r3.data ?? []
+        if (r2.error) {
+          const r3 = await admin
+            .from('portfolio_locations')
+            .select(baseCols)
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+          portfolioRows = r3.data ?? []
+        } else {
+          portfolioRows = r2.data ?? []
+        }
       } else {
-        portfolioRows = r2.data ?? []
+        portfolioRows = noParking.data ?? []
       }
     } else {
       portfolioRows = r.data ?? []
@@ -440,16 +453,25 @@ export async function GET(request: Request, context: any) {
     // the migration is in, the first attempt succeeds and the fallback
     // never runs.
     const baseCols = 'id,source_location_id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,best_time,parking_info,is_secret,hide_google_photos'
+    const parkingCols = 'parking_type,parking_latitude,parking_longitude'
     let portfolioRows: any[] | null = null
     {
       // Try the newest column set first (includes show_seasons from
-      // 20260428_seasonal_photos). Each fallback drops one migration
-      // worth of columns so the page still renders on older schemas.
+      // 20260428_seasonal_photos + parking cols from the parking-pin
+      // migration). Each fallback drops one migration worth of
+      // columns so the page still renders on older schemas.
       const { data, error } = await admin
         .from('portfolio_locations')
-        .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
+        .select(`${baseCols},${parkingCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
         .in('id', portfolioIds)
       if (error) {
+        const noParking = await admin
+          .from('portfolio_locations')
+          .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links,show_seasons`)
+          .in('id', portfolioIds)
+        if (!noParking.error) {
+          portfolioRows = noParking.data ?? []
+        } else {
         const noSeasons = await admin
           .from('portfolio_locations')
           .select(`${baseCols},pinterest_url,blog_url,permit_fee,permit_website,session_links`)
@@ -474,6 +496,7 @@ export async function GET(request: Request, context: any) {
           }
         } else {
           portfolioRows = noSeasons.data ?? []
+        }
         }
       } else {
         portfolioRows = data ?? []

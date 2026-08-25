@@ -27,6 +27,15 @@ export default function AddPortfolioLocationModal({
   const [tagInput,setTagInput]= useState('')
   const [bestTime,       setBestTime]       = useState('')
   const [parkingInfo,    setParkingInfo]    = useState('')
+  // parking_type is 'free' | 'paid' | null; null = "unknown / didn't
+  // say" so we can keep the badge silent instead of rendering a
+  // misleading "Free" for spots the photographer hasn't answered on.
+  const [parkingType,    setParkingType]    = useState<'free' | 'paid' | null>(null)
+  // Separate lat/lng — parking pins are often a lot at the edge of a
+  // park while the shoot spot is a meadow inside; we don't want to
+  // conflate them with the primary location coords.
+  const [parkingLat,     setParkingLat]     = useState<number | null>(null)
+  const [parkingLng,     setParkingLng]     = useState<number | null>(null)
   const [pinterestUrl,   setPinterestUrl]   = useState('')
   const [blogUrl,        setBlogUrl]        = useState('')
   // Photographer-curated labeled links (e.g. "Family session", "Wedding
@@ -132,15 +141,32 @@ export default function AddPortfolioLocationModal({
       is_secret:          false,
       hide_google_photos: hideGooglePhotos,
     }
+    // Optional columns added by later migrations. Any of these can be
+    // stripped on the retry ladder if the DB hasn't been migrated yet.
+    const parkingCols = { parking_type: parkingType, parking_latitude: parkingLat, parking_longitude: parkingLng }
     const sessionLinksJson = sessionLinksPayload()
     let { data: inserted, error } = await supabase.from('portfolio_locations').insert({
       ...baseInsert,
+      ...parkingCols,
       pinterest_url:  pinterestUrl.trim() || null,
       blog_url:       blogUrl.trim() || null,
       permit_fee:     permitFee.trim() || null,
       permit_website: permitWebsite.trim() || null,
       session_links:  sessionLinksJson,
     }).select('id').single()
+    if (error && /parking_type|parking_latitude|parking_longitude/.test(error.message ?? '')) {
+      // Parking-pin migration hasn't run — retry with everything else.
+      const retry = await supabase.from('portfolio_locations').insert({
+        ...baseInsert,
+        pinterest_url:  pinterestUrl.trim() || null,
+        blog_url:       blogUrl.trim() || null,
+        permit_fee:     permitFee.trim() || null,
+        permit_website: permitWebsite.trim() || null,
+        session_links:  sessionLinksJson,
+      }).select('id').single()
+      inserted = retry.data
+      error    = retry.error
+    }
     if (error && /session_links/.test(error.message ?? '')) {
       // session_links column missing (migration 20260428_session_links
       // hasn't run) — retry with the rest of the optional fields intact.
@@ -320,15 +346,57 @@ export default function AddPortfolioLocationModal({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
-            <div>
-              <label style={labelStyle}>Best time</label>
-              <input value={bestTime} onChange={e => setBestTime(e.target.value)} style={inputStyle} placeholder="Golden hour, sunrise…" />
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle}>Best time</label>
+            <input value={bestTime} onChange={e => setBestTime(e.target.value)} style={inputStyle} placeholder="Golden hour, sunrise…" />
+          </div>
+
+          {/* Parking — free/paid pill toggle + optional note + optional
+              pin. Pin defaults to the location's coords when the
+              photographer opens the picker (so most spots just need
+              one drag onto the actual lot). "None yet" clears the
+              pin without wiping the type or the note. */}
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle}>Parking</label>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {(['free','paid'] as const).map(t => {
+                const on = parkingType === t
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setParkingType(on ? null : t)}
+                    style={{ padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: `1px solid ${on ? 'var(--gold)' : 'var(--cream-dark)'}`, background: on ? 'rgba(196,146,42,.1)' : 'white', color: on ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    {t === 'free' ? '🅿️ Free' : '💰 Paid'}
+                  </button>
+                )
+              })}
+              {parkingType && (
+                <button type="button" onClick={() => setParkingType(null)} style={{ padding: '7px 10px', borderRadius: 20, fontSize: 11, background: 'transparent', color: 'var(--ink-soft)', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  clear
+                </button>
+              )}
             </div>
-            <div>
-              <label style={labelStyle}>Parking info</label>
-              <input value={parkingInfo} onChange={e => setParkingInfo(e.target.value)} style={inputStyle} placeholder="Free lot, street parking…" />
+            <input value={parkingInfo} onChange={e => setParkingInfo(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }} placeholder="Free lot next to the pavilion, meter parking on 5th…" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                {parkingLat != null && parkingLng != null
+                  ? <>Pinned at {parkingLat.toFixed(5)}, {parkingLng.toFixed(5)}</>
+                  : <>Drop a pin at the actual parking spot (optional).</>}
+              </span>
+              {parkingLat != null && parkingLng != null && (
+                <button type="button" onClick={() => { setParkingLat(null); setParkingLng(null) }} style={{ background: 'none', border: 'none', color: 'var(--rust)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+                  Remove pin
+                </button>
+              )}
             </div>
+            <MapCoordPicker
+              lat={parkingLat ?? pin?.lat ?? null}
+              lng={parkingLng ?? pin?.lng ?? null}
+              onChange={(la, ln) => { setParkingLat(la); setParkingLng(ln) }}
+              height={200}
+            />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>

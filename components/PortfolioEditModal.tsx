@@ -57,6 +57,9 @@ export default function PortfolioEditModal({
   const [permitWebsite,  setPermitWebsite]  = useState('')
   const [bestTime,       setBestTime]       = useState('')
   const [parkingInfo,    setParkingInfo]    = useState('')
+  const [parkingType,    setParkingType]    = useState<'free' | 'paid' | null>(null)
+  const [parkingLat,     setParkingLat]     = useState<number | null>(null)
+  const [parkingLng,     setParkingLng]     = useState<number | null>(null)
   const [pinterestUrl,   setPinterestUrl]   = useState('')
   const [blogUrl,        setBlogUrl]        = useState('')
   // Multiple labeled session links (e.g. "Family session" → gallery
@@ -107,7 +110,7 @@ export default function PortfolioEditModal({
     let cancelled = false
     async function load() {
       const [rowRes, photosRes] = await Promise.all([
-        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,permit_fee,permit_website,best_time,parking_info,pinterest_url,blog_url,session_links,show_seasons,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
+        supabase.from('portfolio_locations').select('id,name,description,city,state,latitude,longitude,access_type,tags,permit_required,permit_notes,permit_fee,permit_website,best_time,parking_info,parking_type,parking_latitude,parking_longitude,pinterest_url,blog_url,session_links,show_seasons,is_secret,source_location_id,hide_google_photos').eq('id', portfolioId).single(),
         supabase.from('location_photos').select('id,url,storage_path,caption,sort_order,season').eq('portfolio_location_id', portfolioId).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       ])
       if (cancelled) return
@@ -145,6 +148,10 @@ export default function PortfolioEditModal({
         }
         setBestTime(rowRes.data.best_time ?? '')
         setParkingInfo(rowRes.data.parking_info ?? '')
+        const pt = (rowRes.data as any).parking_type
+        setParkingType(pt === 'free' || pt === 'paid' ? pt : null)
+        setParkingLat((rowRes.data as any).parking_latitude ?? null)
+        setParkingLng((rowRes.data as any).parking_longitude ?? null)
         setPinterestUrl(rowRes.data.pinterest_url ?? '')
         setBlogUrl(rowRes.data.blog_url ?? '')
         // Hydrate session_links — DB stores [{label,url}], we add a
@@ -206,9 +213,11 @@ export default function PortfolioEditModal({
     // 20260427_portfolio_permit_fields: permit_fee + permit_website).
     // Falls back stepwise when columns are missing so the rest of the
     // edit still saves on a Supabase instance that hasn't run them.
+    const parkingCols = { parking_type: parkingType, parking_latitude: parkingLat, parking_longitude: parkingLng }
     const sessionLinksJson = sessionLinksPayload()
     let { error } = await supabase.from('portfolio_locations').update({
       ...baseUpdate,
+      ...parkingCols,
       pinterest_url:  pinterestUrl.trim() || null,
       blog_url:       blogUrl.trim() || null,
       permit_fee:     permitFee.trim() || null,
@@ -216,6 +225,19 @@ export default function PortfolioEditModal({
       session_links:  sessionLinksJson,
       show_seasons:   showSeasons,
     }).eq('id', portfolioId)
+    if (error && /parking_type|parking_latitude|parking_longitude/.test(error.message ?? '')) {
+      // Parking-pin migration hasn't run — retry with everything else.
+      const retry = await supabase.from('portfolio_locations').update({
+        ...baseUpdate,
+        pinterest_url:  pinterestUrl.trim() || null,
+        blog_url:       blogUrl.trim() || null,
+        permit_fee:     permitFee.trim() || null,
+        permit_website: permitWebsite.trim() || null,
+        session_links:  sessionLinksJson,
+        show_seasons:   showSeasons,
+      }).eq('id', portfolioId)
+      error = retry.error
+    }
     if (error && /show_seasons/.test(error.message ?? '')) {
       // show_seasons column missing (migration 20260428_seasonal_photos
       // hasn't run) — drop it and retry with the rest intact.
@@ -575,15 +597,53 @@ export default function PortfolioEditModal({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
-                <div>
-                  <label style={labelStyle}>Best time</label>
-                  <input value={bestTime} onChange={e => setBestTime(e.target.value)} style={inputStyle} placeholder="Golden hour, sunrise…" />
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Best time</label>
+                <input value={bestTime} onChange={e => setBestTime(e.target.value)} style={inputStyle} placeholder="Golden hour, sunrise…" />
+              </div>
+
+              {/* Parking — free/paid pill toggle + note + optional pin */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Parking</label>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  {(['free','paid'] as const).map(t => {
+                    const on = parkingType === t
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setParkingType(on ? null : t)}
+                        style={{ padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: `1px solid ${on ? 'var(--gold)' : 'var(--cream-dark)'}`, background: on ? 'rgba(196,146,42,.1)' : 'white', color: on ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
+                      >
+                        {t === 'free' ? '🅿️ Free' : '💰 Paid'}
+                      </button>
+                    )
+                  })}
+                  {parkingType && (
+                    <button type="button" onClick={() => setParkingType(null)} style={{ padding: '7px 10px', borderRadius: 20, fontSize: 11, background: 'transparent', color: 'var(--ink-soft)', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      clear
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <label style={labelStyle}>Parking info</label>
-                  <input value={parkingInfo} onChange={e => setParkingInfo(e.target.value)} style={inputStyle} placeholder="Free lot, street parking…" />
+                <input value={parkingInfo} onChange={e => setParkingInfo(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }} placeholder="Free lot next to the pavilion, meter parking on 5th…" />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                    {parkingLat != null && parkingLng != null
+                      ? <>Pinned at {parkingLat.toFixed(5)}, {parkingLng.toFixed(5)}</>
+                      : <>Drop a pin at the actual parking spot (optional).</>}
+                  </span>
+                  {parkingLat != null && parkingLng != null && (
+                    <button type="button" onClick={() => { setParkingLat(null); setParkingLng(null) }} style={{ background: 'none', border: 'none', color: 'var(--rust)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+                      Remove pin
+                    </button>
+                  )}
                 </div>
+                <MapCoordPicker
+                  lat={parkingLat ?? lat ?? null}
+                  lng={parkingLng ?? lng ?? null}
+                  onChange={(la, ln) => { setParkingLat(la); setParkingLng(ln) }}
+                  height={200}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: '1rem' }}>
