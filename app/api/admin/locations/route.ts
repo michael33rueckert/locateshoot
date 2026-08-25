@@ -31,7 +31,8 @@ const INSERTABLE_FIELDS = new Set([
   'name', 'description', 'city', 'state', 'latitude', 'longitude',
   'category', 'access_type', 'tags', 'permit_required', 'permit_fee',
   'permit_notes', 'permit_website', 'permit_certainty',
-  'best_time', 'parking_info', 'status', 'rating', 'quality_score',
+  'best_time', 'parking_info', 'parking_type', 'parking_latitude', 'parking_longitude',
+  'status', 'rating', 'quality_score',
 ])
 
 export async function POST(request: Request) {

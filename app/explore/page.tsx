@@ -946,7 +946,7 @@ export default function ExplorePage() {
     // render (status, source, category, etc. aren't on the lightweight
     // detailLoc shape).
     const { data, error } = await supabase.from('locations')
-      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,status,rating,quality_score,source,created_at')
+      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,source,created_at')
       .eq('id', locId).single()
     if (error || !data) { setToast('⚠ Could not load location for edit'); return }
     setAdminEditLoc(data as any)

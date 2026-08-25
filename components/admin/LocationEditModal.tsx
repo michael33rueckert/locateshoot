@@ -18,6 +18,7 @@ export interface ManagedLocation {
   permit_required: boolean | null; permit_fee: string | null; permit_notes: string | null;
   permit_website: string | null; permit_certainty: string | null;
   best_time: string | null; parking_info: string | null;
+  parking_type: 'free' | 'paid' | null; parking_latitude: number | null; parking_longitude: number | null;
   status: string; rating: number | null; quality_score: number | null;
   source: string | null; created_at: string;
 }
@@ -34,7 +35,7 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
   async function handleSave() {
     setSaving(true)
     const patch: Partial<ManagedLocation> = {}
-    ;(['name','description','city','state','latitude','longitude','category','access_type','tags','permit_required','permit_fee','permit_notes','permit_website','permit_certainty','best_time','parking_info','status','rating','quality_score'] as const).forEach(k => {
+    ;(['name','description','city','state','latitude','longitude','category','access_type','tags','permit_required','permit_fee','permit_notes','permit_website','permit_certainty','best_time','parking_info','parking_type','parking_latitude','parking_longitude','status','rating','quality_score'] as const).forEach(k => {
       if ((f as any)[k] !== (loc as any)[k]) (patch as any)[k] = (f as any)[k]
     })
     if (Object.keys(patch).length === 0) { onClose(); setSaving(false); return }
@@ -134,8 +135,44 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
             <input style={inp} value={f.best_time ?? ''} onChange={e => upd('best_time', e.target.value || null)} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={lbl}>Parking info</label>
-            <input style={inp} value={f.parking_info ?? ''} onChange={e => upd('parking_info', e.target.value || null)} />
+            <label style={lbl}>Parking</label>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {(['free','paid'] as const).map(t => {
+                const on = f.parking_type === t
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => upd('parking_type', on ? null : t)}
+                    style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, border: `1px solid ${on ? 'var(--gold)' : 'var(--cream-dark)'}`, background: on ? 'rgba(196,146,42,.1)' : 'white', color: on ? 'var(--gold)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    {t === 'free' ? '🅿️ Free' : '💰 Paid'}
+                  </button>
+                )
+              })}
+              {f.parking_type && (
+                <button type="button" onClick={() => upd('parking_type', null)} style={{ padding: '6px 10px', borderRadius: 20, fontSize: 11, background: 'transparent', color: 'var(--ink-soft)', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>clear</button>
+              )}
+            </div>
+            <input style={{ ...inp, marginBottom: 8 }} value={f.parking_info ?? ''} onChange={e => upd('parking_info', e.target.value || null)} placeholder="Free lot next to the pavilion, meter parking on 5th…" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300 }}>
+                {f.parking_latitude != null && f.parking_longitude != null
+                  ? <>Pin at {f.parking_latitude.toFixed(5)}, {f.parking_longitude.toFixed(5)}</>
+                  : <>Drop a pin at the actual parking spot (optional).</>}
+              </span>
+              {f.parking_latitude != null && f.parking_longitude != null && (
+                <button type="button" onClick={() => { upd('parking_latitude', null); upd('parking_longitude', null) }} style={{ background: 'none', border: 'none', color: 'var(--rust)', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+                  Remove pin
+                </button>
+              )}
+            </div>
+            <MapCoordPicker
+              lat={f.parking_latitude ?? f.latitude ?? null}
+              lng={f.parking_longitude ?? f.longitude ?? null}
+              onChange={(la, ln) => { upd('parking_latitude', la); upd('parking_longitude', ln) }}
+              height={200}
+            />
           </div>
 
           <div style={{ gridColumn: '1 / -1', paddingTop: 8, borderTop: '1px solid var(--cream-dark)' }}>

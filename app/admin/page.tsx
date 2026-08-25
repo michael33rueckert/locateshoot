@@ -26,6 +26,7 @@ interface ManagedLocation {
   permit_required: boolean | null; permit_fee: string | null; permit_notes: string | null;
   permit_website: string | null; permit_certainty: string | null;
   best_time: string | null; parking_info: string | null;
+  parking_type: 'free' | 'paid' | null; parking_latitude: number | null; parking_longitude: number | null;
   status: string; rating: number | null; quality_score: number | null;
   source: string | null; created_at: string;
 }
@@ -230,7 +231,7 @@ export default function AdminPage() {
   const loadAllLocations = useCallback(async () => {
     setLocsLoading(true)
     const { data } = await supabase.from('locations')
-      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,status,rating,quality_score,source,created_at')
+      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,source,created_at')
       .order('created_at', { ascending: false })
       .limit(1000)
     setAllLocs((data ?? []) as ManagedLocation[])
