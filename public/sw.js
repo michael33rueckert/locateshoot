@@ -1,5 +1,8 @@
-const CACHE = 'locateshoot-v3'
-const PRECACHE = ['/dashboard', '/explore', '/share', '/profile', '/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png']
+// Bump this whenever notification icon assets change so old
+// installs pull the new PNGs on next visit instead of continuing
+// to serve the cached-blank icon.
+const CACHE = 'locateshoot-v4'
+const PRECACHE = ['/dashboard', '/explore', '/share', '/profile', '/icon-192.png', '/icon-512.png', '/icon-512-maskable.png', '/apple-touch-icon.png', '/notification-icon-96.png', '/notification-icon-192.png']
 
 // Install — precache core pages
 self.addEventListener('install', e => {
@@ -42,8 +45,16 @@ self.addEventListener('push', e => {
   e.waitUntil(
     self.registration.showNotification(data.title ?? 'LocateShoot', {
       body:  data.body  ?? 'You have a new notification',
-      icon:  '/icon-192.png',
-      badge: '/icon-192.png',
+      // Large icon shown in the notification body — white disc with
+      // an L cutout, works on iOS + as the body icon on Android.
+      icon:  '/notification-icon-192.png',
+      // Small status-bar / lock-screen badge on Android. Android
+      // reads only the alpha channel and re-tints with the theme
+      // accent, so the L stays punched-through and the surrounding
+      // circle picks up the system color instead of rendering the
+      // full-color app icon (which showed as a blank white disc
+      // before). iOS ignores badge; it uses icon.
+      badge: '/notification-icon-96.png',
       tag:   data.tag   ?? 'locateshoot',
       data:  { url: data.url ?? '/dashboard' },
       actions: [{ action: 'view', title: 'View' }],
