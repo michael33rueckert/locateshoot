@@ -35,6 +35,24 @@ const INSERTABLE_FIELDS = new Set([
   'status', 'rating', 'quality_score',
 ])
 
+// Service-role list of every locations row for the admin table. The
+// `locations` table's public SELECT policy is scoped to
+// status='published', so a plain client-side query from /admin hid
+// pending + draft rows — that's why searching for something you
+// know is in the DB was returning fewer results than expected.
+// Going through service role here removes RLS as a variable.
+export async function GET(request: Request) {
+  const { error, admin } = await requireAdmin(request)
+  if (error) return error
+  const { data, error: e } = await admin!
+    .from('locations')
+    .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,source,created_at')
+    .order('created_at', { ascending: false })
+    .limit(2000)
+  if (e) return NextResponse.json({ error: e.message }, { status: 500 })
+  return NextResponse.json({ rows: data ?? [] })
+}
+
 export async function POST(request: Request) {
   const { error, admin, userId } = await requireAdmin(request)
   if (error) return error

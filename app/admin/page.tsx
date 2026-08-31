@@ -228,14 +228,20 @@ export default function AdminPage() {
     if (!error) { setPendingLocs(prev => prev.filter(l => l.id !== id)); setToast('Rejected & deleted') }
   }
 
+  // Route through the service-role admin endpoint so RLS on locations
+  // (which restricts client-side SELECT to status='published') doesn't
+  // hide pending / draft rows from the table — that's why searching
+  // for a name known to be in the DB was showing "not found".
   const loadAllLocations = useCallback(async () => {
     setLocsLoading(true)
-    const { data } = await supabase.from('locations')
-      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,source,created_at')
-      .order('created_at', { ascending: false })
-      .limit(1000)
-    setAllLocs((data ?? []) as ManagedLocation[])
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) { setLocsLoading(false); return }
+    const res = await fetch('/api/admin/locations', { headers: { Authorization: `Bearer ${token}` } })
     setLocsLoading(false)
+    if (!res.ok) return
+    const json = await res.json().catch(() => ({}))
+    setAllLocs((json?.rows ?? []) as ManagedLocation[])
   }, [])
 
   useEffect(() => { if (ready) loadAllLocations() }, [ready, loadAllLocations])

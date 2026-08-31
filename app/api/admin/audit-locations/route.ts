@@ -32,6 +32,7 @@ interface AuditLocation {
   longitude: number | null
   description: string | null
   category: string | null
+  status?: string
 }
 
 interface DuplicateFlag {
@@ -288,10 +289,16 @@ export async function POST(request: Request) {
     const batchIndex = Math.max(0, parseInt(url.searchParams.get('batch') ?? '0', 10) || 0)
     const BATCH_SIZE = 50
 
+    // All statuses — a pending scanner pick that duplicates a
+    // published row should still surface as a duplicate here (they
+    // don't dedup against each other at insert time when the pending
+    // row landed before the current dedup checks were added). The
+    // AI incorrect-flag pass below still runs on the same slice, so
+    // it'll also cover pending rows that need attention.
     const { data: rows, error } = await admin
       .from('locations')
-      .select('id,name,city,state,latitude,longitude,description,category')
-      .eq('status', 'published')
+      .select('id,name,city,state,latitude,longitude,description,category,status')
+      .in('status', ['published', 'pending', 'draft'])
       .order('created_at', { ascending: true })
       .limit(2000)
     if (error) return NextResponse.json({ error: 'query_failed', message: error.message }, { status: 500 })
