@@ -55,14 +55,17 @@ export async function POST(request: Request) {
     // cheap; commit re-checks with the same logic so nothing sneaks
     // through even if the admin approves a flagged row.
     const stateGuess = (candidates[0]?.state ?? '').trim() || city.split(',')[1]?.trim() || ''
+    // Pull all statuses (published + pending + rejected + …) so the
+    // preview surfaces conflicts against rejects too — a candidate
+    // the admin already rejected should show "⚠ likely duplicate"
+    // instead of appearing as fresh.
     let existingQuery = supabase
       .from('locations')
-      .select('id, name, city, state, latitude, longitude')
-      .eq('status', 'published')
+      .select('id, name, city, state, latitude, longitude, status')
     if (stateGuess) existingQuery = existingQuery.eq('state', stateGuess)
     else            existingQuery = existingQuery.ilike('city', `%${city.split(',')[0].trim()}%`)
     const { data: existingRows } = await existingQuery
-    const existing = (existingRows ?? []) as Array<{ id: string; name: string; city: string; state: string | null; latitude: number | null; longitude: number | null }>
+    const existing = (existingRows ?? []) as Array<{ id: string; name: string; city: string; state: string | null; latitude: number | null; longitude: number | null; status?: string }>
 
     const annotated = candidates.map(c => {
       // Name-based fuzzy match (same city or same first-city-token).
@@ -77,13 +80,22 @@ export async function POST(request: Request) {
           )
         : null
       const hit = nameConflict ?? proxConflict ?? null
+      // Lead with the "already rejected" reason when applicable so
+      // the admin sees "no, I already said no to this" before
+      // deciding whether to include it again.
+      const baseReason = nameConflict ? 'similar name' : 'same coordinates'
+      const reason = hit?.status === 'rejected'
+        ? `previously rejected · ${baseReason}`
+        : hit?.status === 'pending'
+          ? `already in review queue · ${baseReason}`
+          : baseReason
       return {
         ...c,
         conflict: hit ? {
           id:   hit.id,
           name: hit.name,
           city: hit.city,
-          reason: nameConflict ? 'similar name' : 'same coordinates',
+          reason,
         } : null,
       }
     })

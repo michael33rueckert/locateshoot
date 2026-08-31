@@ -86,20 +86,18 @@ export default function PendingScanReviewOverlay({ onClose }: { onClose: () => v
     const token = session?.access_token
     if (!token) { setError('Not signed in'); setBusy(false); return }
     try {
-      if (kind === 'keep') {
-        const res = await fetch(`/api/admin/locations/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ status: 'published' }),
-        })
-        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'publish failed')
-      } else {
-        const res = await fetch(`/api/admin/locations/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? 'delete failed')
-      }
+      // Both actions PATCH the row's status — reject used to DELETE,
+      // but that meant the next cron scan would happily re-propose
+      // the exact same location. Marking as 'rejected' keeps the row
+      // in the dedup pool (scan-locations.ts fuzzy-match sees ALL
+      // statuses) so it stays "no, not this one" forever.
+      const nextStatus = kind === 'keep' ? 'published' : 'rejected'
+      const res = await fetch(`/api/admin/locations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: nextStatus }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error ?? `${kind} failed`)
       setQueue(prev => prev.slice(1))
       setDone(d => d + 1)
     } catch (err: any) {
@@ -166,7 +164,7 @@ export default function PendingScanReviewOverlay({ onClose }: { onClose: () => v
               onClick={() => decide('reject')}
               disabled={busy}
               style={{ width: 68, height: 68, borderRadius: 34, background: 'white', color: 'var(--rust)', border: '2px solid rgba(255,255,255,.4)', fontSize: 28, fontWeight: 700, cursor: busy ? 'default' : 'pointer', boxShadow: '0 6px 20px rgba(0,0,0,.35)', fontFamily: 'inherit', opacity: busy ? .5 : 1 }}
-              title="Delete (←)"
+              title="Reject — won't be re-suggested (←)"
             >✕</button>
             <button
               onClick={() => decide('keep')}
@@ -288,7 +286,7 @@ function ReviewCard({ loc, busy, onDecide }: { loc: PendingLoc; busy: boolean; o
         )}
         {/* Decision badges — fade in as the drag crosses the threshold */}
         <div style={{ position: 'absolute', top: 18, right: 18, padding: '8px 16px', borderRadius: 6, border: '3px solid var(--sage)', color: 'var(--sage)', background: 'rgba(255,255,255,.95)', fontSize: 22, fontWeight: 800, letterSpacing: '.1em', transform: 'rotate(8deg)', opacity: keepOpacity, transition: 'none', pointerEvents: 'none' }}>KEEP</div>
-        <div style={{ position: 'absolute', top: 18, left: 18, padding: '8px 16px', borderRadius: 6, border: '3px solid var(--rust)', color: 'var(--rust)', background: 'rgba(255,255,255,.95)', fontSize: 22, fontWeight: 800, letterSpacing: '.1em', transform: 'rotate(-8deg)', opacity: rejectOpacity, transition: 'none', pointerEvents: 'none' }}>DELETE</div>
+        <div style={{ position: 'absolute', top: 18, left: 18, padding: '8px 16px', borderRadius: 6, border: '3px solid var(--rust)', color: 'var(--rust)', background: 'rgba(255,255,255,.95)', fontSize: 22, fontWeight: 800, letterSpacing: '.1em', transform: 'rotate(-8deg)', opacity: rejectOpacity, transition: 'none', pointerEvents: 'none' }}>REJECT</div>
         {hasPhoto && photos.length > 1 && (
           <div style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(0,0,0,.6)', color: 'white', fontSize: 10, padding: '3px 8px', borderRadius: 20 }}>
             <button onClick={() => setActivePhoto(i => Math.max(0, i - 1))} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0 4px', fontSize: 12 }}>‹</button>

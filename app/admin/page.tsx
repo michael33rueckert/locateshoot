@@ -83,7 +83,7 @@ export default function AdminPage() {
 
   const [allLocs,        setAllLocs]        = useState<ManagedLocation[]>([])
   const [locSearch,      setLocSearch]      = useState('')
-  const [locStatus,      setLocStatus]      = useState<'all'|'published'|'pending'>('all')
+  const [locStatus,      setLocStatus]      = useState<'all'|'published'|'pending'|'rejected'>('all')
   const [locsLoading,    setLocsLoading]    = useState(false)
   const [editingLoc,     setEditingLoc]     = useState<ManagedLocation | null>(null)
   const [addLocOpen,     setAddLocOpen]     = useState(false)
@@ -277,6 +277,10 @@ export default function AdminPage() {
   }, [ready])
 
   const filteredAllLocs = allLocs.filter(l => {
+    // 'all' hides rejects because they'd otherwise pollute the
+    // working set with every past scanner rejection. The dedicated
+    // 'rejected' tab is the way to see + optionally un-reject them.
+    if (locStatus === 'all' && l.status === 'rejected') return false
     if (locStatus !== 'all' && l.status !== locStatus) return false
     const q = locSearch.trim().toLowerCase()
     if (!q) return true
@@ -577,7 +581,7 @@ export default function AdminPage() {
 
           <div style={{ padding: '0.75rem 1.25rem', display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid var(--cream-dark)', flexWrap: 'wrap' }}>
             <input value={locSearch} onChange={e => setLocSearch(e.target.value)} placeholder="Search name / city / state…" style={{ flex: 1, minWidth: 200, padding: '8px 12px', border: '1px solid var(--cream-dark)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13, outline: 'none' }} />
-            {(['all','published','pending'] as const).map(s => (
+            {(['all','published','pending','rejected'] as const).map(s => (
               <button key={s} onClick={() => setLocStatus(s)} style={{ padding: '6px 12px', borderRadius: 4, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', border: `1px solid ${locStatus === s ? 'var(--gold)' : 'var(--cream-dark)'}`, background: locStatus === s ? 'rgba(196,146,42,.1)' : 'white', color: locStatus === s ? 'var(--gold)' : 'var(--ink-soft)', fontWeight: locStatus === s ? 500 : 400, textTransform: 'capitalize' }}>{s}</button>
             ))}
             <button onClick={loadAllLocations} disabled={locsLoading} style={{ padding: '6px 12px', borderRadius: 4, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', border: '1px solid var(--cream-dark)', background: 'white', color: 'var(--ink-soft)' }}>{locsLoading ? '…' : '↻'}</button>

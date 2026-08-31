@@ -101,6 +101,7 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
               <option value="pending">pending</option>
               <option value="draft">draft</option>
               <option value="archived">archived</option>
+              <option value="rejected">rejected</option>
             </select>
           </div>
           <div>

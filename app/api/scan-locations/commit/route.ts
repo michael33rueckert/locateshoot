@@ -46,10 +46,12 @@ export async function POST(request: Request) {
     // different metros.
     const rawCandidatesSanitized = rawCandidates.map(sanitizeLocation)
     const stateGuess = (rawCandidatesSanitized[0]?.state ?? '').trim() || city.split(',')[1]?.trim() || ''
+    // No status filter — the dedup pool must include pending
+    // scanner queue rows AND rejected rows so we don't re-insert
+    // something the admin already said "no" to via the swipe UI.
     let existingQuery = supabase
       .from('locations')
-      .select('id, name, city, state, latitude, longitude')
-      .eq('status', 'published')
+      .select('id, name, city, state, latitude, longitude, status')
     if (stateGuess) existingQuery = existingQuery.eq('state', stateGuess)
     else            existingQuery = existingQuery.ilike('city', `%${city.split(',')[0].trim()}%`)
     const { data: existingInState } = await existingQuery
