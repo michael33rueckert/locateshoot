@@ -47,12 +47,23 @@ export default function HomeMap({ variant, flyTo }: HomeMapProps) {
         scrollWheelZoom:    !isHero,
       }).setView([39.5, -95.5], isHero ? 6 : 7)
 
-      L.tileLayer(
-        isHero
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' }
-      ).addTo(map)
+      // OpenStreetMap standard tiles — Carto's basemap CDN started
+      // returning "API Key Required" for anonymous requests. OSM is
+      // key-free. Hero variant used to show the dark_all style; we
+      // fake a dark render below via a CSS filter on the tile pane
+      // so the hero background stays visually close to what it was.
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map)
+      if (isHero) {
+        // Invert + hue-rotate the tile canvas so the light OSM style
+        // renders as a muted dark map. Cheap approximation of Carto's
+        // dark_all — the hero's dark gradient overlay covers most of
+        // it anyway, so slight color shifts don't matter.
+        const pane = map.getPane('tilePane')
+        if (pane) pane.style.filter = 'invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)'
+      }
 
       LOCATIONS.forEach(loc => {
         const isFeatured = loc.type === 'featured'

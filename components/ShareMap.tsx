@@ -56,9 +56,11 @@ export default function ShareMap({
       const map = L.map(container, { zoomControl: true })
         .setView([39.09, -94.58], 11)
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      // OSM standard tiles — see other map components for the reason
+      // we moved off Carto's CDN.
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '© OpenStreetMap © CARTO',
+        attribution: '© OpenStreetMap contributors',
       }).addTo(map)
 
       map.on('click', (e: any) => {

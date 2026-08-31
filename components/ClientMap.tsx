@@ -84,10 +84,15 @@ export default function ClientMap({
       const map = L.map(container, { zoomControl: false, attributionControl: false })
         .setView([39.09, -94.58], 11)
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      // OSM standard tiles — Carto's basemap CDN started responding
+      // with "API Key Required" for anonymous requests. Faking dark
+      // via a CSS invert on the tile pane (was dark_all before).
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '© OpenStreetMap © CARTO',
+        attribution: '© OpenStreetMap contributors',
       }).addTo(map)
+      const tilePane = map.getPane('tilePane')
+      if (tilePane) tilePane.style.filter = 'invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)'
 
       L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map)
       L.control.zoom({ position: 'bottomright' }).addTo(map)

@@ -108,9 +108,13 @@ export default function ExploreMap({
       }).setView(initial.center, initial.zoom)
       if (homeLocation) initialViewApplied.current = true
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      // OpenStreetMap standard tiles — key-free, no anonymous rate
+      // limiting like Carto started imposing. Kept the same 19-max
+      // zoom + attribution shape so downstream layout code (permit
+      // panels sit relative to attribution height) doesn't shift.
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '© OpenStreetMap © CARTO',
+        attribution: '© OpenStreetMap contributors',
       }).addTo(map)
 
       L.control.zoom({ position: 'bottomright' }).addTo(map)

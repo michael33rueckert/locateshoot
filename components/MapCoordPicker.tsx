@@ -59,9 +59,11 @@ export default function MapCoordPicker({
       const zoom = initialZoom ?? (hasPoint ? 15 : 4)
       const map = L.map(container, { zoomControl: true }).setView(center, zoom)
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      // OSM standard tiles — see other map components for the reason
+      // we moved off Carto's CDN.
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '© OpenStreetMap © CARTO',
+        attribution: '© OpenStreetMap contributors',
       }).addTo(map)
 
       const marker = L.marker(center, { draggable: true })
