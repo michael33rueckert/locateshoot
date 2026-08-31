@@ -79,10 +79,16 @@ function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; o
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete, onAdminManagePhotos, photoRefreshTick }: {
+function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete, onAdminManagePhotos, onViewPublicListing, photoRefreshTick }: {
   loc:any; portfolioId:string|null; isFavorite:boolean; onToggleFavorite:(id:any)=>void; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; onOpenLightbox:(src:string|string[], start?:number)=>void; user:any
   isAdmin:boolean; onAdminEdit:(locId:string)=>void; onAdminDelete:(locId:string)=>Promise<void>
   onAdminManagePhotos:(locId:string, locName:string)=>void
+  // When the current pin is a portfolio pin that maps to a public
+  // location (either linked via source_location_id or a manual pin
+  // that near-matches a public row), the parent passes a handler that
+  // reopens the panel with the underlying public row's data. Undefined
+  // when there's no public equivalent to switch to.
+  onViewPublicListing?: (publicId: string) => void
   // Bumped by the parent whenever a photo mutation happens (upload or
   // delete via LocationPhotosModal) so the effect below refetches
   // without needing the modal to reach into DetailPanel state.
@@ -222,7 +228,11 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
   const permitCfg = PERMIT_CFG[loc.permit_certainty ?? 'unknown'] ?? PERMIT_CFG.unknown
 
   function shareWithClient() {
-    sessionStorage.setItem('sharePreselectedLocation', JSON.stringify({ id:loc.id, name:loc.name, city:loc.city, lat:loc.lat, lng:loc.lng, access:loc.access, rating:loc.rating, bg:loc.bg, type:'favorite' }))
+    // For linked portfolio pins the pin id is synthetic
+    // (`portfolio:…`) — share flows on the receiving end key off the
+    // real public id, so use publicEquivalentId when available.
+    const shareId = loc.publicEquivalentId ?? loc.source_location_id ?? loc.id
+    sessionStorage.setItem('sharePreselectedLocation', JSON.stringify({ id:shareId, name:loc.name, city:loc.city, lat:loc.lat, lng:loc.lng, access:loc.access, rating:loc.rating, bg:loc.bg, type:'favorite' }))
     router.push('/location-guides?new=1')
   }
 
@@ -360,7 +370,16 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
               entries via the regular Location Guide creation flow. */}
           {user && !loc.isManualPortfolio && (
             <button
-              onClick={() => onToggleFavorite(loc.id)}
+              onClick={() => {
+                // location_favorites.location_id is an FK to public
+                // locations. Portfolio pins have a synthetic
+                // `portfolio:…` id — use their publicEquivalentId
+                // instead, or skip if the pin doesn't map to a
+                // public row.
+                const id = loc.publicEquivalentId ?? loc.source_location_id ?? loc.id
+                if (typeof id === 'string' && id.startsWith('portfolio:')) return
+                onToggleFavorite(id)
+              }}
               style={{
                 width: '100%', padding: '12px', borderRadius: 4,
                 background: isFavorite ? 'rgba(196,146,42,.12)' : 'white',
@@ -375,6 +394,17 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
             </button>
           )}
           {user && !loc.isManualPortfolio && <button onClick={shareWithClient} style={{width:'100%',padding:'12px',borderRadius:4,background:'var(--gold)',color:'var(--ink)',border:'none',fontFamily:'inherit',fontSize:14,fontWeight:500,cursor:'pointer',marginBottom:'1rem'}}>🔗 Share with client</button>}
+          {/* Portfolio pin viewing an override — offer a jump to the
+              public row so the photographer can compare their own edits
+              against the source (e.g. to see how permit / parking info
+              changed on the public side after they grabbed it). */}
+          {loc.publicEquivalentId && onViewPublicListing && (
+            <button
+              onClick={() => onViewPublicListing(loc.publicEquivalentId)}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 4, background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--cream-dark)', fontFamily: 'inherit', fontSize: 13, cursor: 'pointer', marginBottom: '1rem' }}>
+              🌐 View the public listing
+            </button>
+          )}
           {isAdmin&&(
             <div style={{padding:'10px 12px',background:'rgba(26,22,18,.04)',border:'1px dashed var(--cream-dark)',borderRadius:6,marginBottom:'1rem',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginRight:'auto'}}>🛠 Admin</span>
@@ -668,27 +698,35 @@ export default function ExplorePage() {
       })
   }, [user])
 
-  // Load the user's manually-added portfolio locations (no
-  // source_location_id) so they show up on the map under "My Portfolio".
-  // Public-locations-via-source already render through the main
-  // locations query — those are filtered to is null here so we don't
-  // double-render them.
+  // Load ALL of the photographer's portfolio locations (both the
+  // manual "I know a spot Google doesn't" entries with a null
+  // source_location_id AND the "I grabbed a public one" entries
+  // that link back to a public row). Each renders on the map as a
+  // pin carrying THIS user's data (their edits, description, coords,
+  // tags) — the public counterpart, if one exists, is hidden from
+  // the merged list so the photographer sees only one pin per real
+  // spot. `source_location_id` on the pin is what the "View public
+  // listing" button uses to jump back to the original public row.
   useEffect(() => {
     if (!user) { setManualPortfolioLocs([]); return }
     let cancelled = false
     ;(async () => {
       const { data, error } = await supabase
         .from('portfolio_locations')
-        .select('id,name,city,state,latitude,longitude,access_type,tags,description,is_secret,permit_required,permit_notes,permit_fee,permit_website,sort_order,created_at')
+        .select('id,source_location_id,name,city,state,latitude,longitude,access_type,tags,description,is_secret,permit_required,permit_notes,permit_fee,permit_website,sort_order,created_at')
         .eq('user_id', user.id)
-        .is('source_location_id', null)
       if (cancelled || error || !data) return
       const rows = data
         .filter((p: any) => p.latitude != null && p.longitude != null)
         .map((p: any, idx: number) => ({
-          id:                `manual:${p.id}`,
+          // Pin id prefix keeps portfolio pins distinct from public
+          // location ids even for linked entries (whose
+          // source_location_id equals a real public id).
+          id:                    `portfolio:${p.id}`,
           portfolio_location_id: p.id,
-          isManualPortfolio: true,
+          source_location_id:    p.source_location_id ?? null,
+          isManualPortfolio:     !p.source_location_id,
+          isMine:                true,
           name:              p.name,
           city:              p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
           lat:               p.latitude,
@@ -1061,14 +1099,42 @@ export default function ExplorePage() {
   const homeOnly       = !!homeLocation && !strictNearRef
 
   const filtered = useMemo(()=>{
-    // Merge in the user's manually-added portfolio locations so they
-    // appear on the map alongside the public catalog. Manual entries
-    // are identified by isManualPortfolio so the My Portfolio filter
-    // includes them even though they aren't in portfolioSources (which
-    // only tracks Explore-sourced portfolio adds).
-    const merged = manualPortfolioLocs.length > 0 ? [...locations, ...manualPortfolioLocs] : locations
+    // Merge portfolio pins into the public catalog with a hard rule:
+    // once a photographer has grabbed (or manually recreated near) a
+    // public spot, the public pin disappears and the portfolio pin
+    // takes its place. Two ways a public row gets "overridden":
+    //   1. Explicit — a portfolio row's source_location_id equals it.
+    //   2. Fuzzy — a manual portfolio row within ~150 m carries a
+    //      name substring match (case-insensitive) with the public
+    //      row's name. Catches the "I added Loose Park manually
+    //      before the public one existed" case that showed up as a
+    //      duplicate pin.
+    // Each portfolio pin also learns its publicEquivalentId so the
+    // DetailPanel can offer a "View public listing" button.
+    const NEAR_M = 0.0932  // ~150 m in miles
+    const overridden = new Set<string>()
+    const pinsWithEquivalent = manualPortfolioLocs.map((pin: any) => {
+      let equivalentId: string | null = pin.source_location_id ? String(pin.source_location_id) : null
+      if (!equivalentId && pin.isManualPortfolio) {
+        // Cheap normalized-name match against public locations within
+        // the near-radius. First hit wins.
+        const nname = String(pin.name ?? '').toLowerCase().trim()
+        const match = locations.find((l: any) =>
+          Number.isFinite(l.lat) && Number.isFinite(l.lng)
+          && distMiles(pin.lat, pin.lng, l.lat, l.lng) < NEAR_M
+          && (String(l.name ?? '').toLowerCase().includes(nname) || nname.includes(String(l.name ?? '').toLowerCase()))
+        )
+        if (match) equivalentId = String(match.id)
+      }
+      if (equivalentId) overridden.add(equivalentId)
+      return { ...pin, publicEquivalentId: equivalentId }
+    })
+    const visiblePublic = overridden.size > 0
+      ? locations.filter((l: any) => !overridden.has(String(l.id)))
+      : locations
+    const merged = pinsWithEquivalent.length > 0 ? [...visiblePublic, ...pinsWithEquivalent] : visiblePublic
     let result=merged.filter((loc:any)=>{
-      const isMine = portfolioSources.has(loc.id) || loc.isManualPortfolio === true
+      const isMine = portfolioSources.has(loc.id) || loc.isMine === true || loc.isManualPortfolio === true
       const matchesAccess=accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Portfolio'?isMine:true
       const matchesTags=selectedTags.length===0||selectedTags.some(t=>(loc.tags??[]).some((lt:string)=>lt.toLowerCase().includes(t.toLowerCase())))
       const q=searchQuery.toLowerCase().trim()
@@ -1170,9 +1236,27 @@ export default function ExplorePage() {
   // filters (search, tags, access, rating) still apply because those
   // are user choices to narrow the visible set.
   const mapMarkers = useMemo(() => {
-    const merged = manualPortfolioLocs.length > 0 ? [...locations, ...manualPortfolioLocs] : locations
+    // Same override-collapse rule as the sidebar list: portfolio pins
+    // hide the public pin they cover, so a photographer's map never
+    // shows the "Loose Park public" + "Loose Park (mine)" duplicate.
+    const NEAR_M = 0.0932
+    const overridden = new Set<string>()
+    for (const pin of manualPortfolioLocs) {
+      if (pin.source_location_id) overridden.add(String(pin.source_location_id))
+      else if (pin.isManualPortfolio) {
+        const nname = String(pin.name ?? '').toLowerCase().trim()
+        const match = locations.find((l: any) =>
+          Number.isFinite(l.lat) && Number.isFinite(l.lng)
+          && distMiles(pin.lat, pin.lng, l.lat, l.lng) < NEAR_M
+          && (String(l.name ?? '').toLowerCase().includes(nname) || nname.includes(String(l.name ?? '').toLowerCase()))
+        )
+        if (match) overridden.add(String(match.id))
+      }
+    }
+    const visiblePublic = overridden.size > 0 ? locations.filter((l:any) => !overridden.has(String(l.id))) : locations
+    const merged = manualPortfolioLocs.length > 0 ? [...visiblePublic, ...manualPortfolioLocs] : visiblePublic
     return merged.filter((loc:any) => {
-      const isMine = portfolioSources.has(loc.id) || loc.isManualPortfolio === true
+      const isMine = portfolioSources.has(loc.id) || loc.isMine === true || loc.isManualPortfolio === true
       const matchesAccess = accessFilter==='All'?true:accessFilter==='Public'?loc.access==='public':accessFilter==='Private'?loc.access==='private':accessFilter==='My Portfolio'?isMine:true
       const matchesTags = selectedTags.length===0 || selectedTags.some(t => (loc.tags??[]).some((lt:string) => lt.toLowerCase().includes(t.toLowerCase())))
       const q = searchQuery.toLowerCase().trim()
@@ -1461,18 +1545,26 @@ export default function ExplorePage() {
       {detailLoc&&(
         <DetailPanel
           loc={detailLoc}
-          /* For Explore-sourced portfolio entries, look up the linked
-             portfolio_location.id via portfolioSources. For manually-
-             added portfolio entries (which have no public location
-             row), fall back to the portfolio_location_id we stored on
-             the merged map row. Either way, a non-null portfolioId
-             means the panel renders the "✓ In your portfolio" UI. */
+          /* Portfolio pin (both manual + linked) carries the
+             portfolio_location_id directly — the map row was built
+             from portfolio_locations so we already have it. Public
+             pin falls back to portfolioSources for the case where
+             the pin isn't overridden but is still "grabbed". A non-
+             null portfolioId means the panel renders the "✓ In your
+             portfolio" UI. */
           portfolioId={
-            detailLoc.isManualPortfolio
-              ? (detailLoc.portfolio_location_id ?? null)
-              : (portfolioSources.get(String(detailLoc.id)) ?? null)
+            detailLoc.portfolio_location_id
+              ?? portfolioSources.get(String(detailLoc.id))
+              ?? null
           }
-          isFavorite={favoriteIds.has(String(detailLoc.id))}
+          isFavorite={(() => {
+            // Favorite state is keyed on the public location id; for
+            // portfolio pins prefer the public equivalent so the star
+            // reflects reality when the photographer favorited the
+            // same spot before grabbing it.
+            const id = detailLoc.publicEquivalentId ?? detailLoc.source_location_id ?? detailLoc.id
+            return favoriteIds.has(String(id))
+          })()}
           onToggleFavorite={toggleFavorite}
           onClose={()=>setDetailLoc(null)}
           onAddToPortfolio={addToPortfolio}
@@ -1483,6 +1575,13 @@ export default function ExplorePage() {
           onAdminEdit={adminEditLocation}
           onAdminDelete={adminDeleteLocation}
           onAdminManagePhotos={(id, name) => setAdminPhotoLoc({ id, name })}
+          onViewPublicListing={(publicId) => {
+            // The public row is in `locations` state — flip the panel
+            // to it. activeId also updates so the map re-anchors and
+            // the sidebar highlight follows.
+            const pub = locations.find((l: any) => String(l.id) === String(publicId))
+            if (pub) { setDetailLoc(pub); setActiveId(pub.id) }
+          }}
           photoRefreshTick={photoRefreshTick}
         />
       )}
