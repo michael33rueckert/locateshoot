@@ -129,6 +129,21 @@ export default function ExploreMap({
         onMapMoveRef.current({ lat: c.lat, lng: c.lng }, map.getZoom())
       })
 
+      // Google-Maps-style label reveal — every marker gets a
+      // permanent tooltip below (see the marker loop), but the
+      // CSS rule in globals.css hides all of them unless the map
+      // container carries `explore-map-show-labels`. We flip the
+      // class based on current zoom: below the threshold the map
+      // stays visually calm; above it, every visible marker earns
+      // a name. 13 is roughly city-neighborhood zoom — dense enough
+      // to matter, sparse enough not to overlap into chaos.
+      const LABEL_ZOOM_THRESHOLD = 13
+      const updateLabelVisibility = () => {
+        container.classList.toggle('explore-map-show-labels', map.getZoom() >= LABEL_ZOOM_THRESHOLD)
+      }
+      map.on('zoomend', updateLabelVisibility)
+      updateLabelVisibility()
+
       mapRef.current = map
     })
 
@@ -246,6 +261,17 @@ export default function ExploreMap({
            <span style="color:#6b5f52;font-size:12px;">📍 ${loc.city}</span><br>
            <span style="color:#c4922a;font-size:12px;">★ ${loc.rating}</span>`
         )
+        // Permanent name label — DOM node exists on every marker but
+        // display:none unless the map container has the show-labels
+        // class (see updateLabelVisibility above + the CSS rule in
+        // globals.css). At high zoom the labels appear alongside
+        // their pins, Google-Maps-style.
+        marker.bindTooltip(loc.name, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -8],
+          className: 'explore-map-label',
+        })
         if (isActive) marker.bringToFront()
 
         markersRef.current[loc.id] = marker
