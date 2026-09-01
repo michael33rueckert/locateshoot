@@ -904,26 +904,41 @@ body {
    appear only when zoomed in enough. ExploreMap.tsx toggles the
    .explore-map-show-labels class on the map container based on
    zoom (threshold 13); default (no class) hides every label so
-   the map stays legible at wide zooms. */
+   the map stays legible at wide zooms.
+
+   No background box — just the text with a white halo (multi-
+   layer text-shadow) so it stays readable on any tile color the
+   basemap throws at it, whether that's grey road, green park,
+   or blue water. */
 .explore-map-label.leaflet-tooltip {
-  background: rgba(255, 255, 255, .92) !important;
-  border: 1px solid rgba(0, 0, 0, .08) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
   color: #1a1612 !important;
   font-family: var(--font-dm-sans), sans-serif !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  padding: 2px 7px !important;
-  border-radius: 4px !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .18) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
   white-space: nowrap !important;
-  pointer-events: none !important;
+  /* Four-corner halo (was 8-offset) — same visual read, half the
+     text-shadow work per label per paint. */
+  text-shadow:
+    -1px -1px 0 #fff,
+     1px -1px 0 #fff,
+    -1px  1px 0 #fff,
+     1px  1px 0 #fff !important;
+  /* Enable clicks — the marker's onMarkerClick fires when the
+     tooltip is tapped (via marker.getTooltip().on('click', …)). */
+  pointer-events: auto !important;
+  cursor: pointer !important;
 }
 /* Kill Leaflet's default tooltip triangle — pins are small enough that
    an anchored pointer just adds visual noise. */
 .explore-map-label.leaflet-tooltip::before { display: none !important; }
-.leaflet-container:not(.explore-map-show-labels) .explore-map-label.leaflet-tooltip {
-  display: none !important;
-}
+/* Promote the tooltip pane to its own compositing layer so pan/zoom
+   transforms are handled on the GPU instead of triggering a layout
+   pass across the tooltip DOM subtree every frame. */
+.leaflet-tooltip-pane { will-change: transform; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 1024px) {

@@ -52,6 +52,22 @@ interface ExploreMapProps {
 const USA_VIEW = { center: [39.5, -98.5] as [number, number], zoom: 4 }
 const HOME_CITY_ZOOM = 11
 
+// Zoom threshold at which pin-name labels appear. Roughly city-
+// neighborhood zoom — dense enough that labels are useful, sparse
+// enough that they don't overlap into visual chaos.
+const LABEL_ZOOM_THRESHOLD = 13
+
+// Options passed to marker.bindTooltip on label activation. Kept
+// as a module-level constant so the shape is stable across binds
+// and doesn't allocate a new object per marker per zoom event.
+const LABEL_OPTS = {
+  permanent:   true,
+  direction:   'top' as const,
+  offset:      [0, -8] as [number, number],
+  className:   'explore-map-label',
+  interactive: true,
+}
+
 export default function ExploreMap({
   locations,
   activeId,
@@ -73,6 +89,14 @@ export default function ExploreMap({
   // the home-location effect below would re-center the map every time the
   // photographer pans away — annoying instead of helpful.
   const initialViewApplied = useRef(false)
+  // Labels tracking — labelsShownRef mirrors the "are tooltips
+  // currently bound?" state so applyLabelsForCurrentZoom short-
+  // circuits when zoom crosses within the same tier. The applier
+  // itself is stashed on a ref so the marker-refresh effect can
+  // invoke it after rebuilding markers without needing to re-run
+  // the init useEffect.
+  const labelsShownRef            = useRef(false)
+  const applyLabelsForCurrentZoomRef = useRef<(() => void) | null>(null)
 
   // ── Init map ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -129,20 +153,36 @@ export default function ExploreMap({
         onMapMoveRef.current({ lat: c.lat, lng: c.lng }, map.getZoom())
       })
 
-      // Google-Maps-style label reveal — every marker gets a
-      // permanent tooltip below (see the marker loop), but the
-      // CSS rule in globals.css hides all of them unless the map
-      // container carries `explore-map-show-labels`. We flip the
-      // class based on current zoom: below the threshold the map
-      // stays visually calm; above it, every visible marker earns
-      // a name. 13 is roughly city-neighborhood zoom — dense enough
-      // to matter, sparse enough not to overlap into chaos.
-      const LABEL_ZOOM_THRESHOLD = 13
-      const updateLabelVisibility = () => {
-        container.classList.toggle('explore-map-show-labels', map.getZoom() >= LABEL_ZOOM_THRESHOLD)
+      // Google-Maps-style label reveal — labels are bound to markers
+      // on-demand once the user zooms past the threshold, and
+      // unbound again when they zoom out. Previous version bound a
+      // permanent tooltip to every marker at init, which meant 700
+      // hidden DOM nodes lived on the page all the time — creation
+      // stalled the initial load and every zoom animation had to
+      // reposition all of them even when invisible. Dynamic bind
+      // keeps the map at zero tooltip DOM until it's actually
+      // useful, then re-binds only when needed.
+      const applyLabelsForCurrentZoom = () => {
+        const showLabels = map.getZoom() >= LABEL_ZOOM_THRESHOLD
+        if (showLabels === labelsShownRef.current) return
+        labelsShownRef.current = showLabels
+        for (const m of Object.values(markersRef.current) as any[]) {
+          if (showLabels) {
+            const name = m.__label
+            if (name && !m.getTooltip()) {
+              m.bindTooltip(name, LABEL_OPTS)
+              const tt = m.getTooltip()
+              const onClick = m.__onLabelClick
+              if (tt && onClick) tt.on('click', onClick)
+            }
+          } else if (m.getTooltip()) {
+            m.unbindTooltip()
+          }
+        }
       }
-      map.on('zoomend', updateLabelVisibility)
-      updateLabelVisibility()
+      applyLabelsForCurrentZoomRef.current = applyLabelsForCurrentZoom
+      map.on('zoomend', applyLabelsForCurrentZoom)
+      applyLabelsForCurrentZoom()
 
       mapRef.current = map
     })
@@ -255,27 +295,32 @@ export default function ExploreMap({
           opacity:     1,
         }).addTo(map)
 
-        marker.on('click', () => onMarkerClick(loc.id))
+        const onClick = () => onMarkerClick(loc.id)
+        marker.on('click', onClick)
         marker.bindPopup(
           `<strong>${loc.name}</strong><br>
            <span style="color:#6b5f52;font-size:12px;">📍 ${loc.city}</span><br>
            <span style="color:#c4922a;font-size:12px;">★ ${loc.rating}</span>`
         )
-        // Permanent name label — DOM node exists on every marker but
-        // display:none unless the map container has the show-labels
-        // class (see updateLabelVisibility above + the CSS rule in
-        // globals.css). At high zoom the labels appear alongside
-        // their pins, Google-Maps-style.
-        marker.bindTooltip(loc.name, {
-          permanent: true,
-          direction: 'top',
-          offset: [0, -8],
-          className: 'explore-map-label',
-        })
+        // Stash the label + its click handler on the marker for
+        // dynamic bind/unbind in applyLabelsForCurrentZoom. The
+        // tooltip isn't created here — it only gets bound when we're
+        // actually at or above LABEL_ZOOM_THRESHOLD, so at wide zoom
+        // we have zero tooltip DOM nodes on the page.
+        ;(marker as any).__label        = loc.name
+        ;(marker as any).__onLabelClick = onClick
         if (isActive) marker.bringToFront()
 
         markersRef.current[loc.id] = marker
       })
+
+      // Rebuilding markers wipes any tooltips that were bound the
+      // last time we crossed the label-zoom threshold, so reset the
+      // "labels are currently shown" mirror and re-run the applier.
+      // Skips work when zoom < threshold (no bind needed) or when
+      // there's no map ref yet during first render race.
+      labelsShownRef.current = false
+      applyLabelsForCurrentZoomRef.current?.()
     })
   }, [locations, activeId, onMarkerClick])
 
