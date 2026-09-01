@@ -89,6 +89,17 @@ const LABEL_OPTS_FEATURED = {
   className:   'explore-map-label explore-map-label-featured',
   interactive: true,
 }
+// Hover tooltip — bound to every 'dot' marker (and used as a
+// fallback for name/featured markers when they're below their
+// zoom threshold). Non-permanent, so it only shows while the
+// pointer is over the marker; no DOM created until then.
+const LABEL_OPTS_HOVER = {
+  permanent:   false,
+  direction:   'top' as const,
+  offset:      [0, -8] as [number, number],
+  className:   'explore-map-label',
+  sticky:      false,
+}
 
 // Guard on the URL we drop into the tooltip HTML — Leaflet passes
 // the string straight through to innerHTML, so a malformed value
@@ -113,7 +124,15 @@ export default function ExploreMap({
   // without needing to re-run the marker-refresh useEffect when
   // photos stream in (they load async as the sidebar scrolls).
   const photoMapRef = useRef<Record<string, string>>(photoMap ?? {})
-  useEffect(() => { photoMapRef.current = photoMap ?? {} }, [photoMap])
+  useEffect(() => {
+    photoMapRef.current = photoMap ?? {}
+    // A featured pin may have been rendered as name-only because its
+    // thumb hadn't loaded yet. When photoMap grows (either from the
+    // bulk location_photos query or the viewport-driven Google Places
+    // fetches), re-run the applier so any pin that just gained a
+    // thumb switches from 'name' → 'featured' shape.
+    applyLabelsForCurrentZoomRef.current?.()
+  }, [photoMap])
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<any>(null)
   const markersRef    = useRef<Record<number, any>>({})
@@ -197,34 +216,54 @@ export default function ExploreMap({
       //   'dot'      → never labeled
       //   'name'     → labeled at zoom >= ZOOM_THRESHOLD_NAME
       //   'featured' → labeled with thumb at ZOOM_THRESHOLD_FEATURED+
+      // Each marker's tooltip is chosen by (mode, zoom, has-thumb):
+      //   dot mode                    → 'hover'    (non-permanent)
+      //   name mode, zoom >= 13       → 'name'     (permanent, text)
+      //   featured, zoom >= 11, thumb → 'featured' (permanent, img+text)
+      //   featured, zoom >= 11, no thumb → 'name' fallback until the
+      //     photoMap effect re-runs the applier once the thumb loads
+      //   name/featured below threshold → 'hover' fallback so a mouse
+      //     over on desktop can still surface the name
+      // We track (__tooltipType, __tooltipHasThumb) per marker so the
+      // applier only unbinds+rebinds when the desired shape actually
+      // changed — cheap zoom passes over 700 markers stay flat.
       const applyLabelsForCurrentZoom = () => {
         const zoom = map.getZoom()
+        const pm   = photoMapRef.current
         for (const m of Object.values(markersRef.current) as any[]) {
           const mode = m.__mode as 'dot' | 'name' | 'featured'
-          const shouldShow =
-            mode === 'featured' ? zoom >= ZOOM_THRESHOLD_FEATURED
-            : mode === 'name'   ? zoom >= ZOOM_THRESHOLD_NAME
-            : false
-          const has = !!m.getTooltip()
-          if (shouldShow && !has) {
-            const name = m.__label as string
-            if (!name) continue
-            let content = escapeText(name)
-            let opts: any = LABEL_OPTS_NAME
-            if (mode === 'featured') {
-              const thumb = photoMapRef.current[String(m.__id)]
-              if (thumb) {
-                content = `<img class="explore-map-label-thumb" src="${escapeAttr(thumb)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span>`
-                opts = LABEL_OPTS_FEATURED
-              }
-            }
-            m.bindTooltip(content, opts)
-            const tt = m.getTooltip()
-            const onClick = m.__onLabelClick
-            if (tt && onClick) tt.on('click', onClick)
-          } else if (!shouldShow && has) {
-            m.unbindTooltip()
+          const name = m.__label as string
+          if (!name) continue
+
+          const canShowFeatured = mode === 'featured' && zoom >= ZOOM_THRESHOLD_FEATURED
+          const canShowName     = mode === 'name'     && zoom >= ZOOM_THRESHOLD_NAME
+          const thumb           = canShowFeatured ? pm[String(m.__id)] : undefined
+          const wantType: 'hover' | 'name' | 'featured' =
+            canShowFeatured && thumb ? 'featured'
+            : canShowFeatured        ? 'name'      // no thumb yet — fall back to text-only
+            : canShowName            ? 'name'
+            : 'hover'
+
+          if (m.__tooltipType === wantType) continue
+          if (m.getTooltip()) m.unbindTooltip()
+
+          if (wantType === 'featured') {
+            m.bindTooltip(
+              `<img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span>`,
+              LABEL_OPTS_FEATURED,
+            )
+          } else if (wantType === 'name') {
+            m.bindTooltip(escapeText(name), LABEL_OPTS_NAME)
+          } else {
+            m.bindTooltip(escapeText(name), LABEL_OPTS_HOVER)
           }
+          const tt = m.getTooltip()
+          // Only permanent labels get the click-to-open-panel handler.
+          // Non-permanent hover tooltips are non-interactive so clicks
+          // fall through to the marker itself, which already fires
+          // onMarkerClick.
+          if (tt && wantType !== 'hover' && m.__onLabelClick) tt.on('click', m.__onLabelClick)
+          m.__tooltipType = wantType
         }
       }
       applyLabelsForCurrentZoomRef.current = applyLabelsForCurrentZoom
