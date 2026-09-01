@@ -29,6 +29,13 @@ export interface ExploreLocation {
   bg: string
   tags: string[]
   saves: number
+  // Per-location label rendering — admin picks in LocationEditModal:
+  //   'dot'      → circle only, no label at any zoom (default)
+  //   'name'     → circle + text label appears at zoom >= 13
+  //   'featured' → circle + text label + tiny image thumb, zoom >= 11
+  // Undefined behaves like 'dot' to stay backward-compat with any
+  // caller that hasn't populated the field yet.
+  mapDisplayMode?: 'dot' | 'name' | 'featured'
 }
 
 interface ExploreMapProps {
@@ -40,6 +47,10 @@ interface ExploreMapProps {
   // back to a USA-wide view instead of the old St-Joseph default — much
   // better for users who haven't told us where they shoot yet.
   homeLocation: { lat: number; lng: number } | null
+  // Optional lookup of location_id → first photo URL. Used to render the
+  // tiny image thumb inside 'featured' labels. Missing entries fall back
+  // to a name-only label.
+  photoMap?: Record<string, string>
   onMarkerClick: (id: number) => void
   // Fires on Leaflet's moveend (pan or zoom finished). Parent uses this to
   // decide whether to show a "Search this area" button. Debounced to
@@ -53,20 +64,40 @@ interface ExploreMapProps {
 const USA_VIEW = { center: [39.5, -98.5] as [number, number], zoom: 4 }
 const HOME_CITY_ZOOM = 11
 
-// Zoom threshold at which pin-name labels appear. Roughly city-
-// neighborhood zoom — dense enough that labels are useful, sparse
-// enough that they don't overlap into visual chaos.
-const LABEL_ZOOM_THRESHOLD = 13
+// Per-mode zoom thresholds. Featured labels light up earlier
+// (roughly city zoom) so the admin's hand-picked spots appear from
+// further out; name-only labels wait until the map is zoomed in
+// far enough that the density is manageable.
+const ZOOM_THRESHOLD_NAME     = 13
+const ZOOM_THRESHOLD_FEATURED = 11
 
 // Options passed to marker.bindTooltip on label activation. Kept
 // as a module-level constant so the shape is stable across binds
-// and doesn't allocate a new object per marker per zoom event.
-const LABEL_OPTS = {
+// and doesn't allocate a new object per marker per zoom event. The
+// name variant is text-only; featured swaps in HTML with a thumb.
+const LABEL_OPTS_NAME = {
   permanent:   true,
   direction:   'top' as const,
   offset:      [0, -8] as [number, number],
   className:   'explore-map-label',
   interactive: true,
+}
+const LABEL_OPTS_FEATURED = {
+  permanent:   true,
+  direction:   'top' as const,
+  offset:      [0, -8] as [number, number],
+  className:   'explore-map-label explore-map-label-featured',
+  interactive: true,
+}
+
+// Guard on the URL we drop into the tooltip HTML — Leaflet passes
+// the string straight through to innerHTML, so a malformed value
+// could break out of the src attribute.
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+function escapeText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 export default function ExploreMap({
@@ -74,9 +105,15 @@ export default function ExploreMap({
   activeId,
   userLocation,
   homeLocation,
+  photoMap,
   onMarkerClick,
   onMapMove,
 }: ExploreMapProps) {
+  // Held in a ref so the label-applier reads the latest photo map
+  // without needing to re-run the marker-refresh useEffect when
+  // photos stream in (they load async as the sidebar scrolls).
+  const photoMapRef = useRef<Record<string, string>>(photoMap ?? {})
+  useEffect(() => { photoMapRef.current = photoMap ?? {} }, [photoMap])
   const containerRef  = useRef<HTMLDivElement>(null)
   const mapRef        = useRef<any>(null)
   const markersRef    = useRef<Record<number, any>>({})
@@ -90,13 +127,11 @@ export default function ExploreMap({
   // the home-location effect below would re-center the map every time the
   // photographer pans away — annoying instead of helpful.
   const initialViewApplied = useRef(false)
-  // Labels tracking — labelsShownRef mirrors the "are tooltips
-  // currently bound?" state so applyLabelsForCurrentZoom short-
-  // circuits when zoom crosses within the same tier. The applier
-  // itself is stashed on a ref so the marker-refresh effect can
-  // invoke it after rebuilding markers without needing to re-run
-  // the init useEffect.
-  const labelsShownRef            = useRef(false)
+  // Applier ref — the marker-refresh useEffect calls this after
+  // rebuilding markers so per-marker labels get bound/unbound to
+  // match current zoom without re-running the init useEffect. The
+  // applier itself walks every marker each zoomend since bind state
+  // is now per-marker (mode + zoom combo).
   const applyLabelsForCurrentZoomRef = useRef<(() => void) | null>(null)
 
   // ── Init map ───────────────────────────────────────────────────────────────
@@ -152,28 +187,42 @@ export default function ExploreMap({
       })
 
       // Google-Maps-style label reveal — labels are bound to markers
-      // on-demand once the user zooms past the threshold, and
-      // unbound again when they zoom out. Previous version bound a
-      // permanent tooltip to every marker at init, which meant 700
-      // hidden DOM nodes lived on the page all the time — creation
-      // stalled the initial load and every zoom animation had to
-      // reposition all of them even when invisible. Dynamic bind
-      // keeps the map at zero tooltip DOM until it's actually
-      // useful, then re-binds only when needed.
+      // on-demand based on per-marker mode + current zoom. Previous
+      // version bound a permanent tooltip to every marker at init,
+      // which meant 700 hidden DOM nodes lived on the page all the
+      // time — creation stalled the initial load and every zoom
+      // animation had to reposition all of them even when invisible.
+      // Dynamic bind keeps the map at zero tooltip DOM until it's
+      // actually useful, and each pin honors its own mapDisplayMode:
+      //   'dot'      → never labeled
+      //   'name'     → labeled at zoom >= ZOOM_THRESHOLD_NAME
+      //   'featured' → labeled with thumb at ZOOM_THRESHOLD_FEATURED+
       const applyLabelsForCurrentZoom = () => {
-        const showLabels = map.getZoom() >= LABEL_ZOOM_THRESHOLD
-        if (showLabels === labelsShownRef.current) return
-        labelsShownRef.current = showLabels
+        const zoom = map.getZoom()
         for (const m of Object.values(markersRef.current) as any[]) {
-          if (showLabels) {
-            const name = m.__label
-            if (name && !m.getTooltip()) {
-              m.bindTooltip(name, LABEL_OPTS)
-              const tt = m.getTooltip()
-              const onClick = m.__onLabelClick
-              if (tt && onClick) tt.on('click', onClick)
+          const mode = m.__mode as 'dot' | 'name' | 'featured'
+          const shouldShow =
+            mode === 'featured' ? zoom >= ZOOM_THRESHOLD_FEATURED
+            : mode === 'name'   ? zoom >= ZOOM_THRESHOLD_NAME
+            : false
+          const has = !!m.getTooltip()
+          if (shouldShow && !has) {
+            const name = m.__label as string
+            if (!name) continue
+            let content = escapeText(name)
+            let opts: any = LABEL_OPTS_NAME
+            if (mode === 'featured') {
+              const thumb = photoMapRef.current[String(m.__id)]
+              if (thumb) {
+                content = `<img class="explore-map-label-thumb" src="${escapeAttr(thumb)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span>`
+                opts = LABEL_OPTS_FEATURED
+              }
             }
-          } else if (m.getTooltip()) {
+            m.bindTooltip(content, opts)
+            const tt = m.getTooltip()
+            const onClick = m.__onLabelClick
+            if (tt && onClick) tt.on('click', onClick)
+          } else if (!shouldShow && has) {
             m.unbindTooltip()
           }
         }
@@ -300,12 +349,14 @@ export default function ExploreMap({
            <span style="color:#6b5f52;font-size:12px;">📍 ${loc.city}</span><br>
            <span style="color:#c4922a;font-size:12px;">★ ${loc.rating}</span>`
         )
-        // Stash the label + its click handler on the marker for
-        // dynamic bind/unbind in applyLabelsForCurrentZoom. The
-        // tooltip isn't created here — it only gets bound when we're
-        // actually at or above LABEL_ZOOM_THRESHOLD, so at wide zoom
-        // we have zero tooltip DOM nodes on the page.
+        // Stash the label + mode + id + its click handler on the
+        // marker for dynamic bind/unbind in applyLabelsForCurrentZoom.
+        // The tooltip isn't created here — it only gets bound when
+        // the current zoom crosses the mode's threshold, so at wide
+        // zoom we have zero tooltip DOM nodes on the page.
+        ;(marker as any).__id           = loc.id
         ;(marker as any).__label        = loc.name
+        ;(marker as any).__mode         = (loc as any).mapDisplayMode ?? 'dot'
         ;(marker as any).__onLabelClick = onClick
         if (isActive) marker.bringToFront()
 
@@ -313,11 +364,9 @@ export default function ExploreMap({
       })
 
       // Rebuilding markers wipes any tooltips that were bound the
-      // last time we crossed the label-zoom threshold, so reset the
-      // "labels are currently shown" mirror and re-run the applier.
-      // Skips work when zoom < threshold (no bind needed) or when
-      // there's no map ref yet during first render race.
-      labelsShownRef.current = false
+      // last time we crossed a mode threshold — re-run the applier
+      // so per-marker labels get restored based on current zoom +
+      // each marker's mode.
       applyLabelsForCurrentZoomRef.current?.()
     })
   }, [locations, activeId, onMarkerClick])

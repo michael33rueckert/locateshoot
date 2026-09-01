@@ -28,6 +28,7 @@ interface ManagedLocation {
   best_time: string | null; parking_info: string | null;
   parking_type: 'free' | 'paid' | null; parking_latitude: number | null; parking_longitude: number | null;
   status: string; rating: number | null; quality_score: number | null;
+  map_display_mode: 'dot' | 'name' | 'featured' | null;
   source: string | null; created_at: string;
 }
 

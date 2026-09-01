@@ -21,7 +21,7 @@ const EDITABLE_FIELDS = new Set([
   'category', 'access_type', 'tags', 'permit_required', 'permit_fee',
   'permit_notes', 'permit_website', 'permit_certainty',
   'best_time', 'parking_info', 'parking_type', 'parking_latitude', 'parking_longitude',
-  'status', 'rating', 'quality_score',
+  'status', 'rating', 'quality_score', 'map_display_mode',
 ])
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {

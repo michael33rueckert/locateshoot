@@ -20,6 +20,7 @@ export interface ManagedLocation {
   best_time: string | null; parking_info: string | null;
   parking_type: 'free' | 'paid' | null; parking_latitude: number | null; parking_longitude: number | null;
   status: string; rating: number | null; quality_score: number | null;
+  map_display_mode: 'dot' | 'name' | 'featured' | null;
   source: string | null; created_at: string;
 }
 
@@ -35,7 +36,7 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
   async function handleSave() {
     setSaving(true)
     const patch: Partial<ManagedLocation> = {}
-    ;(['name','description','city','state','latitude','longitude','category','access_type','tags','permit_required','permit_fee','permit_notes','permit_website','permit_certainty','best_time','parking_info','parking_type','parking_latitude','parking_longitude','status','rating','quality_score'] as const).forEach(k => {
+    ;(['name','description','city','state','latitude','longitude','category','access_type','tags','permit_required','permit_fee','permit_notes','permit_website','permit_certainty','best_time','parking_info','parking_type','parking_latitude','parking_longitude','status','rating','quality_score','map_display_mode'] as const).forEach(k => {
       if ((f as any)[k] !== (loc as any)[k]) (patch as any)[k] = (f as any)[k]
     })
     if (Object.keys(patch).length === 0) { onClose(); setSaving(false); return }
@@ -129,6 +130,24 @@ export default function LocationEditModal({ loc, onClose, onSave }: {
           <div>
             <label style={lbl}>Quality score</label>
             <input style={inp} type="number" value={f.quality_score ?? ''} onChange={e => upd('quality_score', e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lbl}>
+              Map display
+              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 400, color: 'var(--ink-soft)', textTransform: 'none', letterSpacing: 0 }}>
+                Controls what shows next to the pin on Explore
+              </span>
+            </label>
+            <select
+              style={inp}
+              value={f.map_display_mode ?? 'dot'}
+              onChange={e => upd('map_display_mode', e.target.value as 'dot' | 'name' | 'featured')}
+            >
+              <option value="dot">Dot only — no label (default)</option>
+              <option value="name">Name label — shows at zoom 13+</option>
+              <option value="featured">Featured — name + tiny image, shows at zoom 11+</option>
+            </select>
           </div>
 
           <div style={{ gridColumn: '1 / -1' }}>

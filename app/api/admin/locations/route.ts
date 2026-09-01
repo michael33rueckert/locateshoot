@@ -32,7 +32,7 @@ const INSERTABLE_FIELDS = new Set([
   'category', 'access_type', 'tags', 'permit_required', 'permit_fee',
   'permit_notes', 'permit_website', 'permit_certainty',
   'best_time', 'parking_info', 'parking_type', 'parking_latitude', 'parking_longitude',
-  'status', 'rating', 'quality_score',
+  'status', 'rating', 'quality_score', 'map_display_mode',
 ])
 
 // Service-role list of every locations row for the admin table. The
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   if (error) return error
   const { data, error: e } = await admin!
     .from('locations')
-    .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,source,created_at')
+    .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,map_display_mode,source,created_at')
     .order('created_at', { ascending: false })
     .limit(2000)
   if (e) return NextResponse.json({ error: e.message }, { status: 500 })

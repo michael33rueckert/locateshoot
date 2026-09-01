@@ -555,7 +555,7 @@ export default function ExplorePage() {
       setDbLoading(true)
       try {
         const { data } = await supabase.from('locations')
-          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,favorite_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at')
+          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,favorite_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at,map_display_mode')
           .eq('status','published').not('latitude','is',null).not('longitude','is',null)
           // Order by quality_score so if we ever DO hit the cap, the
           // best curated locations come back first instead of whatever
@@ -581,6 +581,7 @@ export default function ExplorePage() {
           permit_required:loc.permit_required, permit_notes:loc.permit_notes,
           permit_fee:loc.permit_fee, permit_website:loc.permit_website,
           permit_certainty:loc.permit_certainty??'unknown', permit_scanned_at:loc.permit_scanned_at,
+          mapDisplayMode: (loc.map_display_mode === 'name' || loc.map_display_mode === 'featured') ? loc.map_display_mode : 'dot',
         })))
       } catch(e){console.error(e)} finally{setDbLoading(false)}
     }
@@ -745,6 +746,10 @@ export default function ExplorePage() {
         source_location_id:    p.source_location_id ?? null,
         isManualPortfolio:     !p.source_location_id,
         isMine:                true,
+        // Portfolio pins are the user's own — always worth showing a
+        // name label at zoom, unlike public pins which default to
+        // 'dot' unless the admin promotes them.
+        mapDisplayMode:        'name' as const,
         name:              p.name,
         city:              p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
         lat:               p.latitude,
@@ -1021,7 +1026,7 @@ export default function ExplorePage() {
     // render (status, source, category, etc. aren't on the lightweight
     // detailLoc shape).
     const { data, error } = await supabase.from('locations')
-      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,source,created_at')
+      .select('id,name,description,city,state,latitude,longitude,category,access_type,tags,permit_required,permit_fee,permit_notes,permit_website,permit_certainty,best_time,parking_info,parking_type,parking_latitude,parking_longitude,status,rating,quality_score,map_display_mode,source,created_at')
       .eq('id', locId).single()
     if (error || !data) { setToast('⚠ Could not load location for edit'); return }
     setAdminEditLoc(data as any)
@@ -1062,6 +1067,9 @@ export default function ExplorePage() {
         desc:         j2.description  ?? base.desc,
         rating:       Number.isFinite(nextRating) ? nextRating.toFixed(1) : '—',
         ratingNum:    Number.isFinite(nextRating) ? nextRating : (base.ratingNum ?? 0),
+        mapDisplayMode: (j2.map_display_mode === 'name' || j2.map_display_mode === 'featured')
+          ? j2.map_display_mode
+          : (j2.map_display_mode === 'dot' ? 'dot' : (base.mapDisplayMode ?? 'dot')),
       }
     }
     setLocations(prev => prev.map(l => String(l.id) === String(adminEditLoc.id) ? remap(l) : l))
@@ -1538,6 +1546,7 @@ export default function ExplorePage() {
             activeId={activeId}
             userLocation={userLocation}
             homeLocation={homeLocation}
+            photoMap={photoMap}
             onMarkerClick={handleMarkerClick}
             onMapMove={(c, zoom) => setMapCenter({ lat: c.lat, lng: c.lng, zoom })}
           />

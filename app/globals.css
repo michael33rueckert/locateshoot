@@ -940,6 +940,38 @@ body {
    pass across the tooltip DOM subtree every frame. */
 .leaflet-tooltip-pane { will-change: transform; }
 
+/* Featured label — name paired with a tiny image thumb. Restores a
+   small white card here because a raw image against varying tile
+   colors can't be framed by text-shadow alone. Rounded 24px thumb
+   tucked to the left of the name in a single inline pill. */
+.explore-map-label-featured.leaflet-tooltip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: rgba(255, 255, 255, .95) !important;
+  border: 1px solid rgba(0, 0, 0, .12) !important;
+  padding: 3px 10px 3px 3px !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .18) !important;
+  text-shadow: none !important;
+  color: #1a1612 !important;
+}
+.explore-map-label-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+}
+.explore-map-label-name {
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1612;
+  white-space: nowrap;
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 1024px) {
   .hero { grid-template-columns: 1fr; }

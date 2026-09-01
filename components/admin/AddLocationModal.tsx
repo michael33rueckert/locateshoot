@@ -33,6 +33,7 @@ export interface NewLocation {
   status:          string
   rating:          number | null
   quality_score:   number | null
+  map_display_mode: 'dot' | 'name' | 'featured' | null
 }
 
 export default function AddLocationModal({ onClose, onCreate }: {
@@ -51,6 +52,7 @@ export default function AddLocationModal({ onClose, onCreate }: {
     parking_type: null, parking_latitude: null, parking_longitude: null,
     status: 'published',
     rating: null, quality_score: 75,
+    map_display_mode: 'dot',
   })
   const [saving, setSaving] = useState(false)
   const [err,    setErr]    = useState<string | null>(null)
@@ -182,6 +184,15 @@ export default function AddLocationModal({ onClose, onCreate }: {
           <div>
             <label style={lbl}>Quality score</label>
             <input style={inp} type="number" value={f.quality_score ?? ''} onChange={e => upd('quality_score', e.target.value === '' ? null : parseInt(e.target.value, 10))} placeholder="0–100" />
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={lbl}>Map display</label>
+            <select style={inp} value={f.map_display_mode ?? 'dot'} onChange={e => upd('map_display_mode', e.target.value as 'dot' | 'name' | 'featured')}>
+              <option value="dot">Dot only — no label (default)</option>
+              <option value="name">Name label — shows at zoom 13+</option>
+              <option value="featured">Featured — name + tiny image, shows at zoom 11+</option>
+            </select>
           </div>
 
           <div style={{ gridColumn: '1 / -1' }}>
