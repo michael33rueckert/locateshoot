@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { getTileConfig } from '@/lib/map-tiles'
 
 // Small Leaflet map used inside modals so someone can pick a location
 // visually instead of typing latitude/longitude. Marker is draggable
@@ -59,12 +60,10 @@ export default function MapCoordPicker({
       const zoom = initialZoom ?? (hasPoint ? 15 : 4)
       const map = L.map(container, { zoomControl: true }).setView(center, zoom)
 
-      // OSM standard tiles — see other map components for the reason
-      // we moved off Carto's CDN.
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(map)
+      // Basemap via lib/map-tiles.ts — Stadia Alidade Smooth when
+      // the key is set, OSM standard as a keyless fallback.
+      const tiles = getTileConfig('light')
+      L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom, attribution: tiles.attribution }).addTo(map)
 
       const marker = L.marker(center, { draggable: true })
       if (hasPoint) marker.addTo(map)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { getTileConfig } from '@/lib/map-tiles'
 
 // Leaflet throws "Invalid LatLng object: (NaN, NaN)" when flyTo/setView run while the
 // map container has zero width/height — which happens on mobile because the map column
@@ -132,14 +133,11 @@ export default function ExploreMap({
       }).setView(initial.center, initial.zoom)
       if (homeLocation) initialViewApplied.current = true
 
-      // OpenStreetMap standard tiles — key-free, no anonymous rate
-      // limiting like Carto started imposing. Kept the same 19-max
-      // zoom + attribution shape so downstream layout code (permit
-      // panels sit relative to attribution height) doesn't shift.
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(map)
+      // Basemap tiles routed through lib/map-tiles.ts — Stadia
+      // Alidade Smooth when NEXT_PUBLIC_STADIA_API_KEY is set,
+      // OpenStreetMap standard as a keyless fallback.
+      const tiles = getTileConfig('light')
+      L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom, attribution: tiles.attribution }).addTo(map)
 
       L.control.zoom({ position: 'bottomright' }).addTo(map)
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { getTileConfig, needsDarkFilter } from '@/lib/map-tiles'
 
 // Leaflet throws "Invalid LatLng object: (NaN, NaN)" when flyTo/setView/fitBounds
 // run while the map container has zero width/height. On mobile the map column is
@@ -84,15 +85,15 @@ export default function ClientMap({
       const map = L.map(container, { zoomControl: false, attributionControl: false })
         .setView([39.09, -94.58], 11)
 
-      // OSM standard tiles — Carto's basemap CDN started responding
-      // with "API Key Required" for anonymous requests. Faking dark
-      // via a CSS invert on the tile pane (was dark_all before).
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(map)
-      const tilePane = map.getPane('tilePane')
-      if (tilePane) tilePane.style.filter = 'invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)'
+      // Basemap via lib/map-tiles.ts — Stadia Alidade Smooth Dark
+      // when the key is set (a proper dark tileset), OSM standard
+      // + CSS invert filter as a fallback.
+      const tiles = getTileConfig('dark')
+      L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom, attribution: tiles.attribution }).addTo(map)
+      if (needsDarkFilter('dark')) {
+        const tilePane = map.getPane('tilePane')
+        if (tilePane) tilePane.style.filter = 'invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)'
+      }
 
       L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map)
       L.control.zoom({ position: 'bottomright' }).addTo(map)

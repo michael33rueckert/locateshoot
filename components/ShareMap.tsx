@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { getTileConfig } from '@/lib/map-tiles'
 
 export interface MapLocation {
   id: number | string
@@ -56,12 +57,10 @@ export default function ShareMap({
       const map = L.map(container, { zoomControl: true })
         .setView([39.09, -94.58], 11)
 
-      // OSM standard tiles — see other map components for the reason
-      // we moved off Carto's CDN.
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors',
-      }).addTo(map)
+      // Basemap via lib/map-tiles.ts — Stadia Alidade Smooth when
+      // the key is set, OSM standard as a keyless fallback.
+      const tiles = getTileConfig('light')
+      L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom, attribution: tiles.attribution }).addTo(map)
 
       map.on('click', (e: any) => {
         onPinDrop(e.latlng.lat, e.latlng.lng)
