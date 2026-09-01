@@ -405,14 +405,29 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
               🌐 View the public listing
             </button>
           )}
-          {isAdmin&&(
-            <div style={{padding:'10px 12px',background:'rgba(26,22,18,.04)',border:'1px dashed var(--cream-dark)',borderRadius:6,marginBottom:'1rem',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-              <span style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginRight:'auto'}}>🛠 Admin</span>
-              <button onClick={()=>onAdminManagePhotos(loc.id, loc.name)} style={{padding:'7px 14px',borderRadius:4,border:'1px solid var(--cream-dark)',background:'white',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--ink)'}}>📷 Photos</button>
-              <button onClick={()=>onAdminEdit(loc.id)} style={{padding:'7px 14px',borderRadius:4,border:'1px solid var(--cream-dark)',background:'white',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--ink)'}}>Edit</button>
-              <button onClick={async()=>{ if(confirm(`Delete ${loc.name}? This removes it from the public map and unlinks any portfolio rows.`)){ await onAdminDelete(loc.id); } }} style={{padding:'7px 14px',borderRadius:4,border:'1px solid rgba(181,75,42,.3)',background:'rgba(181,75,42,.05)',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--rust)'}}>Delete</button>
-            </div>
-          )}
+          {isAdmin && (() => {
+            // Admin ops target the PUBLIC `locations` table. For a
+            // portfolio pin (its own id is `portfolio:<uuid>`), we
+            // route to the underlying public row via
+            // publicEquivalentId / source_location_id. If neither is
+            // set (a photographer's manual entry that maps to no
+            // public row), hide the admin block — there is no public
+            // row to edit/delete, and passing the synthetic id would
+            // produce a "could not find" error on the API side.
+            const targetId: string | null =
+              loc.publicEquivalentId
+                ?? loc.source_location_id
+                ?? (!loc.isManualPortfolio && !String(loc.id ?? '').startsWith('portfolio:') ? String(loc.id) : null)
+            if (!targetId) return null
+            return (
+              <div style={{padding:'10px 12px',background:'rgba(26,22,18,.04)',border:'1px dashed var(--cream-dark)',borderRadius:6,marginBottom:'1rem',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <span style={{fontSize:10,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginRight:'auto'}}>🛠 Admin</span>
+                <button onClick={()=>onAdminManagePhotos(targetId, loc.name)} style={{padding:'7px 14px',borderRadius:4,border:'1px solid var(--cream-dark)',background:'white',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--ink)'}}>📷 Photos</button>
+                <button onClick={()=>onAdminEdit(targetId)} style={{padding:'7px 14px',borderRadius:4,border:'1px solid var(--cream-dark)',background:'white',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--ink)'}}>Edit</button>
+                <button onClick={async()=>{ if(confirm(`Delete ${loc.name}? This removes it from the public map and unlinks any portfolio rows.`)){ await onAdminDelete(targetId); } }} style={{padding:'7px 14px',borderRadius:4,border:'1px solid rgba(181,75,42,.3)',background:'rgba(181,75,42,.05)',fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:'var(--rust)'}}>Delete</button>
+              </div>
+            )
+          })()}
           <div style={{padding:'10px 12px',background:'rgba(196,146,42,.04)',border:'1px solid rgba(196,146,42,.15)',borderRadius:6,marginBottom:10}}>
             <div style={{fontSize:10,color:'var(--ink-soft)',lineHeight:1.6,fontWeight:300}}>⚠ <strong style={{fontWeight:500}}>Disclaimer:</strong> Always verify access rights, permit requirements, and safety before your session.</div>
           </div>
@@ -1009,17 +1024,30 @@ export default function ExplorePage() {
     setAdminEditLoc(null)
     setToast('✓ Saved')
     // Refresh the detail panel + the loaded markers so the change is
-    // visible. The DB row uses latitude/longitude but the client-side
-    // shape uses lat/lng — a plain spread merged the DB values in as
-    // new keys but left the existing lat/lng untouched, so coordinate
-    // edits looked like they didn't save until the page was reloaded.
-    // Remap explicitly here.
-    const remap = (base: any) => ({
-      ...base,
-      ...j.location,
-      lat: j.location.latitude  ?? base.lat,
-      lng: j.location.longitude ?? base.lng,
-    })
+    // visible. The DB row uses snake_case + full column names
+    // (latitude, longitude, access_type, quality_score, save_count,
+    // description, rating-as-numeric) while the client shape uses
+    // shortened keys (lat, lng, access, qualityScore, saves, desc,
+    // rating-as-formatted-string + ratingNum). A plain spread merges
+    // the DB values in as NEW keys and leaves the existing client
+    // keys untouched, so edits look like they didn't save until the
+    // page is reloaded. Remap every mismatched pair explicitly.
+    const remap = (base: any) => {
+      const j2 = j.location
+      const nextRating = j2.rating != null ? parseFloat(String(j2.rating)) : NaN
+      return {
+        ...base,
+        ...j2,
+        lat:          j2.latitude  ?? base.lat,
+        lng:          j2.longitude ?? base.lng,
+        access:       j2.access_type ?? base.access,
+        qualityScore: j2.quality_score ?? base.qualityScore ?? 0,
+        saves:        j2.save_count   ?? base.saves ?? 0,
+        desc:         j2.description  ?? base.desc,
+        rating:       Number.isFinite(nextRating) ? nextRating.toFixed(1) : '—',
+        ratingNum:    Number.isFinite(nextRating) ? nextRating : (base.ratingNum ?? 0),
+      }
+    }
     setLocations(prev => prev.map(l => String(l.id) === String(adminEditLoc.id) ? remap(l) : l))
     if (detailLoc && String(detailLoc.id) === String(adminEditLoc.id)) {
       setDetailLoc((prev: any) => prev ? { ...remap(prev), name: j.location.name ?? prev.name } : prev)
@@ -1075,6 +1103,18 @@ export default function ExplorePage() {
     const j = await res.json().catch(() => ({}))
     if (!res.ok) { setToast(`⚠ ${j.error ?? 'Delete failed'}`); return }
     setLocations(prev => prev.filter(l => String(l.id) !== String(locId)))
+    // The DELETE endpoint clears source_location_id on any
+    // portfolio_locations that referenced the deleted public row
+    // (see /api/admin/locations/[id]/route.ts). Mirror that in local
+    // state so the portfolio pin no longer claims a dangling public
+    // equivalent — otherwise clicking it after the delete keeps
+    // trying to route admin ops to the vanished public id and the
+    // "View public listing" button opens nothing.
+    setManualPortfolioLocs(prev => prev.map((p: any) =>
+      String(p.source_location_id) === String(locId)
+        ? { ...p, source_location_id: null, isManualPortfolio: true }
+        : p
+    ))
     setDetailLoc(null)
     setToast('Deleted')
   }
