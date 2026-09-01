@@ -696,16 +696,15 @@ export default function ExplorePage() {
     return () => photoObsRef.current?.disconnect()
   }, [processPhotoQueue])
 
-  useEffect(() => {
-    if(!user){setPortfolioSources(new Map());return}
-    supabase.from('portfolio_locations').select('id,source_location_id').eq('user_id',user.id)
-      .then(({data})=>{
-        if(!data)return
-        const m=new Map<string,string>()
-        data.forEach((r:any)=>{ if(r.source_location_id) m.set(String(r.source_location_id), String(r.id)) })
-        setPortfolioSources(m)
-      })
+  const loadPortfolioSources = useCallback(async () => {
+    if (!user) { setPortfolioSources(new Map()); return }
+    const { data } = await supabase.from('portfolio_locations').select('id,source_location_id').eq('user_id', user.id)
+    if (!data) return
+    const m = new Map<string, string>()
+    data.forEach((r: any) => { if (r.source_location_id) m.set(String(r.source_location_id), String(r.id)) })
+    setPortfolioSources(m)
   }, [user])
+  useEffect(() => { loadPortfolioSources() }, [loadPortfolioSources])
 
   // Load the user's favorites once on login. Falls through silently
   // if the migration hasn't been applied (table-missing error) so
@@ -728,53 +727,70 @@ export default function ExplorePage() {
   // the merged list so the photographer sees only one pin per real
   // spot. `source_location_id` on the pin is what the "View public
   // listing" button uses to jump back to the original public row.
-  useEffect(() => {
+  const loadManualPortfolioLocs = useCallback(async () => {
     if (!user) { setManualPortfolioLocs([]); return }
-    let cancelled = false
-    ;(async () => {
-      const { data, error } = await supabase
-        .from('portfolio_locations')
-        .select('id,source_location_id,name,city,state,latitude,longitude,access_type,tags,description,is_secret,permit_required,permit_notes,permit_fee,permit_website,sort_order,created_at')
-        .eq('user_id', user.id)
-      if (cancelled || error || !data) return
-      const rows = data
-        .filter((p: any) => p.latitude != null && p.longitude != null)
-        .map((p: any, idx: number) => ({
-          // Pin id prefix keeps portfolio pins distinct from public
-          // location ids even for linked entries (whose
-          // source_location_id equals a real public id).
-          id:                    `portfolio:${p.id}`,
-          portfolio_location_id: p.id,
-          source_location_id:    p.source_location_id ?? null,
-          isManualPortfolio:     !p.source_location_id,
-          isMine:                true,
-          name:              p.name,
-          city:              p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
-          lat:               p.latitude,
-          lng:               p.longitude,
-          access:            p.access_type ?? 'public',
-          rating:            '—',
-          ratingNum:         0,
-          bg:                BG_CYCLE[idx % BG_CYCLE.length],
-          tags:              p.tags ?? [],
-          saves:             0,
-          favoriteCount:     0,
-          desc:              p.description ?? '',
-          qualityScore:      0,
-          createdAt:         p.created_at,
-          addedBy:           user.id,
-          source:            'manual_portfolio',
-          permit_required:   p.permit_required ?? false,
-          permit_notes:      p.permit_notes ?? null,
-          permit_fee:        p.permit_fee ?? null,
-          permit_website:    p.permit_website ?? null,
-          permit_certainty:  'unknown',
-          permit_scanned_at: null,
-        }))
-      setManualPortfolioLocs(rows)
-    })()
-    return () => { cancelled = true }
+    const { data, error } = await supabase
+      .from('portfolio_locations')
+      .select('id,source_location_id,name,city,state,latitude,longitude,access_type,tags,description,is_secret,permit_required,permit_notes,permit_fee,permit_website,sort_order,created_at')
+      .eq('user_id', user.id)
+    if (error || !data) return
+    const rows = data
+      .filter((p: any) => p.latitude != null && p.longitude != null)
+      .map((p: any, idx: number) => ({
+        // Pin id prefix keeps portfolio pins distinct from public
+        // location ids even for linked entries (whose
+        // source_location_id equals a real public id).
+        id:                    `portfolio:${p.id}`,
+        portfolio_location_id: p.id,
+        source_location_id:    p.source_location_id ?? null,
+        isManualPortfolio:     !p.source_location_id,
+        isMine:                true,
+        name:              p.name,
+        city:              p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
+        lat:               p.latitude,
+        lng:               p.longitude,
+        access:            p.access_type ?? 'public',
+        rating:            '—',
+        ratingNum:         0,
+        bg:                BG_CYCLE[idx % BG_CYCLE.length],
+        tags:              p.tags ?? [],
+        saves:             0,
+        favoriteCount:     0,
+        desc:              p.description ?? '',
+        qualityScore:      0,
+        createdAt:         p.created_at,
+        addedBy:           user.id,
+        source:            'manual_portfolio',
+        permit_required:   p.permit_required ?? false,
+        permit_notes:      p.permit_notes ?? null,
+        permit_fee:        p.permit_fee ?? null,
+        permit_website:    p.permit_website ?? null,
+        permit_certainty:  'unknown',
+        permit_scanned_at: null,
+      }))
+    setManualPortfolioLocs(rows)
   }, [user])
+  useEffect(() => { loadManualPortfolioLocs() }, [loadManualPortfolioLocs])
+
+  // Refresh portfolio state whenever the Explore tab regains focus /
+  // becomes visible. Fires when the user returns from Dashboard's
+  // PortfolioEditModal (their edits to description, parking info,
+  // photos, etc. all live in portfolio_locations) so returning to
+  // Explore doesn't keep showing stale pre-edit data.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return
+    function onVisible() {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      loadPortfolioSources()
+      loadManualPortfolioLocs()
+    }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [user, loadPortfolioSources, loadManualPortfolioLocs])
 
   async function toggleFavorite(locId: any) {
     if (!user) { setAuthOpen('login'); return }
