@@ -1198,28 +1198,39 @@ export default function ExplorePage() {
     // public spot, the public pin disappears and the portfolio pin
     // takes its place. Two ways a public row gets "overridden":
     //   1. Explicit — a portfolio row's source_location_id equals it.
-    //   2. Fuzzy — a manual portfolio row within ~150 m carries a
-    //      name substring match (case-insensitive) with the public
-    //      row's name. Catches the "I added Loose Park manually
-    //      before the public one existed" case that showed up as a
-    //      duplicate pin.
+    //   2. Fuzzy — a manual portfolio row that either
+    //        (a) sits within ~150 m regardless of name, or
+    //        (b) sits within ~500 m AND either name substring-
+    //            includes the other (min 4 chars on both sides to
+    //            keep "Park" / "The" from matching everything).
+    //      Both tiers catch the "I added Loose Park manually before
+    //      the public one existed" case even when the two pins'
+    //      coords disagree by a couple hundred meters (park entrance
+    //      vs meadow center).
     // Each portfolio pin also learns its publicEquivalentId so the
     // DetailPanel can offer a "View public listing" button.
-    const NEAR_M = 0.0932  // ~150 m in miles
+    const NEAR_M_EXACT = 0.0932  // ~150 m: same physical spot regardless of name
+    const NEAR_M_FUZZY = 0.31    // ~500 m: needs a name substring match
+    function nearMatchPublicId(pin: any): string | null {
+      if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) return null
+      const nname = String(pin.name ?? '').toLowerCase().trim()
+      const nameOk = nname.length >= 4
+      for (const l of locations as any[]) {
+        if (!Number.isFinite(l.lat) || !Number.isFinite(l.lng)) continue
+        const d = distMiles(pin.lat, pin.lng, l.lat, l.lng)
+        if (d < NEAR_M_EXACT) return String(l.id)
+        if (!nameOk || d >= NEAR_M_FUZZY) continue
+        const lname = String(l.name ?? '').toLowerCase()
+        if (lname.length < 4) continue
+        if (lname.includes(nname) || nname.includes(lname)) return String(l.id)
+      }
+      return null
+    }
     const overridden = new Set<string>()
     const pinsWithEquivalent = manualPortfolioLocs.map((pin: any) => {
-      let equivalentId: string | null = pin.source_location_id ? String(pin.source_location_id) : null
-      if (!equivalentId && pin.isManualPortfolio) {
-        // Cheap normalized-name match against public locations within
-        // the near-radius. First hit wins.
-        const nname = String(pin.name ?? '').toLowerCase().trim()
-        const match = locations.find((l: any) =>
-          Number.isFinite(l.lat) && Number.isFinite(l.lng)
-          && distMiles(pin.lat, pin.lng, l.lat, l.lng) < NEAR_M
-          && (String(l.name ?? '').toLowerCase().includes(nname) || nname.includes(String(l.name ?? '').toLowerCase()))
-        )
-        if (match) equivalentId = String(match.id)
-      }
+      const equivalentId: string | null = pin.source_location_id
+        ? String(pin.source_location_id)
+        : (pin.isManualPortfolio ? nearMatchPublicId(pin) : null)
       if (equivalentId) overridden.add(equivalentId)
       return { ...pin, publicEquivalentId: equivalentId }
     })
@@ -1330,21 +1341,25 @@ export default function ExplorePage() {
   // filters (search, tags, access, rating) still apply because those
   // are user choices to narrow the visible set.
   const mapMarkers = useMemo(() => {
-    // Same override-collapse rule as the sidebar list: portfolio pins
-    // hide the public pin they cover, so a photographer's map never
-    // shows the "Loose Park public" + "Loose Park (mine)" duplicate.
-    const NEAR_M = 0.0932
+    // Same override-collapse rule as the sidebar list (see the
+    // filtered useMemo above for the full rationale + two tiers).
+    const NEAR_M_EXACT = 0.0932  // ~150 m
+    const NEAR_M_FUZZY = 0.31    // ~500 m with name substring
     const overridden = new Set<string>()
-    for (const pin of manualPortfolioLocs) {
-      if (pin.source_location_id) overridden.add(String(pin.source_location_id))
-      else if (pin.isManualPortfolio) {
-        const nname = String(pin.name ?? '').toLowerCase().trim()
-        const match = locations.find((l: any) =>
-          Number.isFinite(l.lat) && Number.isFinite(l.lng)
-          && distMiles(pin.lat, pin.lng, l.lat, l.lng) < NEAR_M
-          && (String(l.name ?? '').toLowerCase().includes(nname) || nname.includes(String(l.name ?? '').toLowerCase()))
-        )
-        if (match) overridden.add(String(match.id))
+    for (const pin of manualPortfolioLocs as any[]) {
+      if (pin.source_location_id) { overridden.add(String(pin.source_location_id)); continue }
+      if (!pin.isManualPortfolio) continue
+      if (!Number.isFinite(pin.lat) || !Number.isFinite(pin.lng)) continue
+      const nname = String(pin.name ?? '').toLowerCase().trim()
+      const nameOk = nname.length >= 4
+      for (const l of locations as any[]) {
+        if (!Number.isFinite(l.lat) || !Number.isFinite(l.lng)) continue
+        const d = distMiles(pin.lat, pin.lng, l.lat, l.lng)
+        if (d < NEAR_M_EXACT) { overridden.add(String(l.id)); break }
+        if (!nameOk || d >= NEAR_M_FUZZY) continue
+        const lname = String(l.name ?? '').toLowerCase()
+        if (lname.length < 4) continue
+        if (lname.includes(nname) || nname.includes(lname)) { overridden.add(String(l.id)); break }
       }
     }
     const visiblePublic = overridden.size > 0 ? locations.filter((l:any) => !overridden.has(String(l.id))) : locations
