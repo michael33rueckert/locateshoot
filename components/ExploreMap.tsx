@@ -30,12 +30,14 @@ export interface ExploreLocation {
   tags: string[]
   saves: number
   // Per-location label rendering — admin picks in LocationEditModal:
-  //   'dot'      → circle only, no label at any zoom (default)
-  //   'name'     → circle + text label appears at zoom >= 13
-  //   'featured' → circle + text label + tiny image thumb, zoom >= 11
+  //   'dot'       → circle only, no label at any zoom (default)
+  //   'name'      → circle + text label appears at zoom >= 13
+  //   'featured'  → circle + text label + tiny image thumb, zoom >= 11
+  //   'portfolio' → same shape as 'featured' but with a gold ring +
+  //                 badge marking it as one of THIS user's own spots
   // Undefined behaves like 'dot' to stay backward-compat with any
   // caller that hasn't populated the field yet.
-  mapDisplayMode?: 'dot' | 'name' | 'featured'
+  mapDisplayMode?: 'dot' | 'name' | 'featured' | 'portfolio'
 }
 
 interface ExploreMapProps {
@@ -87,6 +89,15 @@ const LABEL_OPTS_FEATURED = {
   direction:   'top' as const,
   offset:      [0, -8] as [number, number],
   className:   'explore-map-label explore-map-label-featured',
+  interactive: true,
+}
+const LABEL_OPTS_PORTFOLIO = {
+  permanent:   true,
+  direction:   'top' as const,
+  offset:      [0, -8] as [number, number],
+  // Portfolio pins share the featured pill shape but add a class
+  // for the gold-ring + badge treatment defined in globals.css.
+  className:   'explore-map-label explore-map-label-featured explore-map-label-portfolio',
   interactive: true,
 }
 // Hover tooltip — bound to every 'dot' marker (and used as a
@@ -205,6 +216,25 @@ export default function ExploreMap({
         onMapMoveRef.current({ lat: c.lat, lng: c.lng }, map.getZoom())
       })
 
+      // Zoom-responsive label scale — featured/portfolio pills would
+      // otherwise look enormous at wide zoom (they're 40 px thumbs +
+      // 13 px text). We publish a CSS custom property on the map
+      // container that scales linearly with zoom over ZOOM_SCALE_MIN
+      // → ZOOM_SCALE_MAX, capped at [MIN_SCALE, MAX_SCALE]. globals.
+      // css uses transform: scale(var(--label-scale)) on the pill.
+      const ZOOM_SCALE_MIN = 11
+      const ZOOM_SCALE_MAX = 16
+      const MIN_SCALE      = 0.55
+      const MAX_SCALE      = 1
+      const applyLabelScale = () => {
+        const z = map.getZoom()
+        const t = (z - ZOOM_SCALE_MIN) / (ZOOM_SCALE_MAX - ZOOM_SCALE_MIN)
+        const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, MIN_SCALE + t * (MAX_SCALE - MIN_SCALE)))
+        container.style.setProperty('--label-scale', clamped.toFixed(3))
+      }
+      map.on('zoom', applyLabelScale)
+      applyLabelScale()
+
       // Google-Maps-style label reveal — labels are bound to markers
       // on-demand based on per-marker mode + current zoom. Previous
       // version bound a permanent tooltip to every marker at init,
@@ -213,9 +243,10 @@ export default function ExploreMap({
       // animation had to reposition all of them even when invisible.
       // Dynamic bind keeps the map at zero tooltip DOM until it's
       // actually useful, and each pin honors its own mapDisplayMode:
-      //   'dot'      → never labeled
-      //   'name'     → labeled at zoom >= ZOOM_THRESHOLD_NAME
-      //   'featured' → labeled with thumb at ZOOM_THRESHOLD_FEATURED+
+      //   'dot'       → never labeled
+      //   'name'      → labeled at zoom >= ZOOM_THRESHOLD_NAME
+      //   'featured'  → labeled with thumb at ZOOM_THRESHOLD_FEATURED+
+      //   'portfolio' → same as featured w/ gold ring + badge marker
       // Each marker's tooltip is chosen by (mode, zoom, has-thumb):
       //   dot mode                    → 'hover'    (non-permanent)
       //   name mode, zoom >= 13       → 'name'     (permanent, text)
@@ -231,23 +262,31 @@ export default function ExploreMap({
         const zoom = map.getZoom()
         const pm   = photoMapRef.current
         for (const m of Object.values(markersRef.current) as any[]) {
-          const mode = m.__mode as 'dot' | 'name' | 'featured'
+          const mode = m.__mode as 'dot' | 'name' | 'featured' | 'portfolio'
           const name = m.__label as string
           if (!name) continue
 
-          const canShowFeatured = mode === 'featured' && zoom >= ZOOM_THRESHOLD_FEATURED
-          const canShowName     = mode === 'name'     && zoom >= ZOOM_THRESHOLD_NAME
-          const thumb           = canShowFeatured ? pm[String(m.__id)] : undefined
-          const wantType: 'hover' | 'name' | 'featured' =
-            canShowFeatured && thumb ? 'featured'
-            : canShowFeatured        ? 'name'      // no thumb yet — fall back to text-only
-            : canShowName            ? 'name'
+          const canShowFeatured  = mode === 'featured'  && zoom >= ZOOM_THRESHOLD_FEATURED
+          const canShowPortfolio = mode === 'portfolio' && zoom >= ZOOM_THRESHOLD_FEATURED
+          const canShowName      = mode === 'name'      && zoom >= ZOOM_THRESHOLD_NAME
+          const thumb            = (canShowFeatured || canShowPortfolio) ? pm[String(m.__id)] : undefined
+          const wantType: 'hover' | 'name' | 'featured' | 'portfolio' =
+            canShowPortfolio && thumb ? 'portfolio'
+            : canShowPortfolio        ? 'name'    // no thumb yet — fall back to text-only
+            : canShowFeatured && thumb ? 'featured'
+            : canShowFeatured          ? 'name'
+            : canShowName              ? 'name'
             : 'hover'
 
           if (m.__tooltipType === wantType) continue
           if (m.getTooltip()) m.unbindTooltip()
 
-          if (wantType === 'featured') {
+          if (wantType === 'portfolio') {
+            m.bindTooltip(
+              `<img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span><span class="explore-map-label-badge" aria-hidden="true">📷</span>`,
+              LABEL_OPTS_PORTFOLIO,
+            )
+          } else if (wantType === 'featured') {
             m.bindTooltip(
               `<img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span>`,
               LABEL_OPTS_FEATURED,

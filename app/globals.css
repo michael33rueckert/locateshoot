@@ -955,6 +955,13 @@ body {
   box-shadow: 0 3px 10px rgba(0, 0, 0, .22) !important;
   text-shadow: none !important;
   color: #1a1612 !important;
+  /* Scale is driven by ExploreMap's zoom listener (writes
+     --label-scale on the map container). Featured / portfolio pills
+     shrink at wide zoom, grow back to full size as you zoom in.
+     transform-origin at the bottom anchors the scale to the pin. */
+  transform: scale(var(--label-scale, 1)) !important;
+  transform-origin: 50% 100% !important;
+  transition: transform .12s ease-out !important;
 }
 .explore-map-label-thumb {
   width: 40px;
@@ -970,6 +977,33 @@ body {
   font-weight: 600;
   color: #1a1612;
   white-space: nowrap;
+}
+
+/* Portfolio pin — same pill shape as featured but with a gold ring
+   around the thumbnail and a small camera badge on the bottom-right
+   corner of the thumb so the photographer can tell at a glance
+   which pins are their own. */
+.explore-map-label-portfolio .explore-map-label-thumb {
+  border: 2px solid var(--gold) !important;
+  box-sizing: border-box !important;
+}
+.explore-map-label-portfolio {
+  position: relative;
+}
+.explore-map-label-badge {
+  position: absolute !important;
+  left: 30px;
+  top: 26px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
 }
 
 /* ── RESPONSIVE ── */

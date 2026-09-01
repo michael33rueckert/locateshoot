@@ -759,8 +759,40 @@ export default function ExplorePage() {
       .select('id,source_location_id,name,city,state,latitude,longitude,access_type,tags,description,is_secret,permit_required,permit_notes,permit_fee,permit_website,sort_order,created_at')
       .eq('user_id', user.id)
     if (error || !data) return
-    const rows = data
-      .filter((p: any) => p.latitude != null && p.longitude != null)
+
+    // Pull the top photo per portfolio location so map pins render
+    // the photographer's own shot (not the linked public photo).
+    // Same query shape the sidebar list uses via
+    // portfolio_photo_summary — direct SELECT here since we only need
+    // one URL per row and don't want a second RPC round-trip on
+    // Explore init. Fallback path (no photo yet on a portfolio row):
+    // ExploreMap's photoMap lookup already handles a missing key
+    // with a name-only tooltip.
+    const validRows = data.filter((p: any) => p.latitude != null && p.longitude != null)
+    const portfolioIds = validRows.map((p: any) => p.id)
+    let portfolioPhotoUrl: Record<string, string> = {}
+    if (portfolioIds.length > 0) {
+      const { data: photoRows } = await supabase
+        .from('location_photos')
+        .select('portfolio_location_id,url,sort_order,created_at')
+        .in('portfolio_location_id', portfolioIds)
+        .eq('is_private', false)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
+      ;(photoRows ?? []).forEach((r: any) => {
+        if (r.portfolio_location_id && r.url && !portfolioPhotoUrl[r.portfolio_location_id]) {
+          portfolioPhotoUrl[r.portfolio_location_id] = r.url
+        }
+      })
+      // Merge into the shared photoMap keyed by the pin's synthetic
+      // `portfolio:<uuid>` id so ExploreMap's applier can look up
+      // the URL with the same code path it uses for public pins.
+      const merged: Record<string, string> = {}
+      for (const [pid, url] of Object.entries(portfolioPhotoUrl)) merged[`portfolio:${pid}`] = url
+      if (Object.keys(merged).length > 0) setPhotoMap(prev => ({ ...prev, ...merged }))
+    }
+
+    const rows = validRows
       .map((p: any, idx: number) => ({
         // Pin id prefix keeps portfolio pins distinct from public
         // location ids even for linked entries (whose
@@ -770,10 +802,11 @@ export default function ExplorePage() {
         source_location_id:    p.source_location_id ?? null,
         isManualPortfolio:     !p.source_location_id,
         isMine:                true,
-        // Portfolio pins are the user's own — always worth showing a
-        // name label at zoom, unlike public pins which default to
-        // 'dot' unless the admin promotes them.
-        mapDisplayMode:        'name' as const,
+        // Portfolio pins render as their own map style — same visual
+        // as 'featured' (name + thumbnail) but with a gold ring +
+        // badge that flags "this is yours". Threshold matches
+        // featured (zoom >= 11).
+        mapDisplayMode:        'portfolio' as const,
         name:              p.name,
         city:              p.city && p.state ? `${p.city}, ${p.state}` : (p.city ?? p.state ?? ''),
         lat:               p.latitude,
