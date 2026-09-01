@@ -583,11 +583,17 @@ export default function ExplorePage() {
     const ids = locations.map((l: any) => l.id)
     let cancelled = false
     ;(async () => {
+      // Order by sort_order so the sidebar thumbnail matches whatever
+      // the admin dragged to position #1 in the photos modal, not
+      // whatever the DB returned first (which was previously an
+      // arbitrary insertion order).
       const { data } = await supabase
         .from('location_photos')
-        .select('location_id,url')
+        .select('location_id,url,sort_order,created_at')
         .in('location_id', ids)
         .eq('is_private', false)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
         .limit(5000)
       if (cancelled || !data) return
       const m: Record<string, string> = {}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { validateImageUpload } from '@/lib/upload-validate'
 import { compressImageIfNeeded } from '@/lib/image-compress'
+import { useReorderDrag } from '@/hooks/useReorderDrag'
 
 // Admin-only photo manager for a public location row. Opens from the
 // Explore detail panel's admin block. Shows every photo currently
@@ -112,6 +113,37 @@ export default function LocationPhotosModal({
     if (successCount > 0) onChanged()
   }
 
+  // Reorder — writes sort_order back to every row so the order
+  // survives a reload. Admin RLS bypass on location_photos
+  // (20260624_admin_rls_bypass.sql) lets us update rows we didn't
+  // upload (Google seeds, other admins' uploads).
+  async function persistOrder(next: PhotoRow[], prev: PhotoRow[]) {
+    setPhotos(next)
+    setError(null)
+    const results = await Promise.all(next.map((p, idx) =>
+      supabase.from('location_photos').update({ sort_order: idx }).eq('id', p.id)
+    ))
+    const firstErr = results.find(r => r.error)?.error
+    if (firstErr) {
+      // Roll back optimistic UI so the visible order matches the DB.
+      setPhotos(prev)
+      setError(`Could not save photo order: ${firstErr.message}`)
+      return
+    }
+    onChanged()
+  }
+  async function reorderPhoto(fromId: string, toId: string) {
+    if (fromId === toId) return
+    const fromIdx = photos.findIndex(p => p.id === fromId)
+    const toIdx   = photos.findIndex(p => p.id === toId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const next = [...photos]
+    const [moved] = next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, moved)
+    await persistOrder(next, photos)
+  }
+  const photoReorder = useReorderDrag(reorderPhoto)
+
   async function confirmDelete(p: PhotoRow) {
     if (deleteId !== p.id) { setDeleteId(p.id); return }
     setDeleteId(null)
@@ -143,7 +175,7 @@ export default function LocationPhotosModal({
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--cream-dark)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📷 {locationName}</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>{photos.length} photo{photos.length === 1 ? '' : 's'} attached · uploads appear on the Explore map immediately</div>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 300, marginTop: 2 }}>{photos.length} photo{photos.length === 1 ? '' : 's'} attached · drag the ⋮⋮ handle to reorder · #1 is the cover shot</div>
           </div>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--cream-dark)', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--ink-soft)', flexShrink: 0 }}>✕</button>
         </div>
@@ -189,23 +221,67 @@ export default function LocationPhotosModal({
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 10 }}>
-              {photos.map(p => {
+              {photos.map((p, idx) => {
                 const isConfirmingDelete = deleteId === p.id
                 const isExternal = !!p.storage_path && p.storage_path.startsWith('external:')
+                const isDragging = photoReorder.draggingId === p.id
+                const isOver     = photoReorder.overId === p.id
                 return (
-                  <div key={p.id} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--cream-dark)', background: 'var(--cream)' }}>
+                  <div
+                    key={p.id}
+                    {...photoReorder.bindItem(p.id)}
+                    style={{
+                      position: 'relative', borderRadius: 8, overflow: 'hidden',
+                      border: `1px solid ${isOver ? 'var(--gold)' : 'var(--cream-dark)'}`,
+                      background: 'var(--cream)',
+                      // Ghost the card being dragged so the drop target
+                      // underneath is easy to see.
+                      opacity: isDragging ? 0.4 : 1,
+                      transform: isOver ? 'scale(1.02)' : 'none',
+                      boxShadow: isOver ? '0 4px 14px rgba(196,146,42,.25)' : 'none',
+                      transition: 'transform .12s ease-out, box-shadow .12s ease-out, opacity .12s ease-out',
+                      // Start pan-y so a normal touch scrolls the grid;
+                      // useReorderDrag flips it to 'none' once a drag
+                      // is armed via the long-press or handle.
+                      touchAction: 'pan-y',
+                    }}
+                  >
                     <div style={{ aspectRatio: '4 / 3', position: 'relative' }}>
                       <img
                         src={p.url}
                         alt={p.caption ?? locationName}
                         loading="lazy"
+                        draggable={false}
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                       />
+                      {/* Position badge — makes it obvious which shot is
+                          #1 (Explore card's primary photo). */}
+                      <div style={{ position: 'absolute', bottom: 6, left: 6, padding: '2px 8px', borderRadius: 3, background: idx === 0 ? 'var(--gold)' : 'rgba(0,0,0,.55)', color: idx === 0 ? 'var(--ink)' : 'white', fontSize: 10, fontWeight: 700, letterSpacing: '.04em' }}>
+                        #{idx + 1}{idx === 0 ? ' · cover' : ''}
+                      </div>
                       {isExternal && (
                         <div style={{ position: 'absolute', top: 6, left: 6, padding: '2px 6px', borderRadius: 3, background: 'rgba(0,0,0,.6)', color: 'white', fontSize: 9, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>
                           {p.storage_path === 'external:google' ? 'Google' : p.storage_path === 'external:wiki' ? 'Wiki' : 'External'}
                         </div>
                       )}
+                      {/* Dedicated drag handle in the top-right of the
+                          photo — grabbing it starts the drag instantly
+                          instead of after the 320 ms long-press. Bigger
+                          hit target on touch than the desktop-only ⋮⋮
+                          glyph might suggest. */}
+                      <div
+                        {...photoReorder.bindHandle(p.id)}
+                        title="Drag to reorder"
+                        style={{
+                          position: 'absolute', top: 4, right: 4,
+                          width: 30, height: 30, borderRadius: 4,
+                          background: 'rgba(0,0,0,.55)', color: 'white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 16, cursor: 'grab', userSelect: 'none',
+                        }}
+                      >
+                        ⋮⋮
+                      </div>
                     </div>
                     <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.photographer_name || '—'}</span>
