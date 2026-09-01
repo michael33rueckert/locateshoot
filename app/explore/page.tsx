@@ -697,6 +697,30 @@ export default function ExplorePage() {
     return () => photoObsRef.current?.disconnect()
   }, [processPhotoQueue])
 
+  // Featured pins on the map need their thumbnail regardless of
+  // whether the sidebar has scrolled past them. The intersection-
+  // observer-driven fetch above only fires when a card enters the
+  // list viewport, so a user who just opened the map would never
+  // see the thumb for a featured pin whose list card is offscreen.
+  // Enqueue them eagerly the moment we know they exist AND we
+  // don't yet have their photo URL. photoSeenRef dedups so this
+  // effect can safely re-run on locations / photoMap change without
+  // re-queuing.
+  useEffect(() => {
+    if (!locations.length) return
+    let added = false
+    for (const l of locations as any[]) {
+      if (l.mapDisplayMode !== 'featured') continue
+      const id = String(l.id)
+      if (photoMap[id])                continue
+      if (photoSeenRef.current.has(id)) continue
+      photoSeenRef.current.add(id)
+      photoQueueRef.current.push(l)
+      added = true
+    }
+    if (added) processPhotoQueue()
+  }, [locations, photoMap, processPhotoQueue])
+
   const loadPortfolioSources = useCallback(async () => {
     if (!user) { setPortfolioSources(new Map()); return }
     const { data } = await supabase.from('portfolio_locations').select('id,source_location_id').eq('user_id', user.id)
