@@ -275,58 +275,93 @@ export default function ExploreMap({
       // We track (__tooltipType, __tooltipHasThumb) per marker so the
       // applier only unbinds+rebinds when the desired shape actually
       // changed — cheap zoom passes over 700 markers stay flat.
+      // Per-marker bind logic. Same shape it always had; extracted
+      // so the split-processing scheduler below can call it for one
+      // marker at a time regardless of which pass (in-view / off-view)
+      // that marker landed in.
+      const bindMarker = (m: any, zoom: number, pm: Record<string, string>) => {
+        const mode = m.__mode as 'dot' | 'name' | 'featured' | 'portfolio'
+        const name = m.__label as string
+        if (!name) return
+
+        const canShowFeatured  = mode === 'featured'  && zoom >= ZOOM_THRESHOLD_FEATURED
+        const canShowPortfolio = mode === 'portfolio' && zoom >= ZOOM_THRESHOLD_FEATURED
+        const canShowName      = mode === 'name'      && zoom >= ZOOM_THRESHOLD_NAME
+        const thumb            = (canShowFeatured || canShowPortfolio) ? pm[String(m.__id)] : undefined
+        const wantType: 'hover' | 'name' | 'featured' | 'portfolio' =
+          canShowPortfolio && thumb ? 'portfolio'
+          : canShowPortfolio        ? 'name'
+          : canShowFeatured && thumb ? 'featured'
+          : canShowFeatured          ? 'name'
+          : canShowName              ? 'name'
+          : 'hover'
+
+        if (m.__tooltipType === wantType) return
+        if (m.getTooltip()) m.unbindTooltip()
+
+        if (wantType === 'portfolio') {
+          m.bindTooltip(
+            `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-text"><span class="explore-map-label-name">${escapeText(name)}</span><span class="explore-map-label-sub">In your portfolio</span></span><span class="explore-map-label-badge" aria-hidden="true">📷</span></span>`,
+            LABEL_OPTS_PORTFOLIO,
+          )
+        } else if (wantType === 'featured') {
+          m.bindTooltip(
+            `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span></span>`,
+            LABEL_OPTS_FEATURED,
+          )
+        } else if (wantType === 'name') {
+          m.bindTooltip(escapeText(name), LABEL_OPTS_NAME)
+        } else {
+          m.bindTooltip(escapeText(name), LABEL_OPTS_HOVER)
+        }
+        const tt = m.getTooltip()
+        if (tt && wantType !== 'hover' && m.__onLabelClick) tt.on('click', m.__onLabelClick)
+        m.__tooltipType = wantType
+      }
+
+      // Threshold-crossing lag fix. When zoom crosses the featured /
+      // portfolio threshold (11) or the name threshold (13), a large
+      // batch of pins flip mode at once — each bind creates a DOM
+      // tooltip, and doing 50-100 of them in one frame was visibly
+      // stalling the map.
+      //
+      // Two-pass scheduler:
+      //   1. Bind every marker CURRENTLY IN THE MAP VIEWPORT
+      //      synchronously. These are the ones the user actually
+      //      sees, so we want them right now.
+      //   2. Bind the remaining off-viewport markers in chunks of
+      //      OFFVIEW_CHUNK per rAF tick. Off-viewport tooltips paint
+      //      to nothing (browser cull), so binding them later is
+      //      invisible. This spreads the DOM-create cost across
+      //      several frames and unblocks the main thread between
+      //      chunks. offviewRafId is cancelled if another zoomend
+      //      arrives while we're mid-flight so we don't stack work.
+      const OFFVIEW_CHUNK = 40
+      let offviewRafId: number | null = null
       const applyLabelsForCurrentZoom = () => {
         const zoom = map.getZoom()
         const pm   = photoMapRef.current
+        const bounds = map.getBounds()
+
+        // Cancel any deferred off-view work still in flight — the
+        // fresh call will restart it with current zoom state.
+        if (offviewRafId !== null) { cancelAnimationFrame(offviewRafId); offviewRafId = null }
+
+        const offView: any[] = []
         for (const m of Object.values(markersRef.current) as any[]) {
-          const mode = m.__mode as 'dot' | 'name' | 'featured' | 'portfolio'
-          const name = m.__label as string
-          if (!name) continue
-
-          const canShowFeatured  = mode === 'featured'  && zoom >= ZOOM_THRESHOLD_FEATURED
-          const canShowPortfolio = mode === 'portfolio' && zoom >= ZOOM_THRESHOLD_FEATURED
-          const canShowName      = mode === 'name'      && zoom >= ZOOM_THRESHOLD_NAME
-          const thumb            = (canShowFeatured || canShowPortfolio) ? pm[String(m.__id)] : undefined
-          const wantType: 'hover' | 'name' | 'featured' | 'portfolio' =
-            canShowPortfolio && thumb ? 'portfolio'
-            : canShowPortfolio        ? 'name'    // no thumb yet — fall back to text-only
-            : canShowFeatured && thumb ? 'featured'
-            : canShowFeatured          ? 'name'
-            : canShowName              ? 'name'
-            : 'hover'
-
-          if (m.__tooltipType === wantType) continue
-          if (m.getTooltip()) m.unbindTooltip()
-
-          if (wantType === 'portfolio') {
-            // Content wrapped in .explore-map-label-inner so CSS can
-            // apply transform: scale() to it without fighting
-            // Leaflet's positioning transform on .leaflet-tooltip.
-            // Two-line label — name on top, "In your portfolio" as
-            // a small subtitle underneath. Keeps the pill narrower
-            // than one-line "Name — In your portfolio" would have.
-            m.bindTooltip(
-              `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-text"><span class="explore-map-label-name">${escapeText(name)}</span><span class="explore-map-label-sub">In your portfolio</span></span><span class="explore-map-label-badge" aria-hidden="true">📷</span></span>`,
-              LABEL_OPTS_PORTFOLIO,
-            )
-          } else if (wantType === 'featured') {
-            m.bindTooltip(
-              `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span></span>`,
-              LABEL_OPTS_FEATURED,
-            )
-          } else if (wantType === 'name') {
-            m.bindTooltip(escapeText(name), LABEL_OPTS_NAME)
-          } else {
-            m.bindTooltip(escapeText(name), LABEL_OPTS_HOVER)
-          }
-          const tt = m.getTooltip()
-          // Only permanent labels get the click-to-open-panel handler.
-          // Non-permanent hover tooltips are non-interactive so clicks
-          // fall through to the marker itself, which already fires
-          // onMarkerClick.
-          if (tt && wantType !== 'hover' && m.__onLabelClick) tt.on('click', m.__onLabelClick)
-          m.__tooltipType = wantType
+          if (bounds.contains(m.getLatLng())) bindMarker(m, zoom, pm)
+          else                                 offView.push(m)
         }
+
+        if (offView.length === 0) return
+        let cursor = 0
+        const step = () => {
+          offviewRafId = null
+          const end = Math.min(cursor + OFFVIEW_CHUNK, offView.length)
+          for (; cursor < end; cursor++) bindMarker(offView[cursor], zoom, pm)
+          if (cursor < offView.length) offviewRafId = requestAnimationFrame(step)
+        }
+        offviewRafId = requestAnimationFrame(step)
       }
       applyLabelsForCurrentZoomRef.current = applyLabelsForCurrentZoom
       map.on('zoomend', applyLabelsForCurrentZoom)

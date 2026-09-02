@@ -107,10 +107,22 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
     if (!loc?.id) return
     let cancelled = false
     ;(async () => {
-      const { data } = await supabase
-        .from('location_photos')
-        .select('url,photographer_name,storage_path,sort_order,created_at')
-        .eq('location_id', loc.id)
+      // location_photos stores photographer uploads under
+      // portfolio_location_id (for their own portfolio entries) and
+      // admin uploads under location_id (for public rows). Portfolio
+      // pins carry the portfolio row's uuid on loc.portfolio_location_id
+      // and a synthetic `portfolio:<uuid>` on loc.id — filtering by
+      // loc.id alone missed the photographer's uploads on their own
+      // pins, so the carousel fell back to only Google Places photos.
+      // Query by whichever key applies to this pin.
+      const q = loc.portfolio_location_id
+        ? supabase.from('location_photos')
+            .select('url,photographer_name,storage_path,sort_order,created_at')
+            .eq('portfolio_location_id', loc.portfolio_location_id)
+        : supabase.from('location_photos')
+            .select('url,photographer_name,storage_path,sort_order,created_at')
+            .eq('location_id', loc.id)
+      const { data } = await q
         .eq('is_private', false)
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true })
@@ -124,7 +136,7 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
       setUserPhotos(own.map((p: any) => ({ url: p.url, photographer_name: p.photographer_name ?? null })))
     })()
     return () => { cancelled = true }
-  }, [loc?.id, photoRefreshTick])
+  }, [loc?.id, loc?.portfolio_location_id, photoRefreshTick])
 
   // Carousel source of truth — user uploads first, then Google. Both
   // paths yield `{url, ...}` so the rest of the panel can treat them
