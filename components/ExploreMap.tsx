@@ -218,10 +218,17 @@ export default function ExploreMap({
 
       // Zoom-responsive label scale — featured/portfolio pills would
       // otherwise look enormous at wide zoom (they're 40 px thumbs +
-      // 13 px text). We publish a CSS custom property on the map
-      // container that scales linearly with zoom over ZOOM_SCALE_MIN
-      // → ZOOM_SCALE_MAX, capped at [MIN_SCALE, MAX_SCALE]. globals.
-      // css uses transform: scale(var(--label-scale)) on the pill.
+      // 13 px text). We publish --label-scale on the map container
+      // that scales linearly with zoom over ZOOM_SCALE_MIN → ZOOM_
+      // SCALE_MAX, capped at [MIN_SCALE, MAX_SCALE]. globals.css
+      // applies transform: scale(var(--label-scale)) to an INNER
+      // wrapper inside each tooltip — not to .leaflet-tooltip itself.
+      // Leaflet writes translate3d() on that element to position it,
+      // and any CSS transform there would fight for the same
+      // property, causing thrashing on every zoom animation frame.
+      // 'zoomend' (not 'zoom') so update fires once per settled
+      // zoom instead of ~60x per animation. Transition on the
+      // wrapper smooths the resize.
       const ZOOM_SCALE_MIN = 11
       const ZOOM_SCALE_MAX = 16
       const MIN_SCALE      = 0.55
@@ -232,7 +239,7 @@ export default function ExploreMap({
         const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, MIN_SCALE + t * (MAX_SCALE - MIN_SCALE)))
         container.style.setProperty('--label-scale', clamped.toFixed(3))
       }
-      map.on('zoom', applyLabelScale)
+      map.on('zoomend', applyLabelScale)
       applyLabelScale()
 
       // Google-Maps-style label reveal — labels are bound to markers
@@ -282,13 +289,16 @@ export default function ExploreMap({
           if (m.getTooltip()) m.unbindTooltip()
 
           if (wantType === 'portfolio') {
+            // Content wrapped in .explore-map-label-inner so CSS can
+            // apply transform: scale() to it without fighting
+            // Leaflet's positioning transform on .leaflet-tooltip.
             m.bindTooltip(
-              `<img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span><span class="explore-map-label-badge" aria-hidden="true">📷</span>`,
+              `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span><span class="explore-map-label-badge" aria-hidden="true">📷</span></span>`,
               LABEL_OPTS_PORTFOLIO,
             )
           } else if (wantType === 'featured') {
             m.bindTooltip(
-              `<img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span>`,
+              `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span></span>`,
               LABEL_OPTS_FEATURED,
             )
           } else if (wantType === 'name') {

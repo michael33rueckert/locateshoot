@@ -940,28 +940,40 @@ body {
    pass across the tooltip DOM subtree every frame. */
 .leaflet-tooltip-pane { will-change: transform; }
 
-/* Featured label — name paired with a tiny image thumb. Restores a
-   small white card here because a raw image against varying tile
-   colors can't be framed by text-shadow alone. Rounded 24px thumb
-   tucked to the left of the name in a single inline pill. */
+/* Featured / portfolio pill — outer .leaflet-tooltip element stays
+   transparent + unstyled here because Leaflet uses THAT element's
+   `transform` property for pin-anchor positioning. If our CSS wrote
+   `transform: scale(...)` on the same element, it would drop
+   Leaflet's translate3d and thrash on every zoom animation frame
+   (~60 style recalcs per zoom event, on ~700 markers). The pill
+   background, border, padding, shadow, AND the zoom scale all live
+   on an inner .explore-map-label-inner span — the tooltip HTML
+   wraps its contents in that span (see ExploreMap.tsx bindTooltip). */
 .explore-map-label-featured.leaflet-tooltip {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  background: rgba(255, 255, 255, .95) !important;
-  border: 1px solid rgba(0, 0, 0, .12) !important;
-  padding: 4px 12px 4px 4px !important;
-  border-radius: 24px !important;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, .22) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
   text-shadow: none !important;
   color: #1a1612 !important;
-  /* Scale is driven by ExploreMap's zoom listener (writes
+}
+.explore-map-label-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, .95);
+  border: 1px solid rgba(0, 0, 0, .12);
+  padding: 4px 12px 4px 4px;
+  border-radius: 24px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .22);
+  position: relative;
+  /* Scale is driven by ExploreMap's zoomend listener (writes
      --label-scale on the map container). Featured / portfolio pills
      shrink at wide zoom, grow back to full size as you zoom in.
      transform-origin at the bottom anchors the scale to the pin. */
-  transform: scale(var(--label-scale, 1)) !important;
-  transform-origin: 50% 100% !important;
-  transition: transform .12s ease-out !important;
+  transform: scale(var(--label-scale, 1));
+  transform-origin: 50% 100%;
+  transition: transform .18s ease-out;
 }
 .explore-map-label-thumb {
   width: 40px;
@@ -984,14 +996,11 @@ body {
    corner of the thumb so the photographer can tell at a glance
    which pins are their own. */
 .explore-map-label-portfolio .explore-map-label-thumb {
-  border: 2px solid var(--gold) !important;
-  box-sizing: border-box !important;
-}
-.explore-map-label-portfolio {
-  position: relative;
+  border: 2px solid var(--gold);
+  box-sizing: border-box;
 }
 .explore-map-label-badge {
-  position: absolute !important;
+  position: absolute;
   left: 30px;
   top: 26px;
   width: 18px;
@@ -1003,7 +1012,7 @@ body {
   line-height: 18px;
   text-align: center;
   border: 2px solid #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
 }
 
 /* ── RESPONSIVE ── */
