@@ -995,12 +995,28 @@ body {
 }
 
 /* Portfolio pin — same pill shape as featured but with a gold ring
-   around the thumbnail and a small camera badge on the bottom-right
-   corner of the thumb so the photographer can tell at a glance
-   which pins are their own. */
+   around the thumbnail, a small camera badge on the bottom-right
+   corner of the thumb, AND a two-line label so "In your portfolio"
+   sits under the location name. Makes the photographer's own spots
+   unambiguous at a glance vs featured public locations. */
 .explore-map-label-portfolio .explore-map-label-thumb {
   border: 2px solid var(--gold);
   box-sizing: border-box;
+}
+.explore-map-label-text {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.15;
+}
+.explore-map-label-sub {
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
 }
 .explore-map-label-badge {
   position: absolute;

@@ -302,8 +302,11 @@ export default function ExploreMap({
             // Content wrapped in .explore-map-label-inner so CSS can
             // apply transform: scale() to it without fighting
             // Leaflet's positioning transform on .leaflet-tooltip.
+            // Two-line label — name on top, "In your portfolio" as
+            // a small subtitle underneath. Keeps the pill narrower
+            // than one-line "Name — In your portfolio" would have.
             m.bindTooltip(
-              `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-name">${escapeText(name)}</span><span class="explore-map-label-badge" aria-hidden="true">📷</span></span>`,
+              `<span class="explore-map-label-inner"><img class="explore-map-label-thumb" src="${escapeAttr(thumb!)}" alt="" loading="lazy" /><span class="explore-map-label-text"><span class="explore-map-label-name">${escapeText(name)}</span><span class="explore-map-label-sub">In your portfolio</span></span><span class="explore-map-label-badge" aria-hidden="true">📷</span></span>`,
               LABEL_OPTS_PORTFOLIO,
             )
           } else if (wantType === 'featured') {
