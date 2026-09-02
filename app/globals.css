@@ -967,13 +967,16 @@ body {
   border-radius: 24px;
   box-shadow: 0 3px 10px rgba(0, 0, 0, .22);
   position: relative;
-  /* Scale is driven by ExploreMap's zoomend listener (writes
-     --label-scale on the map container). Featured / portfolio pills
-     shrink at wide zoom, grow back to full size as you zoom in.
-     transform-origin at the bottom anchors the scale to the pin. */
+  /* Scale updates every frame during a Leaflet zoom animation
+     (writeLabelScale is rAF-throttled to at most one write per
+     frame). No transition here — it would queue a duplicate
+     animation on top of every per-frame update and produce the
+     opposite of smoothness. will-change flags the element for GPU
+     compositing so the browser doesn't repaint the whole pill on
+     each scale write. */
   transform: scale(var(--label-scale, 1));
   transform-origin: 50% 100%;
-  transition: transform .18s ease-out;
+  will-change: transform;
 }
 .explore-map-label-thumb {
   width: 40px;

@@ -216,31 +216,41 @@ export default function ExploreMap({
         onMapMoveRef.current({ lat: c.lat, lng: c.lng }, map.getZoom())
       })
 
-      // Zoom-responsive label scale — featured/portfolio pills would
-      // otherwise look enormous at wide zoom (they're 40 px thumbs +
-      // 13 px text). We publish --label-scale on the map container
-      // that scales linearly with zoom over ZOOM_SCALE_MIN → ZOOM_
-      // SCALE_MAX, capped at [MIN_SCALE, MAX_SCALE]. globals.css
-      // applies transform: scale(var(--label-scale)) to an INNER
-      // wrapper inside each tooltip — not to .leaflet-tooltip itself.
-      // Leaflet writes translate3d() on that element to position it,
-      // and any CSS transform there would fight for the same
-      // property, causing thrashing on every zoom animation frame.
-      // 'zoomend' (not 'zoom') so update fires once per settled
-      // zoom instead of ~60x per animation. Transition on the
-      // wrapper smooths the resize.
+      // Zoom-responsive label scale. Publishes --label-scale on the
+      // map container; globals.css applies transform:scale(var(...))
+      // to .explore-map-label-inner (a wrapper INSIDE each tooltip,
+      // never on .leaflet-tooltip itself — Leaflet uses that
+      // element's `transform` for pin-anchor positioning).
+      //
+      // Listens to Leaflet's 'zoom' event so the scale updates every
+      // frame of the zoom animation (smooth grow/shrink), throttled
+      // via requestAnimationFrame so we never write the CSS var more
+      // than once per browser frame. No CSS transition on the inner
+      // span — it would queue up an animation every frame and defeat
+      // the direct-per-frame update.
       const ZOOM_SCALE_MIN = 11
       const ZOOM_SCALE_MAX = 16
       const MIN_SCALE      = 0.55
       const MAX_SCALE      = 1
-      const applyLabelScale = () => {
+      let scaleRafId: number | null = null
+      let lastScaleWritten = ''
+      const writeLabelScale = () => {
+        scaleRafId = null
         const z = map.getZoom()
         const t = (z - ZOOM_SCALE_MIN) / (ZOOM_SCALE_MAX - ZOOM_SCALE_MIN)
         const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, MIN_SCALE + t * (MAX_SCALE - MIN_SCALE)))
-        container.style.setProperty('--label-scale', clamped.toFixed(3))
+        const s = clamped.toFixed(3)
+        if (s === lastScaleWritten) return
+        lastScaleWritten = s
+        container.style.setProperty('--label-scale', s)
       }
-      map.on('zoomend', applyLabelScale)
-      applyLabelScale()
+      const scheduleScaleUpdate = () => {
+        if (scaleRafId !== null) return
+        scaleRafId = requestAnimationFrame(writeLabelScale)
+      }
+      map.on('zoom', scheduleScaleUpdate)
+      map.on('zoomend', scheduleScaleUpdate)
+      writeLabelScale()
 
       // Google-Maps-style label reveal — labels are bound to markers
       // on-demand based on per-marker mode + current zoom. Previous
