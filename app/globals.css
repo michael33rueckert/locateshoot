@@ -895,6 +895,62 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Reusable open-animations for modals, sheets, dropdowns ──
+   Applied as classes on the top-level wrapper element(s) of each
+   overlay component. Kept short (180–320ms) so nothing feels
+   sluggish. `animation-fill-mode: both` freezes the resting
+   state so backdrops don't flash before the first frame lands.
+
+   Respect prefers-reduced-motion: users who opt out of motion
+   get a near-instant fade instead of the full transform. This
+   is the accessibility baseline every animation here honors. */
+.anim-backdrop-in {
+  animation: overlay-backdrop-in 0.18s ease both;
+}
+.anim-sheet-up {
+  animation: overlay-sheet-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: bottom center;
+}
+.anim-modal-in {
+  animation: overlay-modal-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.anim-drop-in {
+  animation: overlay-drop-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: top center;
+}
+.anim-fade-in {
+  animation: overlay-fade-in 0.2s ease both;
+}
+@keyframes overlay-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes overlay-sheet-up {
+  from { opacity: 0; transform: translate(-50%, 24px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes overlay-modal-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes overlay-drop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anim-backdrop-in,
+  .anim-sheet-up,
+  .anim-modal-in,
+  .anim-drop-in,
+  .anim-fade-in {
+    animation-duration: 0.01s !important;
+  }
+}
+
 /* ── LEAFLET ── */
 .leaflet-container { font-family: var(--font-dm-sans), sans-serif !important; }
 .leaflet-popup-content-wrapper { border-radius: 8px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.2) !important; font-family: var(--font-dm-sans), sans-serif !important; }

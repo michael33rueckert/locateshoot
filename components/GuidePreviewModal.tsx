@@ -73,13 +73,14 @@ export default function GuidePreviewModal({ url, onClose }: Props) {
           other modals. */}
       <div
         onClick={onClose}
+        className="anim-backdrop-in"
         style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', zIndex: 1700 }}
       />
       {/* contain: layout style + willChange: transform promote this
           modal to its own compositing layer and scope its layout
           recalc so scroll inside the iframe doesn't ripple through to
           the page underneath. */}
-      <div style={{
+      <div className="anim-modal-in" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         willChange: 'transform', contain: 'layout style',
         background: '#1a1612',

@@ -105,6 +105,7 @@ export default function ImageLightbox({ src, startIndex = 0, alt, onClose }: Pro
   return (
     <div
       onClick={onClose}
+      className="anim-fade-in"
       style={{
         position: 'fixed',
         inset: 0,

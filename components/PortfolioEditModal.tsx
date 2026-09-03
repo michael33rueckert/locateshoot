@@ -498,7 +498,7 @@ export default function PortfolioEditModal({
           reads as lag / jank. The solid rgba scrim looks identical
           and scrolls smoothly. Same fix pattern the guide modal
           already uses. */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', zIndex: 1700 }} />
+      <div onClick={onClose} className="anim-backdrop-in" style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', zIndex: 1700 }} />
       {/* contain: layout style + willChange: transform scopes the
           modal's layout/style recalc + promotes it to its own
           compositing layer, so scroll frames don't ripple through to
@@ -508,7 +508,7 @@ export default function PortfolioEditModal({
           hidden so on desktop the scrollbar's top and bottom edges
           follow the rounded corners instead of squaring them off.
           The inner div is the actual scroll container. */}
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflow: 'hidden', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)', display: 'flex', flexDirection: 'column' }}>
+      <div className="anim-modal-in" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 560, maxWidth: '92vw', maxHeight: '92svh', overflow: 'hidden', zIndex: 1800, boxShadow: '0 24px 64px rgba(0,0,0,.3)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ minHeight: 0, overflowY: 'auto', willChange: 'transform', contain: 'layout style' }}>
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem', gap: 12 }}>

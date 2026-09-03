@@ -172,9 +172,10 @@ export default function AuthModal({ initialMode, onClose }: Props) {
     <>
       <div
         onClick={onClose}
+        className="anim-backdrop-in"
         style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.8)', backdropFilter: 'blur(6px)', zIndex: 1700 }}
       />
-      <div style={{
+      <div className="anim-modal-in" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: '#1a1612', border: '1px solid rgba(255,255,255,.1)', borderRadius: 16,
         width: 420, maxWidth: '94vw', maxHeight: '94svh', overflowY: 'auto',
