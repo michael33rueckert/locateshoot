@@ -55,7 +55,7 @@ export interface ClientLocation {
 // swap to Google-Maps-style category icons (colored circle + emoji)
 // so parks / urban / waterfront reads at a glance. Same threshold
 // the Explore map uses so both maps behave consistently.
-const ZOOM_THRESHOLD_ICONS = 14
+const ZOOM_THRESHOLD_ICONS = 13
 
 interface ClientMapProps {
   locations: ClientLocation[]

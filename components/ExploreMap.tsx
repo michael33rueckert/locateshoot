@@ -84,7 +84,7 @@ const ZOOM_THRESHOLD_FEATURED = 11
 // is a plain colored circle for the calm wide-zoom look. Only
 // pins CURRENTLY in the viewport get an icon overlay — panning
 // keeps the DOM count bounded.
-const ZOOM_THRESHOLD_ICONS    = 14
+const ZOOM_THRESHOLD_ICONS    = 13
 
 // Options passed to marker.bindTooltip on label activation. Kept
 // as a module-level constant so the shape is stable across binds
