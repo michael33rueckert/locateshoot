@@ -1667,7 +1667,18 @@ body {
     border-right: none !important;
     box-shadow: none !important;
   }
-  .explore-sidebar.mobile-hidden {
+  /* On mobile the desktop collapse concept doesn't apply — the
+     mobile-toggle pill at the bottom is the only view switch.
+     Force the .explore-sidebar-collapsed class to have no
+     effect so a sidebar collapsed on a wider viewport doesn't
+     stay stuck off-screen after resizing down. .mobile-hidden
+     still handles the translate for the map/list toggle. */
+  .explore-sidebar.explore-sidebar-collapsed {
+    transform: translateX(0) !important;
+    pointer-events: auto !important;
+  }
+  .explore-sidebar.mobile-hidden,
+  .explore-sidebar.mobile-hidden.explore-sidebar-collapsed {
     transform: translateX(-100%) !important;
     pointer-events: none !important;
   }
@@ -1703,8 +1714,12 @@ body {
     grid-template-columns: unset !important;
   }
   /* Search pill takes full topbar width on phones so it stays
-     tappable; chips wrap below it. */
-  .explore-search-pill { width: 100% !important; }
+     tappable; chips wrap below it. Override max-width too so
+     the pill isn't asymmetrically indented on the right. */
+  .explore-search-pill {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
  
   /* ── Share ── */
   .share-outer   { display: block !important; height: 100svh !important; overflow: hidden !important; }

@@ -532,11 +532,21 @@ export default function ExploreMap({
   }, [homeLocation])
 
   // ── Fly to user location when it arrives ──────────────────────────────────
+  // setView (not flyTo): flyTo animates over 1.2s and Leaflet has
+  // to reproject ~700 markers every frame during the fly, which
+  // was the perf hit users reported as "search lags the map".
+  // setView with animate:true does a linear pan/zoom in ~0.5s and
+  // avoids flyTo's zoom-out-then-zoom-in path (which crosses many
+  // extra tile boundaries and marker positions along the way).
   useEffect(() => {
     if (!mapRef.current || !userLocation) return
     if (!mapHasSize(mapRef.current)) return
     if (!isFiniteLatLng(userLocation.lat, userLocation.lng)) return
-    mapRef.current.flyTo([userLocation.lat, userLocation.lng], 13, { duration: 1.2 })
+    mapRef.current.setView(
+      [userLocation.lat, userLocation.lng],
+      13,
+      { animate: true, duration: 0.5, easeLinearity: 0.25 },
+    )
   }, [userLocation])
 
   // ── Draw user location dot ─────────────────────────────────────────────────
@@ -676,7 +686,10 @@ export default function ExploreMap({
     if (!mapHasSize(mapRef.current)) return
     const loc = locations.find(l => l.id === activeId)
     if (!loc || !isFiniteLatLng(loc.lat, loc.lng)) return
-    mapRef.current.flyTo([loc.lat, loc.lng], 14, { duration: 0.8 })
+    // setView (not flyTo) so the marker-click jump doesn't stall
+    // while Leaflet reprojects every marker for 0.8s of zoom-out /
+    // zoom-in animation — same perf fix as the search flyTo above.
+    mapRef.current.setView([loc.lat, loc.lng], 14, { animate: true, duration: 0.5, easeLinearity: 0.25 })
   }, [activeId, locations])
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
