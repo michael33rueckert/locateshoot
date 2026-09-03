@@ -575,7 +575,7 @@ export default function ExplorePage() {
       setDbLoading(true)
       try {
         const { data } = await supabase.from('locations')
-          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,favorite_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at,map_display_mode')
+          .select('id,name,city,state,latitude,longitude,access_type,tags,quality_score,rating,save_count,favorite_count,description,created_at,added_by,source,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,permit_scanned_at,map_display_mode,category')
           .eq('status','published').not('latitude','is',null).not('longitude','is',null)
           // Order by quality_score so if we ever DO hit the cap, the
           // best curated locations come back first instead of whatever
@@ -602,6 +602,7 @@ export default function ExplorePage() {
           permit_fee:loc.permit_fee, permit_website:loc.permit_website,
           permit_certainty:loc.permit_certainty??'unknown', permit_scanned_at:loc.permit_scanned_at,
           mapDisplayMode: (loc.map_display_mode === 'name' || loc.map_display_mode === 'featured') ? loc.map_display_mode : 'dot',
+          category: loc.category ?? null,
         })))
       } catch(e){console.error(e)} finally{setDbLoading(false)}
     }

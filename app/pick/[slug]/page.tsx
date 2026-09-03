@@ -359,6 +359,7 @@ export default function ClientPickerPage() {
           // and the viewport stays on the fallback center.
           const lat = typeof loc.latitude  === 'number' ? loc.latitude  : parseFloat(loc.latitude)
           const lng = typeof loc.longitude === 'number' ? loc.longitude : parseFloat(loc.longitude)
+          const isHighlighted = highlightSet.has(String(loc.id))
           all.push({
             id:     loc.id,
             name:   loc.name,
@@ -368,7 +369,14 @@ export default function ClientPickerPage() {
             access: loc.access_type ?? 'public',
             rating: ratingStr,
             bg:     BG_CYCLE[idx % BG_CYCLE.length],
-            type:   'favorite',
+            // 'recommended' drives the featured-style pill (thumbnail
+            // + "Recommended" subtitle) on ClientMap. 'favorite' is
+            // the ordinary numbered dot everyone else gets.
+            type:   isHighlighted ? 'recommended' : 'favorite',
+            // Category powers the Google-Maps-style icon on ClientMap
+            // at close zoom (colored circle + emoji for parks, urban,
+            // etc.). null falls back to a generic pin icon.
+            category: loc.category ?? null,
             tags:   loc.tags ?? [],
             desc:   loc.description ?? '',
             permitRequired:  loc.permit_required ?? null,
@@ -391,7 +399,7 @@ export default function ClientPickerPage() {
               : new Array((loc.photo_urls ?? (loc.photo_url ? [loc.photo_url] : [])).length).fill(null),
             showSeasons: !!loc.show_seasons,
             hideGooglePhotos: !!loc.hide_google_photos,
-            highlighted: highlightSet.has(String(loc.id)),
+            highlighted: isHighlighted,
           })
         })
 
@@ -401,6 +409,7 @@ export default function ClientPickerPage() {
             lat: s.lat ?? 0, lng: s.lng ?? 0,
             access: 'public', rating: '—',
             bg: s.bg ?? 'bg-1', type: 'secret',
+            category: null,
             tags: s.tags ?? [],
             desc: s.description ?? '',
             permitRequired: null, permitNotes: null, permitFee: null,

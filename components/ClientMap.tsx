@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { getTileConfig, needsDarkFilter } from '@/lib/map-tiles'
+import { getCategoryVisual } from '@/lib/map-categories'
 
 // Leaflet throws "Invalid LatLng object: (NaN, NaN)" when flyTo/setView/fitBounds
 // run while the map container has zero width/height. On mobile the map column is
@@ -29,8 +30,26 @@ export interface ClientLocation {
   access: string
   rating: string
   bg: string
+  // 'recommended' triggers the featured-style pill (thumbnail +
+  // "Recommended" subtitle) on the map. 'favorite' is the ordinary
+  // numbered dot every other portfolio spot gets.
   type: 'favorite' | 'recommended' | 'secret'
+  // Category powers the Google-Maps-style icon (colored circle +
+  // emoji) that replaces the plain numbered dot once the client
+  // zooms in past ZOOM_THRESHOLD_ICONS. Optional — an unrecognized
+  // or missing category falls back to a generic pin.
+  category?: string | null
+  // First photo (portfolio own upload preferred, source-location
+  // photo otherwise). Used for the "Recommended" thumbnail — the
+  // pin drops back to a name-only pill if there's no photo.
+  photoUrl?: string | null
 }
+
+// Once the client zooms in past this level the plain numbered dots
+// swap to Google-Maps-style category icons (colored circle + emoji)
+// so parks / urban / waterfront reads at a glance. Same threshold
+// the Explore map uses so both maps behave consistently.
+const ZOOM_THRESHOLD_ICONS = 14
 
 interface ClientMapProps {
   locations: ClientLocation[]
@@ -58,6 +77,13 @@ export default function ClientMap({
   const mapRef       = useRef<any>(null)
   const markersRef   = useRef<Record<number, any>>({})
   const didInitialFitRef = useRef(false)
+  // Which "icon tier" the markers are currently drawn at. Flips
+  // when the map crosses ZOOM_THRESHOLD_ICONS so the marker-render
+  // effect knows to rebuild the divIcons with category emojis
+  // instead of numbered dots (and back). Held in state so the
+  // effect re-runs; we throttle the flip via the zoom handler
+  // below so mid-animation zooms don't thrash marker DOM.
+  const [iconTier, setIconTier] = useState<'wide' | 'close'>('wide')
   // React state (not ref) so the fit-bounds effect below re-runs when the
   // leaflet dynamic import resolves. Using a ref here would miss the transition
   // and leave the map parked on the fallback center.
@@ -97,6 +123,16 @@ export default function ClientMap({
 
       L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map)
       L.control.zoom({ position: 'bottomright' }).addTo(map)
+
+      // Flip iconTier on zoomend when the zoom crosses
+      // ZOOM_THRESHOLD_ICONS. Using zoomend (not zoom) keeps the
+      // rebuild off the animation frame — mid-zoom the pins hold
+      // their old shape, then swap in one hop when the animation
+      // settles. That's smoother than rebuilding the divIcon HTML
+      // on every intermediate zoom level.
+      map.on('zoomend', () => {
+        setIconTier(map.getZoom() >= ZOOM_THRESHOLD_ICONS ? 'close' : 'wide')
+      })
 
       mapRef.current = map
       setMapReady(true)
@@ -165,55 +201,117 @@ export default function ClientMap({
         const isChosen   = chosenSet.has(String(loc.id))
         const isDisabled = !isChosen && disabledSet.has(String(loc.id))
         const isRec      = loc.type === 'recommended'
+        // Recommended pins with a photo get the Explore-style
+        // featured pill (thumbnail + name + "Recommended" subtitle).
+        // Without a photo we fall back to the plain-dot render so a
+        // photographer who hasn't uploaded photos to their recommended
+        // spot doesn't end up with a broken image.
+        const showRecPill = isRec && !!loc.photoUrl && !isChosen && !isActive
+        // Close-zoom category icon (colored circle + emoji) replaces
+        // the plain numbered dot once the client zooms in. Chosen /
+        // active pins keep the accent-colored dot so the current
+        // selection stays visually obvious regardless of zoom.
+        const showCatIcon = iconTier === 'close' && !isChosen && !isActive && !isDisabled && !showRecPill
 
-        let bg     = isRec ? 'rgba(61,110,140,0.95)' : 'rgba(245,240,232,0.95)'
-        let color  = isRec ? 'white' : '#1a1612'
-        let size   = 28
-        let border = '2.5px solid white'
-
-        if (isChosen) {
-          bg = '#4a6741'; color = 'white'; size = 32; border = '3px solid white'
-        } else if (isActive) {
-          bg = '#c4922a'; color = '#1a1612'; size = 32; border = '3px solid white'
-        } else if (isDisabled) {
-          bg = 'rgba(180,175,165,.7)'; color = '#6b5f52'; border = '2px solid rgba(255,255,255,.6)'
-        }
-
-        // Name label sits to the right of the numbered dot so clients can scan
-        // the map without having to tap every marker. Icon anchor keeps the dot
-        // centered on the actual coordinate.
         const labelText = escapeHtml(loc.name)
-        const labelBg   = isChosen ? '#4a6741' : isActive ? '#c4922a' : isDisabled ? 'rgba(26,22,18,.35)' : 'rgba(26,22,18,.88)'
-        const labelFg   = isActive && !isChosen ? '#1a1612' : 'white'
-        const totalW    = size + 8 + 180   // dot + gap + max label width
-        const dotOpacity = isDisabled ? 0.55 : 1
+
+        let html: string
+        let iconW: number
+        let iconH: number
+        let anchorX: number
+        let anchorY: number
+
+        if (showRecPill) {
+          // Featured-style pill — mirrors the Explore map's featured
+          // pin so photographers' recommended picks read the same way
+          // on both surfaces. Gold "Recommended" subtitle sits under
+          // the location name.
+          const thumb = escapeHtml(loc.photoUrl!)
+          html = `<span class="pick-map-label-inner">
+            <img class="pick-map-label-thumb" src="${thumb}" alt="" loading="lazy" />
+            <span class="pick-map-label-text">
+              <span class="pick-map-label-name">${labelText}</span>
+              <span class="pick-map-label-sub">Recommended</span>
+            </span>
+          </span>`
+          iconW = 240; iconH = 52
+          anchorX = 26; anchorY = 26
+        } else if (showCatIcon) {
+          // Colored circle + category emoji, with the name label
+          // beside it (same layout as the numbered-dot render so the
+          // list-order badge and the icon occupy the same footprint).
+          const visual = getCategoryVisual(loc.category, loc.access)
+          html = `<div style="display:flex;align-items:center;gap:6px;">
+            <span class="pick-map-cat-icon-inner" style="background:${visual.color}">${visual.emoji}</span>
+            <div style="
+              max-width:180px; padding:3px 8px; border-radius:6px;
+              background:rgba(26,22,18,.88); color:white;
+              font-family:var(--font-dm-sans), sans-serif;
+              font-size:11px; font-weight:600;
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+              box-shadow:0 2px 6px rgba(0,0,0,.3);
+              line-height:1.25;
+            ">${labelText}</div>
+          </div>`
+          iconW = 30 + 6 + 180
+          iconH = 30
+          anchorX = 15
+          anchorY = 15
+        } else {
+          // Ordinary numbered dot + name label — same shape the map
+          // has always used, so chosen / active / disabled states
+          // keep their existing accent colors.
+          let bg     = isRec ? 'rgba(61,110,140,0.95)' : 'rgba(245,240,232,0.95)'
+          let color  = isRec ? 'white' : '#1a1612'
+          let size   = 28
+          let border = '2.5px solid white'
+
+          if (isChosen) {
+            bg = '#4a6741'; color = 'white'; size = 32; border = '3px solid white'
+          } else if (isActive) {
+            bg = '#c4922a'; color = '#1a1612'; size = 32; border = '3px solid white'
+          } else if (isDisabled) {
+            bg = 'rgba(180,175,165,.7)'; color = '#6b5f52'; border = '2px solid rgba(255,255,255,.6)'
+          }
+
+          const labelBg   = isChosen ? '#4a6741' : isActive ? '#c4922a' : isDisabled ? 'rgba(26,22,18,.35)' : 'rgba(26,22,18,.88)'
+          const labelFg   = isActive && !isChosen ? '#1a1612' : 'white'
+          const totalW    = size + 8 + 180
+          const dotOpacity = isDisabled ? 0.55 : 1
+
+          html = `<div style="display:flex;align-items:center;gap:6px;transition:all .25s;opacity:${dotOpacity};">
+            <div style="
+              width:${size}px; height:${size}px; border-radius:50%;
+              background:${bg}; border:${border};
+              box-shadow:0 3px 10px rgba(0,0,0,.4);
+              display:flex; align-items:center; justify-content:center;
+              font-size:12px; font-weight:700; color:${color};
+              flex-shrink:0;
+            ">${isChosen ? '✓' : i + 1}</div>
+            <div style="
+              max-width:180px; padding:3px 8px; border-radius:6px;
+              background:${labelBg}; color:${labelFg};
+              font-family:var(--font-dm-sans), sans-serif;
+              font-size:11px; font-weight:600;
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+              box-shadow:0 2px 6px rgba(0,0,0,.3);
+              line-height:1.25;
+            ">${labelText}</div>
+          </div>`
+          iconW = totalW
+          iconH = size
+          anchorX = size / 2
+          anchorY = size / 2
+        }
 
         const marker = L.marker([loc.lat, loc.lng], {
           icon: L.divIcon({
-            className: '',
-            html: `<div style="display:flex;align-items:center;gap:6px;transition:all .25s;opacity:${dotOpacity};">
-              <div style="
-                width:${size}px; height:${size}px; border-radius:50%;
-                background:${bg}; border:${border};
-                box-shadow:0 3px 10px rgba(0,0,0,.4);
-                display:flex; align-items:center; justify-content:center;
-                font-size:12px; font-weight:700; color:${color};
-                flex-shrink:0;
-              ">${isChosen ? '✓' : i + 1}</div>
-              <div style="
-                max-width:180px; padding:3px 8px; border-radius:6px;
-                background:${labelBg}; color:${labelFg};
-                font-family:var(--font-dm-sans), sans-serif;
-                font-size:11px; font-weight:600;
-                white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-                box-shadow:0 2px 6px rgba(0,0,0,.3);
-                line-height:1.25;
-              ">${labelText}</div>
-            </div>`,
-            iconSize:   [totalW, size],
-            iconAnchor: [size / 2, size / 2],
+            className: showRecPill ? 'pick-map-label pick-map-label-recommended' : '',
+            html,
+            iconSize:   [iconW, iconH],
+            iconAnchor: [anchorX, anchorY],
           }),
-          zIndexOffset: isActive || isChosen ? 1000 : 0,
+          zIndexOffset: showRecPill ? 800 : (isActive || isChosen ? 1000 : 0),
         }).addTo(map)
 
         marker.on('click', () => onMarkerClick(loc.id))
@@ -228,7 +326,7 @@ export default function ClientMap({
         markersRef.current[loc.id] = marker
       })
     })
-  }, [mapReady, locations, activeId, chosenIds, disabledIds, onMarkerClick]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapReady, locations, activeId, chosenIds, disabledIds, onMarkerClick, iconTier]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fly to active location ─────────────────────────────────────────────────
   useEffect(() => {

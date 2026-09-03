@@ -183,7 +183,7 @@ async function handlePreview(request: Request, admin: SupabaseClient): Promise<N
     if (sourceIds.length > 0) {
       const { data: sourceRows } = await admin
         .from('locations')
-        .select('id,access_type,rating,quality_score,save_count,permit_required,permit_notes,permit_fee,permit_website,permit_certainty')
+        .select('id,category,access_type,rating,quality_score,save_count,permit_required,permit_notes,permit_fee,permit_website,permit_certainty')
         .in('id', sourceIds)
       ;(sourceRows ?? []).forEach((s: any) => { sourceLookup[s.id] = s })
     }
@@ -211,6 +211,7 @@ async function handlePreview(request: Request, admin: SupabaseClient): Promise<N
         state:            p.state,
         latitude:         p.latitude,
         longitude:        p.longitude,
+        category:         src?.category ?? null,
         access_type:      preferOwn('access_type'),
         tags:             p.tags,
         permit_required:  isProPhotographer ? preferOwn('permit_required') : null,
@@ -550,7 +551,7 @@ export async function GET(request: Request, context: any) {
       sourcePhotos = data ?? []
       const { data: sourceRows } = await admin
         .from('locations')
-        .select('id,access_type,rating,quality_score,save_count,permit_required,permit_notes,permit_fee,permit_website,permit_certainty')
+        .select('id,category,access_type,rating,quality_score,save_count,permit_required,permit_notes,permit_fee,permit_website,permit_certainty')
         .in('id', sourceIds)
       ;(sourceRows ?? []).forEach((s: any) => { sourceLookup[s.id] = s })
     }
@@ -606,6 +607,12 @@ export async function GET(request: Request, context: any) {
         state:            p.state,
         latitude:         p.latitude,
         longitude:        p.longitude,
+        // Category drives the Google-Maps-style category icon on the
+        // guide map at close zoom. Portfolio copies don't store their
+        // own category, so we always pull it from the source public
+        // locations row via sourceLookup (null when the portfolio
+        // entry has no source_location_id, e.g. custom-added spots).
+        category:         src?.category ?? null,
         access_type:      preferOwn('access_type'),
         tags:             p.tags,
         // Permit fields are gated to Pro photographers. Free shares get
@@ -650,7 +657,7 @@ export async function GET(request: Request, context: any) {
     if (locIds.length > 0) {
       const { data, error } = await admin
         .from('locations')
-        .select('id,name,city,state,latitude,longitude,access_type,description,tags,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,rating,quality_score,save_count')
+        .select('id,name,city,state,latitude,longitude,access_type,description,tags,category,permit_required,permit_notes,permit_fee,permit_website,permit_certainty,rating,quality_score,save_count')
         .in('id', locIds)
       if (error) console.error('locations query error:', error)
       // Restore manual order — see the portfolio path above for the

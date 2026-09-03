@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { getTileConfig } from '@/lib/map-tiles'
+import { getCategoryVisual } from '@/lib/map-categories'
 
 // Leaflet throws "Invalid LatLng object: (NaN, NaN)" when flyTo/setView run while the
 // map container has zero width/height — which happens on mobile because the map column
@@ -29,6 +30,11 @@ export interface ExploreLocation {
   bg: string
   tags: string[]
   saves: number
+  // Location's category label (e.g. 'Parks & Nature'). Drives the
+  // Google-Maps-style icon overlay at close zoom — see
+  // lib/map-categories.ts for the icon+color mapping. Missing /
+  // unrecognized values fall back to a neutral pin icon.
+  category?: string | null
   // Per-location label rendering — admin picks in LocationEditModal:
   //   'dot'       → circle only, no label at any zoom (default)
   //   'name'      → circle + text label appears at zoom >= 13
@@ -72,6 +78,13 @@ const HOME_CITY_ZOOM = 11
 // far enough that the density is manageable.
 const ZOOM_THRESHOLD_NAME     = 13
 const ZOOM_THRESHOLD_FEATURED = 11
+// Google-Maps-style rich category icons (green tree for parks,
+// blue building for urban, etc.) appear once the map is zoomed in
+// past a comfortable neighborhood view. Below this every dot pin
+// is a plain colored circle for the calm wide-zoom look. Only
+// pins CURRENTLY in the viewport get an icon overlay — panning
+// keeps the DOM count bounded.
+const ZOOM_THRESHOLD_ICONS    = 14
 
 // Options passed to marker.bindTooltip on label activation. Kept
 // as a module-level constant so the shape is stable across binds
@@ -163,6 +176,15 @@ export default function ExploreMap({
   // applier itself walks every marker each zoomend since bind state
   // is now per-marker (mode + zoom combo).
   const applyLabelsForCurrentZoomRef = useRef<(() => void) | null>(null)
+  // Category-icon overlay layer — keyed by pin id. At zoom >=
+  // ZOOM_THRESHOLD_ICONS we add a DivIcon marker per dot-mode pin
+  // in the viewport that draws a colored-circle-with-emoji icon
+  // (Google Maps style). At wider zoom or off-viewport, the entry
+  // is removed. applyCategoryIcons handles the sync; ref lets the
+  // marker-refresh useEffect trigger it after the underlying
+  // CircleMarkers get rebuilt.
+  const iconOverlaysRef            = useRef<Record<string, any>>({})
+  const applyCategoryIconsRef      = useRef<(() => void) | null>(null)
 
   // ── Init map ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -367,6 +389,76 @@ export default function ExploreMap({
       map.on('zoomend', applyLabelsForCurrentZoom)
       applyLabelsForCurrentZoom()
 
+      // Category-icon overlay sync. At zoom >= ZOOM_THRESHOLD_ICONS
+      // every dot-mode pin currently in the viewport gets a DivIcon
+      // marker overlay (colored circle + emoji, Google-Maps-style).
+      // Below the threshold, or when a pin leaves the viewport, the
+      // overlay is removed. The underlying CircleMarker is faded to
+      // opacity 0 when its icon is showing so we don't get a
+      // colored dot peeking out from under the pill. moveend fires
+      // this on pan so overlays follow the visible pins around.
+      const applyCategoryIcons = () => {
+        const zoom = map.getZoom()
+        const bounds = map.getBounds()
+        const showIcons = zoom >= ZOOM_THRESHOLD_ICONS
+
+        // First pass — remove overlays that no longer belong. A pin
+        // needs its overlay gone when: zoom dropped below threshold,
+        // pin left the viewport, its mode is no longer 'dot', or the
+        // underlying marker has been rebuilt (missing from
+        // markersRef).
+        for (const [id, overlay] of Object.entries(iconOverlaysRef.current)) {
+          const m = markersRef.current[id as any] as any
+          const keep = showIcons
+            && m
+            && m.__mode === 'dot'
+            && bounds.contains(m.getLatLng())
+          if (!keep) {
+            map.removeLayer(overlay as any)
+            delete iconOverlaysRef.current[id]
+            // Restore the CircleMarker underneath (only when it
+            // still exists — during a marker rebuild the CircleMarker
+            // might be gone too).
+            if (m && typeof m.setStyle === 'function') m.setStyle({ opacity: 1, fillOpacity: 1 })
+          }
+        }
+        if (!showIcons) return
+
+        // Second pass — add overlays for eligible pins that don't
+        // have one yet. Only dot-mode + in-viewport qualifies;
+        // featured/portfolio/name pins have their own pill labels.
+        for (const [id, m] of Object.entries(markersRef.current) as [string, any][]) {
+          if (m.__mode !== 'dot') continue
+          if (iconOverlaysRef.current[id]) continue
+          if (!bounds.contains(m.getLatLng())) continue
+          const visual = getCategoryVisual(m.__category, m.__access)
+          const overlay = L.marker(m.getLatLng(), {
+            icon: L.divIcon({
+              className: 'explore-map-cat-icon',
+              html: `<span class="explore-map-cat-icon-inner" style="background:${visual.color}">${visual.emoji}</span>`,
+              iconSize:   [30, 30],
+              iconAnchor: [15, 15],
+            }),
+            interactive:  true,
+            keyboard:     false,
+            riseOnHover:  true,
+            // Assemble at zIndex that puts the icon above the
+            // CircleMarker but below any tooltip/label pill.
+            zIndexOffset: 100,
+          }).addTo(map)
+          const onClick = m.__onLabelClick
+          if (onClick) overlay.on('click', onClick)
+          iconOverlaysRef.current[id] = overlay
+          // Hide the CircleMarker below the icon so we don't get a
+          // colored dot peeking out from the sides.
+          m.setStyle({ opacity: 0, fillOpacity: 0 })
+        }
+      }
+      applyCategoryIconsRef.current = applyCategoryIcons
+      map.on('zoomend', applyCategoryIcons)
+      map.on('moveend', applyCategoryIcons)
+      applyCategoryIcons()
+
       mapRef.current = map
     })
 
@@ -485,25 +577,38 @@ export default function ExploreMap({
            <span style="color:#6b5f52;font-size:12px;">📍 ${loc.city}</span><br>
            <span style="color:#c4922a;font-size:12px;">★ ${loc.rating}</span>`
         )
-        // Stash the label + mode + id + its click handler on the
-        // marker for dynamic bind/unbind in applyLabelsForCurrentZoom.
-        // The tooltip isn't created here — it only gets bound when
-        // the current zoom crosses the mode's threshold, so at wide
-        // zoom we have zero tooltip DOM nodes on the page.
+        // Stash the label + mode + id + category + access + its
+        // click handler on the marker for dynamic bind/unbind in
+        // applyLabelsForCurrentZoom AND applyCategoryIcons. Tooltip
+        // + icon overlay aren't created here — they only get added
+        // when the current zoom crosses the relevant threshold, so
+        // at wide zoom we have zero tooltip / DivIcon DOM nodes.
         ;(marker as any).__id           = loc.id
         ;(marker as any).__label        = loc.name
         ;(marker as any).__mode         = (loc as any).mapDisplayMode ?? 'dot'
+        ;(marker as any).__category     = (loc as any).category ?? null
+        ;(marker as any).__access       = loc.access
         ;(marker as any).__onLabelClick = onClick
         if (isActive) marker.bringToFront()
 
         markersRef.current[loc.id] = marker
       })
 
-      // Rebuilding markers wipes any tooltips that were bound the
-      // last time we crossed a mode threshold — re-run the applier
-      // so per-marker labels get restored based on current zoom +
-      // each marker's mode.
+      // Rebuilding markers wipes any tooltips + icon overlays that
+      // were bound to the OLD marker objects. Icon overlay refs
+      // still point at Leaflet layers on the map though — clear
+      // them so applyCategoryIcons sees a clean slate and re-adds
+      // for the new markers. Labels are per-marker on __tooltipType,
+      // so applyLabelsForCurrentZoom just re-runs.
+      const map2 = mapRef.current
+      if (map2) {
+        for (const overlay of Object.values(iconOverlaysRef.current)) {
+          try { map2.removeLayer(overlay as any) } catch {}
+        }
+      }
+      iconOverlaysRef.current = {}
       applyLabelsForCurrentZoomRef.current?.()
+      applyCategoryIconsRef.current?.()
     })
   }, [locations, activeId, onMarkerClick])
 

@@ -1034,6 +1034,105 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
 }
 
+/* Category icon overlays — Google-Maps-style colored pins that
+   replace the plain circle dot at close zoom (see
+   applyCategoryIcons in ExploreMap.tsx). Only dot-mode pins in
+   the current viewport get one, so DOM node count stays bounded
+   even in dense metros. */
+.explore-map-cat-icon {
+  background: transparent !important;
+  border: none !important;
+}
+.explore-map-cat-icon-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+  font-size: 15px;
+  line-height: 1;
+  color: #fff;
+  cursor: pointer;
+  /* Emoji rendering: strip color-emoji font hinting so all
+     platforms render the glyph legibly against the colored
+     background. Chrome / Safari on macOS especially like to
+     render emoji at outlined weights that vanish on the ring. */
+  font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
+}
+
+/* ── Location guide (ClientMap) ────────────────────────────────
+   Mirrors the Explore map's Google-Maps-style visuals so
+   photographers' recommended pins look consistent across the
+   two surfaces. Kept independent of the .explore-map-* rules
+   because ClientMap uses divIcon (not tooltip) for its pins —
+   the wrapper element is different so its size/anchor tokens
+   can't inherit from the explore-map-label CSS. */
+.pick-map-cat-icon-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+  font-size: 15px;
+  line-height: 1;
+  color: #fff;
+  flex-shrink: 0;
+  font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
+}
+.pick-map-label-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid rgba(0, 0, 0, .12);
+  padding: 4px 12px 4px 4px;
+  border-radius: 24px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .28);
+}
+.pick-map-label-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+  /* Gold ring signals "photographer highlight" the same way the
+     Explore portfolio pill uses gold for "photographer's own". */
+  border: 2px solid var(--gold);
+  box-sizing: border-box;
+}
+.pick-map-label-text {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.15;
+}
+.pick-map-label-name {
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1612;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pick-map-label-sub {
+  font-family: var(--font-dm-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 1024px) {
   .hero { grid-template-columns: 1fr; }
