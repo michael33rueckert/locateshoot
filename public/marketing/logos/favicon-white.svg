@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LocateShoot favicon / app icon — solid white variant.
+  White disc with the serif "L" reversed out (transparent hole
+  via SVG mask) so the mark stays readable on any dark-colored
+  background. Only place this on dark surfaces — cutout
+  monograms disappear on matching-color backgrounds.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <mask id="ls-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+    <rect width="512" height="512" fill="white"/>
+    <path fill="black" d="
+      M 152 130
+      L 232 130
+      L 232 148
+      L 220 148
+      Q 210 148 207 154
+      Q 204 160 204 174
+      L 204 354
+      L 280 354
+      Q 296 354 304 348
+      Q 312 342 318 326
+      L 332 290
+      L 348 290
+      L 340 380
+      L 152 380
+      L 152 362
+      L 164 362
+      Q 174 362 177 356
+      Q 180 350 180 336
+      L 180 174
+      Q 180 160 177 154
+      Q 174 148 164 148
+      L 152 148
+      Z
+    "/>
+  </mask>
+  <circle cx="256" cy="256" r="256" fill="#ffffff" mask="url(#ls-cutout)"/>
+</svg>

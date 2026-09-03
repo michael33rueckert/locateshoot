@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LocateShoot full logo — solid black variant.
+  Dot + wordmark both in pure black. Use on light backgrounds
+  where a monochrome brand mark is required (print, single-
+  color email signatures, invoice headers, etc.).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 120" width="560" height="120">
+  <circle cx="42" cy="60" r="14" fill="#000000"/>
+  <text x="80" y="83"
+        font-family="'Playfair Display', Georgia, 'Times New Roman', serif"
+        font-size="72"
+        font-weight="900"
+        letter-spacing="-1.5"
+        fill="#000000">LocateShoot</text>
+</svg>

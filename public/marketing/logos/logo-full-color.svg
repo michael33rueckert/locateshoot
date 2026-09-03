@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LocateShoot full logo — color variant.
+  Small gold dot + "LocateShoot" wordmark in ink (Playfair
+  Display Black), mirroring the nav treatment across the app.
+  Uses <text> with a Playfair Display + Georgia + serif stack:
+  Playfair renders where installed (site + designers with the
+  font); Georgia is a close serif fallback everywhere else. For
+  print / static-asset use where exact fidelity matters, install
+  Playfair Display Black or ask a designer to outline the text.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 120" width="560" height="120">
+  <!-- Gold dot — same proportions as the nav's .logo-dot -->
+  <circle cx="42" cy="60" r="14" fill="#c4922a"/>
+  <!-- Wordmark -->
+  <text x="80" y="83"
+        font-family="'Playfair Display', Georgia, 'Times New Roman', serif"
+        font-size="72"
+        font-weight="900"
+        letter-spacing="-1.5"
+        fill="#1a1612">LocateShoot</text>
+</svg>
