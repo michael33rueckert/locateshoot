@@ -17,6 +17,12 @@ interface AddressSearchProps {
   onClear?: () => void
   placeholder?: string
   autoFocus?: boolean
+  // 'default' — bordered rectangular input for in-form use.
+  // 'pill' — Google-Maps-style rounded pill with a leading search
+  //          icon and a soft shadow. Used by the Explore map's
+  //          floating topbar so the search reads as the primary
+  //          overlay element on top of the map.
+  variant?: 'default' | 'pill'
 }
 
 declare global {
@@ -54,6 +60,7 @@ export default function AddressSearch({
   onClear,
   placeholder = 'Search for a place or address…',
   autoFocus = false,
+  variant = 'default',
 }: AddressSearchProps) {
   const [query,       setQuery]       = useState('')
   const [suggestions, setSuggestions] = useState<any[]>([])
@@ -267,6 +274,29 @@ export default function AddressSearch({
     return <>{elements}</>
   }
 
+  const isPill = variant === 'pill'
+  const inputStyle: React.CSSProperties = isPill
+    ? {
+        // Google-Maps-style pill — soft white surface, rounded to a
+        // full pill, room on the left for the leading search icon,
+        // room on the right for the ✕ clear affordance.
+        width: '100%', padding: '13px 44px 13px 44px',
+        border: '1px solid transparent', borderRadius: 999,
+        fontFamily: 'var(--font-dm-sans), sans-serif',
+        fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
+        transition: 'box-shadow 0.18s, border-color 0.18s',
+        opacity: !gmLoaded ? 0.6 : 1,
+        boxShadow: '0 2px 8px rgba(60,64,67,0.28), 0 1px 3px rgba(60,64,67,0.15)',
+      }
+    : {
+        width: '100%', padding: '9px 36px 9px 12px',
+        border: '1px solid var(--cream-dark)', borderRadius: 4,
+        fontFamily: 'var(--font-dm-sans), sans-serif',
+        fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
+        transition: 'border-color 0.18s',
+        opacity: !gmLoaded ? 0.6 : 1,
+      }
+
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <div style={{ position: 'relative' }}>
@@ -280,25 +310,35 @@ export default function AddressSearch({
           placeholder={!gmLoaded ? 'Loading search…' : placeholder}
           disabled={!gmLoaded}
           autoFocus={autoFocus}
-          style={{
-            width: '100%', padding: '9px 36px 9px 12px',
-            border: '1px solid var(--cream-dark)', borderRadius: 4,
-            fontFamily: 'var(--font-dm-sans), sans-serif',
-            fontSize: 14, color: 'var(--ink)', background: 'white', outline: 'none',
-            transition: 'border-color 0.18s',
-            opacity: !gmLoaded ? 0.6 : 1,
+          style={inputStyle}
+          onFocusCapture={e => {
+            if (isPill) { e.target.style.boxShadow = '0 4px 12px rgba(60,64,67,0.36), 0 2px 4px rgba(60,64,67,0.18)' }
+            else { e.target.style.borderColor = 'var(--gold)' }
           }}
-          onFocusCapture={e => (e.target.style.borderColor = 'var(--gold)')}
-          onBlurCapture={e  => (e.target.style.borderColor = 'var(--cream-dark)')}
+          onBlurCapture={e => {
+            if (isPill) { e.target.style.boxShadow = '0 2px 8px rgba(60,64,67,0.28), 0 1px 3px rgba(60,64,67,0.15)' }
+            else { e.target.style.borderColor = 'var(--cream-dark)' }
+          }}
         />
 
-        <div style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: 'var(--ink-soft)' }}>
+        {/* Leading search icon — pill variant only, mirrors the
+            Google Maps magnifying glass on the left of the pill. */}
+        {isPill && (
+          <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: 'var(--ink-soft)', pointerEvents: 'none' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="m21 21-4.3-4.3"/>
+            </svg>
+          </div>
+        )}
+
+        <div style={{ position: 'absolute', right: isPill ? 14 : 10, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', color: 'var(--ink-soft)' }}>
           {loading ? (
             <div style={{ width: 14, height: 14, border: '2px solid var(--cream-dark)', borderTop: '2px solid var(--gold)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
           ) : query ? (
             <button onClick={handleClear} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
           ) : (
-            <span style={{ fontSize: 14 }}>🔍</span>
+            !isPill && <span style={{ fontSize: 14 }}>🔍</span>
           )}
         </div>
       </div>

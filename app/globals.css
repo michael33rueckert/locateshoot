@@ -1228,8 +1228,9 @@ body {
   /* Dashboard grid: 1 column */
   .dashboard-grid { grid-template-columns: 1fr !important; }
 
-  /* Explore: sidebar below map */
-  .explore-body { grid-template-columns: 1fr !important; grid-template-rows: 50vh 1fr !important; }
+  /* Explore layout is absolute-positioned overlays now, no
+     stacking needed at tablet breakpoint — the mobile-toggle at
+     ≤768px is what actually switches list ↔ map. */
 
   /* Share page: sidebar stacked */
   .share-grid { grid-template-columns: 1fr !important; height: auto !important; }
@@ -1402,41 +1403,58 @@ body {
 .dash-stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 2rem; }
 .dash-right-col  { display: flex; flex-direction: column; gap: 1.25rem; }
  
-/* ── Explore ── */
+/* ── Explore ──
+   Layout is layered absolute-positioning (not a flex row) so the
+   sidebar can slide in/out with a CSS transform transition
+   without forcing the map to re-layout. The map stays a static
+   full-width base layer; only the sidebar's transform changes. */
 .explore-body {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: row;
+  position: relative;
   overflow: hidden;
   background: #f9f6f1;
 }
+.explore-map-col {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
 .explore-sidebar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 360px;
-  flex-shrink: 0;
   overflow: hidden;
   background: #f9f6f1;
   border-right: 1px solid var(--cream-dark);
+  box-shadow: 4px 0 16px rgba(26, 22, 18, .06);
   display: flex;
   flex-direction: column;
+  z-index: 10;
+  /* Leave room at the top for the floating topbar overlay
+     (search pill + chip row) so the sidebar's own count header
+     doesn't collide with it. */
+  padding-top: 72px;
+  transform: translateX(0);
+  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
-.explore-map-col {
-  position: relative;
-  flex: 1;
-  min-width: 0;
+.explore-sidebar-collapsed {
+  transform: translateX(-100%);
+  pointer-events: none;
 }
-/* Desktop collapse — sidebar drops out of the flex row entirely
-   so the map column grows to full width. The collapse button
-   stays visible (positioned inside .explore-map-col) so the user
-   can bring the sidebar back. Hidden on mobile because the
-   mobile-hidden path already handles that flow. */
-.explore-sidebar-collapsed { display: none !important; }
 .explore-sidebar-collapse-btn {
   position: absolute;
   top: 50%;
-  left: 0;
+  /* Sit at the sidebar's right edge (360px wide). Because this
+     button lives OUTSIDE the sidebar (in .explore-body) with a
+     transform transition of its own, it slides in sync with the
+     sidebar as one unit. */
+  left: 360px;
   transform: translateY(-50%);
-  z-index: 500;
+  z-index: 15;
   width: 22px;
   height: 60px;
   border: 1px solid var(--cream-dark);
@@ -1455,24 +1473,92 @@ body {
   padding: 0;
   box-shadow: 2px 2px 8px rgba(0, 0, 0, .12);
   font-family: inherit;
-  transition: background .15s, color .15s;
+  transition: left 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), background .15s, color .15s;
 }
 .explore-sidebar-collapse-btn:hover {
   background: var(--gold);
   color: white;
 }
+/* When sidebar is collapsed, slide the button back to the map's
+   left edge so it stays visible + becomes the "open" affordance. */
+.explore-body:has(.explore-sidebar-collapsed) .explore-sidebar-collapse-btn { left: 0; }
 .explore-mobile-toggle { display: none; }
- 
-/* Explore filter panel — responsive */
+
+/* ── Floating topbar overlay (Google-Maps-style) ──
+   Sits above both sidebar and map. Search pill on the left,
+   filter chips flowing right. Wraps on narrow viewports.
+   pointer-events:none on the wrapper + auto on the children so
+   clicks pass through empty gaps to the map underneath. */
+.explore-topbar-overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+.explore-topbar-overlay > * { pointer-events: auto; }
+.explore-search-pill {
+  width: 320px;
+  max-width: calc(100% - 32px);
+  flex-shrink: 0;
+}
+.explore-chip-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.explore-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  background: white;
+  color: var(--ink-mid);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.15), 0 2px 8px rgba(60, 64, 67, 0.15);
+  transition: box-shadow 0.18s, background 0.18s;
+}
+.explore-chip:hover {
+  box-shadow: 0 2px 6px rgba(60, 64, 67, 0.2), 0 4px 12px rgba(60, 64, 67, 0.18);
+  background: #f8f9fa;
+}
+.explore-chip-active {
+  background: var(--ink);
+  color: var(--cream);
+  font-size: 12px;
+  padding: 6px 12px;
+  gap: 4px;
+}
+.explore-chip-active:hover { background: var(--ink-mid); color: var(--cream); }
+
+/* Explore filter panel — dropdown attached below the chip row */
 .explore-filter-panel {
-  padding: 1rem 1.5rem 1.25rem;
-  border-top: 1px solid var(--cream-dark);
-  background: var(--cream);
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding: 1rem 1.25rem 1.25rem;
+  border: 1px solid var(--cream-dark);
+  border-radius: 12px;
+  background: white;
   display: grid;
   grid-template-columns: auto 1fr auto auto;
   gap: 1.5rem;
   align-items: start;
   overflow-x: auto;
+  box-shadow: 0 4px 16px rgba(26, 22, 18, .12);
+  max-width: calc(100vw - 32px);
 }
 .explore-filter-section { display: flex; flex-wrap: wrap; gap: 6px; }
  
@@ -1511,8 +1597,11 @@ body {
   .dash-stats-summary { display: block !important; }
   .dash-right-col  { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1rem !important; }
  
-  /* Narrower sidebar so map gets more room */
+  /* Narrower sidebar so map gets more room. Collapse handle
+     re-anchors to the sidebar's right edge at this width. */
   .explore-sidebar { width: 260px !important; }
+  .explore-sidebar-collapse-btn { left: 260px !important; }
+  .explore-body:has(.explore-sidebar-collapsed) .explore-sidebar-collapse-btn { left: 0 !important; }
  
   .profile-outer { grid-template-columns: 200px 1fr !important; }
   .profile-main  { padding: 2rem 1.5rem !important; }
@@ -1546,38 +1635,27 @@ body {
   .dash-right-col     { display: flex !important; flex-direction: column !important; gap: 1rem !important; }
   /* Portfolio-share card already full-width on desktop; no override needed. */
  
-  /* ── Explore ── */
-  .explore-body {
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-  }
+  /* ── Explore (mobile ≤768px) ──
+     Map is the always-present base layer. Sidebar overlays it
+     full-screen and slides off with translateX so switching to
+     Map view has the same smooth motion the desktop collapse
+     already gets. The mobile-toggle pill at the bottom flips
+     between the two. */
   .explore-sidebar {
-    width: auto !important;
-    flex: 1 !important;
-    min-height: 0 !important;
+    width: 100% !important;
+    padding-top: 72px !important;
     border-right: none !important;
-    border-bottom: 1px solid var(--cream-dark) !important;
+    box-shadow: none !important;
   }
-  .explore-sidebar.mobile-hidden { display: none !important; }
-  /* Desktop collapse toggle is redundant on mobile — the
-     mobile-toggle pill already handles switching between list
-     and map. Hide it so it doesn't cover the map's edge. */
+  .explore-sidebar.mobile-hidden {
+    transform: translateX(-100%) !important;
+    pointer-events: none !important;
+  }
+  /* Desktop collapse handle is redundant on mobile — the pill
+     at the bottom already handles switching between list + map. */
   .explore-sidebar-collapse-btn { display: none !important; }
-  .explore-map-col { display: none !important; height: auto !important; }
-  .explore-map-col.mobile-visible {
-    display: block !important;
-    flex: 1 !important;
-    position: relative !important;
-    height: 100% !important;
-    inset: auto !important;
-    z-index: auto !important;
-  }
-  .explore-map-col.mobile-visible .leaflet-container {
-    height: 100% !important; width: 100% !important;
-  }
+  /* Map is the base layer — always rendered. Legacy
+     .mobile-visible class on map-col no longer changes anything. */
   .explore-mobile-toggle {
     display: flex !important;
     position: fixed !important;
@@ -1594,19 +1672,17 @@ body {
     white-space: nowrap !important;
     background: var(--ink) !important; color: var(--cream) !important;
   }
+  /* Mobile filter panel becomes a full-column stack inside the
+     wrapping topbar so long chip lists don't stretch off-screen. */
   .explore-filter-panel {
     display: flex !important; flex-direction: column !important;
     gap: 1rem !important; padding: 1rem !important;
     max-height: 60svh !important; overflow-y: auto !important;
     grid-template-columns: unset !important;
   }
-  .explore-filter-row {
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    padding: 6px 1rem !important;
-    -webkit-overflow-scrolling: touch;
-  }
-  .explore-filter-row::-webkit-scrollbar { display: none; }
+  /* Search pill takes full topbar width on phones so it stays
+     tappable; chips wrap below it. */
+  .explore-search-pill { width: 100% !important; }
  
   /* ── Share ── */
   .share-outer   { display: block !important; height: 100svh !important; overflow: hidden !important; }

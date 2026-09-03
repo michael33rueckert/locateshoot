@@ -1460,48 +1460,55 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {/* Filter bar — position:relative + isolation:isolate creates a
-          stacking context so the AddressSearch dropdown (and any
-          future overlays anchored to this row) paints ABOVE Leaflet's
-          internal panes (popups peak at z-index 700, controls at 800).
-          zIndex must clear Leaflet (>800) but stay below the mobile
-          menu drawer (bumped to 1000 in globals.css) and the AppNav
-          topbar (1500) so opening the hamburger doesn't paint under
-          this bar. DetailPanel modal (1700+) still sits on top. */}
-      <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',flexShrink:0,position:'relative',zIndex:900,isolation:'isolate'}}>
-        <div className="explore-filter-row" style={{padding:'8px 1.5rem',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-          <button onClick={()=>setShowFilters(p=>!p)} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${showFilters||activeFilterCount>0?'var(--gold)':'var(--cream-dark)'}`,background:showFilters||activeFilterCount>0?'rgba(196,146,42,.08)':'white',color:showFilters||activeFilterCount>0?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
-            ⚙ Filters & Sort
-            {activeFilterCount>0&&<span style={{width:16,height:16,borderRadius:'50%',background:'var(--gold)',color:'var(--ink)',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{activeFilterCount}</span>}
-          </button>
-          {user&&<button onClick={()=>setAccessFilter(accessFilter==='My Portfolio'?'All':'My Portfolio')} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:600,border:'none',background:accessFilter==='My Portfolio'?'var(--gold)':'var(--ink)',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--cream)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,boxShadow:'0 2px 6px rgba(26,22,18,.15)'}}>
-            {accessFilter==='My Portfolio'?'✓ My Portfolio':'⭐ My Portfolio'}
-            {portfolioSources.size>0&&<span style={{padding:'1px 7px',borderRadius:20,fontSize:10,fontWeight:700,background:accessFilter==='My Portfolio'?'rgba(26,22,18,.15)':'rgba(196,146,42,.3)',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--gold)'}}>{portfolioSources.size}</span>}
-          </button>}
-          {/* The "Find Locations Near" pill was a duplicate of the main
-              search bar's autocomplete — search Boise there and the map
-              already flies + narrows. Kept "Near me" alongside since GPS
-              lookup is a distinct intent from typing a place name. */}
-          <button onClick={requestLocation} disabled={locLoading} style={{display:'flex',alignItems:'center',gap:5,padding:'7px 14px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${locGranted?'var(--sage)':'var(--cream-dark)'}`,background:locGranted?'rgba(74,103,65,.08)':'white',color:locGranted?'var(--sage)':'var(--ink-soft)',cursor:locLoading?'default':'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,opacity:locLoading?.6:1}}>
-            {locLoading?'Locating…':locGranted?'✓ Near me':'📡 Near me'}
-          </button>
-          {accessFilter!=='All'&&<span onClick={()=>setAccessFilter('All')} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0,marginLeft:'auto'}}>{accessFilter} ✕</span>}
-          {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} style={{padding:'4px 10px',borderRadius:20,fontSize:11,background:'var(--ink)',color:'var(--cream)',cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>{t} ✕</span>)}
-          {activeFilterCount>0&&<button onClick={clearAllFilters} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:0,fontWeight:500}}>Clear all</button>}
-        </div>
-
-        {showFilters&&(
-          <div className="explore-filter-panel anim-drop-in">
-            <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Access</div><div className="explore-filter-section">{(['All','Public','Private','My Portfolio'] as AccessFilter[]).map(opt=><button key={opt} onClick={()=>setAccessFilter(opt)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${accessFilter===opt?'var(--gold)':'var(--cream-dark)'}`,background:accessFilter===opt?'rgba(196,146,42,.12)':'white',color:accessFilter===opt?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt}</button>)}</div></div>
-            <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Location type</div><div className="explore-filter-section">{ALL_TAGS.map(tag=><button key={tag} onClick={()=>toggleTag(tag)} style={{padding:'5px 10px',borderRadius:20,fontSize:11,fontWeight:500,border:`1px solid ${selectedTags.includes(tag)?'var(--gold)':'var(--cream-dark)'}`,background:selectedTags.includes(tag)?'rgba(196,146,42,.12)':'white',color:selectedTags.includes(tag)?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{tag}</button>)}</div></div>
-            <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Min rating</div><div className="explore-filter-section">{RATING_OPTIONS.map(opt=><button key={opt.value} onClick={()=>setMinRating(opt.value)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${minRating===opt.value?'var(--gold)':'var(--cream-dark)'}`,background:minRating===opt.value?'rgba(196,146,42,.12)':'white',color:minRating===opt.value?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt.label}</button>)}</div></div>
-            <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Sort by</div><div className="explore-filter-section">{SORT_OPTIONS.map(opt=><button key={opt.value} onClick={()=>setSortBy(opt.value as SortValue)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${sortBy===opt.value?'var(--gold)':'var(--cream-dark)'}`,background:sortBy===opt.value?'rgba(196,146,42,.12)':'white',color:sortBy===opt.value?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt.label}</button>)}</div></div>
-          </div>
-        )}
-      </div>
-
-      {/* Body */}
+      {/* Body — sidebar + map are now sibling absolute layers so the
+          sidebar can slide in/out without changing the map's width
+          (no layout thrash, no tile re-flow while animating). The
+          floating topbar sits above both, Google-Maps-style. */}
       <div className="explore-body">
+
+        {/* ── FLOATING TOPBAR ──
+            Google-Maps-style overlay: pill search on the left, filter
+            chips flowing to the right. Sits above both sidebar and
+            map so it's always accessible regardless of collapse
+            state. isolation:isolate so the AddressSearch dropdown
+            paints above Leaflet's own panes. */}
+        <div className="explore-topbar-overlay">
+          <div className="explore-search-pill">
+            <AddressSearch
+              variant="pill"
+              placeholder="Search a city, area, or address…"
+              onSelect={handleSearchNavigate}
+              onClear={() => { setSearchPin(null); setUserLocation(null) }}
+            />
+          </div>
+          <div className="explore-chip-row">
+            <button onClick={()=>setShowFilters(p=>!p)} className="explore-chip" style={{border:`1px solid ${showFilters||activeFilterCount>0?'var(--gold)':'transparent'}`,color:showFilters||activeFilterCount>0?'var(--gold)':'var(--ink-mid)'}}>
+              <span style={{fontSize:14,marginRight:4}}>⚙</span>Filters
+              {activeFilterCount>0&&<span style={{marginLeft:6,minWidth:16,height:16,borderRadius:'50%',background:'var(--gold)',color:'var(--ink)',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{activeFilterCount}</span>}
+            </button>
+            {user&&<button onClick={()=>setAccessFilter(accessFilter==='My Portfolio'?'All':'My Portfolio')} className="explore-chip" style={{background:accessFilter==='My Portfolio'?'var(--gold)':'white',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--ink-mid)',fontWeight:600}}>
+              <span style={{fontSize:14,marginRight:4}}>{accessFilter==='My Portfolio'?'✓':'⭐'}</span>My Portfolio
+              {portfolioSources.size>0&&<span style={{marginLeft:6,padding:'1px 7px',borderRadius:20,fontSize:10,fontWeight:700,background:accessFilter==='My Portfolio'?'rgba(26,22,18,.15)':'rgba(196,146,42,.18)',color:accessFilter==='My Portfolio'?'var(--ink)':'var(--gold)'}}>{portfolioSources.size}</span>}
+            </button>}
+            {/* GPS-based "Near me" — distinct from typed search since it
+                doesn't require a place name to already exist in mind. */}
+            <button onClick={requestLocation} disabled={locLoading} className="explore-chip" style={{color:locGranted?'var(--sage)':'var(--ink-mid)',border:`1px solid ${locGranted?'var(--sage)':'transparent'}`,cursor:locLoading?'default':'pointer',opacity:locLoading?.6:1}}>
+              <span style={{fontSize:14,marginRight:4}}>{locGranted?'✓':'📡'}</span>{locLoading?'Locating…':'Near me'}
+            </button>
+            {accessFilter!=='All'&&<span onClick={()=>setAccessFilter('All')} className="explore-chip explore-chip-active">{accessFilter} ✕</span>}
+            {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} className="explore-chip explore-chip-active">{t} ✕</span>)}
+            {activeFilterCount>0&&<button onClick={clearAllFilters} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:'0 8px',fontWeight:500}}>Clear all</button>}
+          </div>
+
+          {showFilters&&(
+            <div className="explore-filter-panel anim-drop-in">
+              <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Access</div><div className="explore-filter-section">{(['All','Public','Private','My Portfolio'] as AccessFilter[]).map(opt=><button key={opt} onClick={()=>setAccessFilter(opt)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${accessFilter===opt?'var(--gold)':'var(--cream-dark)'}`,background:accessFilter===opt?'rgba(196,146,42,.12)':'white',color:accessFilter===opt?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt}</button>)}</div></div>
+              <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Location type</div><div className="explore-filter-section">{ALL_TAGS.map(tag=><button key={tag} onClick={()=>toggleTag(tag)} style={{padding:'5px 10px',borderRadius:20,fontSize:11,fontWeight:500,border:`1px solid ${selectedTags.includes(tag)?'var(--gold)':'var(--cream-dark)'}`,background:selectedTags.includes(tag)?'rgba(196,146,42,.12)':'white',color:selectedTags.includes(tag)?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{tag}</button>)}</div></div>
+              <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Min rating</div><div className="explore-filter-section">{RATING_OPTIONS.map(opt=><button key={opt.value} onClick={()=>setMinRating(opt.value)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${minRating===opt.value?'var(--gold)':'var(--cream-dark)'}`,background:minRating===opt.value?'rgba(196,146,42,.12)':'white',color:minRating===opt.value?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt.label}</button>)}</div></div>
+              <div><div style={{fontSize:11,fontWeight:600,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--ink-soft)',marginBottom:8}}>Sort by</div><div className="explore-filter-section">{SORT_OPTIONS.map(opt=><button key={opt.value} onClick={()=>setSortBy(opt.value as SortValue)} style={{padding:'6px 12px',borderRadius:20,fontSize:12,fontWeight:500,border:`1px solid ${sortBy===opt.value?'var(--gold)':'var(--cream-dark)'}`,background:sortBy===opt.value?'rgba(196,146,42,.12)':'white',color:sortBy===opt.value?'var(--gold)':'var(--ink-soft)',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>{opt.label}</button>)}</div></div>
+            </div>
+          )}
+        </div>
 
         {/* ── SIDEBAR ──
             FIX 2: No position:sticky on search/count headers.
@@ -1509,19 +1516,10 @@ export default function ExplorePage() {
             The sidebar scrolls as a whole — search/count scroll away naturally. */}
         <div className={`explore-sidebar${mobileMapVisible?' mobile-hidden':''}${sidebarCollapsed?' explore-sidebar-collapsed':''}`}>
 
-          {/* Search — Google-Maps-style autocomplete. Type a city, area,
-              or address; suggestions appear; selecting one geocodes +
-              flies the map + re-anchors the sidebar sort to that spot
-              (via the existing searchPin plumbing that drove the old
-              pin-search button). Clearing the input unsets the pin and
-              returns to the default view. */}
-          <div style={{background:'white',borderBottom:'1px solid var(--cream-dark)',padding:'10px 1.25rem',flexShrink:0}}>
-            <AddressSearch
-              placeholder="Search a city, area, or address…"
-              onSelect={handleSearchNavigate}
-              onClear={() => { setSearchPin(null); setUserLocation(null) }}
-            />
-          </div>
+          {/* Search + filter chips live in the floating topbar overlay
+              above the map (Google-Maps-style), not inside the sidebar.
+              Sidebar's top strip just holds the count + click-anchor
+              banner + the location list. */}
 
           {/* Count — normal flow, no sticky */}
           <div style={{background:'#f9f6f1',borderBottom:'1px solid var(--cream-dark)',padding:'7px 1.25rem',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
@@ -1619,7 +1617,7 @@ export default function ExplorePage() {
         </div>
 
         {/* Map */}
-        <div className={`explore-map-col${mobileMapVisible?' mobile-visible':''}`}>
+        <div className="explore-map-col">
           {/* Desktop-only sidebar collapse handle. Sits vertically
               centered on the map's left edge — shows "‹" when the
               sidebar is expanded so you can hide it, and "›" when
@@ -1634,34 +1632,10 @@ export default function ExplorePage() {
           >
             {sidebarCollapsed ? '›' : '‹'}
           </button>
-          {/* On mobile map view the sidebar is hidden, which also
-              hid the AddressSearch bar that normally lives inside it.
-              Bring it back as a floating overlay at the top of the
-              map, sharing a flex row with the "← List" back button
-              so they don't collide. Non-mobile viewports show the
-              sidebar directly and skip this overlay. */}
-          {mobileMapVisible&&(
-            <div style={{position:'absolute',top:12,left:12,right:12,zIndex:500,display:'flex',gap:8,alignItems:'flex-start',pointerEvents:'none'}}>
-              <button
-                onClick={()=>setMobileMapVisible(false)}
-                style={{pointerEvents:'auto',display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:20,background:'rgba(26,22,18,.9)',color:'var(--cream)',border:'1px solid rgba(255,255,255,.15)',fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit',backdropFilter:'blur(4px)',flexShrink:0,height:38}}
-              >
-                ← List
-              </button>
-              {/* filter:drop-shadow follows the actual input shape
-                  (unlike box-shadow, which needs a background) so the
-                  shadow hugs the input's own rounded border instead
-                  of drawing a phantom rectangle around a transparent
-                  wrapper. Keeps the AddressSearch native look. */}
-              <div style={{pointerEvents:'auto',flex:1,minWidth:0,filter:'drop-shadow(0 4px 12px rgba(0,0,0,.22))'}}>
-                <AddressSearch
-                  placeholder="Search a city, area, or address…"
-                  onSelect={handleSearchNavigate}
-                  onClear={() => { setSearchPin(null); setUserLocation(null) }}
-                />
-              </div>
-            </div>
-          )}
+          {/* Search + filters live in the floating topbar overlay
+              above (Google-Maps-style) — no longer duplicated here.
+              On mobile map view the "← List" back button is
+              rendered as part of the mobile toggle at the bottom. */}
           <ExploreMap
             locations={mapMarkers as ExploreLocation[]}
             activeId={activeId}
