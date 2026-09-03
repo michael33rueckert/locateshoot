@@ -395,12 +395,32 @@ export default function ExploreMap({
       // Below the threshold, or when a pin leaves the viewport, the
       // overlay is removed. The underlying CircleMarker is faded to
       // opacity 0 when its icon is showing so we don't get a
-      // colored dot peeking out from under the pill. moveend fires
-      // this on pan so overlays follow the visible pins around.
-      const applyCategoryIcons = () => {
+      // colored dot peeking out from under the pill.
+      //
+      // Perf notes:
+      //   1. Coalesced via rAF — Leaflet fires zoomend AND moveend
+      //      per zoom (zooming moves the map), and moveend fires per
+      //      pan segment. Without coalescing every pan/zoom did the
+      //      full walk twice back-to-back.
+      //   2. Add pass is CHUNKED across rAF frames. Threshold-
+      //      crossing at dense metro zoom bound ~100 overlays
+      //      synchronously — visible stall. Now we bind
+      //      SYNC_BUDGET the first frame, defer the rest.
+      //   3. Any newly-scheduled apply cancels an in-flight chunk
+      //      loop so a fast wheel-zoom that lands somewhere else
+      //      doesn't keep painting stale overlays.
+      const ICON_CHUNK   = 30
+      let iconAddRafId: number | null = null
+      let iconApplyRafId: number | null = null
+      const applyCategoryIconsImpl = () => {
+        iconApplyRafId = null
         const zoom = map.getZoom()
         const bounds = map.getBounds()
         const showIcons = zoom >= ZOOM_THRESHOLD_ICONS
+
+        // Cancel any deferred add-chunk work still in flight — this
+        // pass sets fresh state; the leftover chunks would be stale.
+        if (iconAddRafId !== null) { cancelAnimationFrame(iconAddRafId); iconAddRafId = null }
 
         // First pass — remove overlays that no longer belong. A pin
         // needs its overlay gone when: zoom dropped below threshold,
@@ -424,13 +444,18 @@ export default function ExploreMap({
         }
         if (!showIcons) return
 
-        // Second pass — add overlays for eligible pins that don't
-        // have one yet. Only dot-mode + in-viewport qualifies;
-        // featured/portfolio/name pins have their own pill labels.
+        // Collect the pins that need overlays added.
+        const toAdd: [string, any][] = []
         for (const [id, m] of Object.entries(markersRef.current) as [string, any][]) {
           if (m.__mode !== 'dot') continue
           if (iconOverlaysRef.current[id]) continue
           if (!bounds.contains(m.getLatLng())) continue
+          toAdd.push([id, m])
+        }
+        if (toAdd.length === 0) return
+
+        const addOne = ([id, m]: [string, any]) => {
+          if (iconOverlaysRef.current[id]) return
           const visual = getCategoryVisual(m.__category, m.__access, m.__tags)
           const overlay = L.marker(m.getLatLng(), {
             icon: L.divIcon({
@@ -453,11 +478,34 @@ export default function ExploreMap({
           // colored dot peeking out from the sides.
           m.setStyle({ opacity: 0, fillOpacity: 0 })
         }
+
+        // Bind up to ICON_CHUNK overlays right away so the visible
+        // pins swap immediately after zoom settles. Anything past
+        // that gets deferred across successive rAF frames to keep
+        // any one frame from stalling.
+        const firstEnd = Math.min(ICON_CHUNK, toAdd.length)
+        for (let i = 0; i < firstEnd; i++) addOne(toAdd[i])
+        if (firstEnd >= toAdd.length) return
+        let cursor = firstEnd
+        const step = () => {
+          iconAddRafId = null
+          const end = Math.min(cursor + ICON_CHUNK, toAdd.length)
+          for (; cursor < end; cursor++) addOne(toAdd[cursor])
+          if (cursor < toAdd.length) iconAddRafId = requestAnimationFrame(step)
+        }
+        iconAddRafId = requestAnimationFrame(step)
       }
-      applyCategoryIconsRef.current = applyCategoryIcons
-      map.on('zoomend', applyCategoryIcons)
-      map.on('moveend', applyCategoryIcons)
-      applyCategoryIcons()
+      const scheduleApplyCategoryIcons = () => {
+        if (iconApplyRafId !== null) return
+        iconApplyRafId = requestAnimationFrame(applyCategoryIconsImpl)
+      }
+      applyCategoryIconsRef.current = scheduleApplyCategoryIcons
+      // moveend alone covers both cases — Leaflet fires it after zoom
+      // AND after pan. Listening on zoomend too would just double-fire
+      // per zoom event (the rAF guard would coalesce them, but we
+      // save the redundant scheduling entirely by not binding both).
+      map.on('moveend', scheduleApplyCategoryIcons)
+      scheduleApplyCategoryIcons()
 
       mapRef.current = map
     })

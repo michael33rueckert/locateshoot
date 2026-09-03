@@ -507,6 +507,20 @@ export default function ExplorePage() {
   // portfolio entries leak into anyone else's Explore view.
   const [manualPortfolioLocs, setManualPortfolioLocs] = useState<any[]>([])
   const [mobileMapVisible, setMobileMapVisible] = useState(false)
+  // Desktop-only: hide the sidebar entirely so the map takes the
+  // full width. Mobile already has its own toggle via
+  // .explore-mobile-toggle; the collapse class only applies at
+  // desktop widths (see globals.css .explore-sidebar-collapsed).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // Any time the sidebar flips visibility on desktop the map's
+  // container width changes — nudge Leaflet to remeasure or the
+  // tiles stay blank in the newly-exposed area until the next
+  // pan/zoom.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const t = setTimeout(() => window.dispatchEvent(new Event('resize')), 200)
+    return () => clearTimeout(t)
+  }, [sidebarCollapsed])
   const [searchPin,        setSearchPin]        = useState<{lat:number;lng:number;label:string}|null>(null)
   // The location the user just clicked on the map or in the sidebar.
   // When set, the sidebar list re-anchors around this point (showing
@@ -1493,7 +1507,7 @@ export default function ExplorePage() {
             FIX 2: No position:sticky on search/count headers.
             Sticky inside overflow:auto can intercept clicks in some browsers.
             The sidebar scrolls as a whole — search/count scroll away naturally. */}
-        <div className={`explore-sidebar${mobileMapVisible?' mobile-hidden':''}`}>
+        <div className={`explore-sidebar${mobileMapVisible?' mobile-hidden':''}${sidebarCollapsed?' explore-sidebar-collapsed':''}`}>
 
           {/* Search — Google-Maps-style autocomplete. Type a city, area,
               or address; suggestions appear; selecting one geocodes +
@@ -1606,6 +1620,20 @@ export default function ExplorePage() {
 
         {/* Map */}
         <div className={`explore-map-col${mobileMapVisible?' mobile-visible':''}`}>
+          {/* Desktop-only sidebar collapse handle. Sits vertically
+              centered on the map's left edge — shows "‹" when the
+              sidebar is expanded so you can hide it, and "›" when
+              it's collapsed so you can bring it back. Hidden on
+              mobile via CSS since the ".explore-mobile-toggle"
+              button already covers that flow. */}
+          <button
+            className="explore-sidebar-collapse-btn"
+            onClick={() => setSidebarCollapsed(v => !v)}
+            title={sidebarCollapsed ? 'Show list' : 'Hide list'}
+            aria-label={sidebarCollapsed ? 'Show list' : 'Hide list'}
+          >
+            {sidebarCollapsed ? '›' : '‹'}
+          </button>
           {/* On mobile map view the sidebar is hidden, which also
               hid the AddressSearch bar that normally lives inside it.
               Bring it back as a floating overlay at the top of the

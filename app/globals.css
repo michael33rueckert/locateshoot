@@ -1369,6 +1369,42 @@ body {
   flex: 1;
   min-width: 0;
 }
+/* Desktop collapse — sidebar drops out of the flex row entirely
+   so the map column grows to full width. The collapse button
+   stays visible (positioned inside .explore-map-col) so the user
+   can bring the sidebar back. Hidden on mobile because the
+   mobile-hidden path already handles that flow. */
+.explore-sidebar-collapsed { display: none !important; }
+.explore-sidebar-collapse-btn {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  z-index: 500;
+  width: 22px;
+  height: 60px;
+  border: 1px solid var(--cream-dark);
+  border-left: none;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, .12);
+  font-family: inherit;
+  transition: background .15s, color .15s;
+}
+.explore-sidebar-collapse-btn:hover {
+  background: var(--gold);
+  color: white;
+}
 .explore-mobile-toggle { display: none; }
  
 /* Explore filter panel — responsive */
@@ -1470,6 +1506,10 @@ body {
     border-bottom: 1px solid var(--cream-dark) !important;
   }
   .explore-sidebar.mobile-hidden { display: none !important; }
+  /* Desktop collapse toggle is redundant on mobile — the
+     mobile-toggle pill already handles switching between list
+     and map. Hide it so it doesn't cover the map's edge. */
+  .explore-sidebar-collapse-btn { display: none !important; }
   .explore-map-col { display: none !important; height: auto !important; }
   .explore-map-col.mobile-visible {
     display: block !important;
