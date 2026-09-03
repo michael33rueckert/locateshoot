@@ -37,8 +37,14 @@ export interface ClientLocation {
   // Category powers the Google-Maps-style icon (colored circle +
   // emoji) that replaces the plain numbered dot once the client
   // zooms in past ZOOM_THRESHOLD_ICONS. Optional — an unrecognized
-  // or missing category falls back to a generic pin.
+  // or missing category falls back to tag-based inference (see
+  // lib/map-categories.ts) or the default pin icon.
   category?: string | null
+  // Tags used to infer a category visual when `category` is null
+  // or unrecognized — most seeded rows have no category set. The
+  // matcher scans for keywords ("Waterfall", "Sunrise", "Historic",
+  // etc.) and picks the closest fit.
+  tags?: string[] | null
   // First photo (portfolio own upload preferred, source-location
   // photo otherwise). Used for the "Recommended" thumbnail — the
   // pin drops back to a name-only pill if there's no photo.
@@ -240,7 +246,7 @@ export default function ClientMap({
           // Colored circle + category emoji, with the name label
           // beside it (same layout as the numbered-dot render so the
           // list-order badge and the icon occupy the same footprint).
-          const visual = getCategoryVisual(loc.category, loc.access)
+          const visual = getCategoryVisual(loc.category, loc.access, loc.tags)
           html = `<div style="display:flex;align-items:center;gap:6px;">
             <span class="pick-map-cat-icon-inner" style="background:${visual.color}">${visual.emoji}</span>
             <div style="

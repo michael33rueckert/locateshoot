@@ -431,7 +431,7 @@ export default function ExploreMap({
           if (m.__mode !== 'dot') continue
           if (iconOverlaysRef.current[id]) continue
           if (!bounds.contains(m.getLatLng())) continue
-          const visual = getCategoryVisual(m.__category, m.__access)
+          const visual = getCategoryVisual(m.__category, m.__access, m.__tags)
           const overlay = L.marker(m.getLatLng(), {
             icon: L.divIcon({
               className: 'explore-map-cat-icon',
@@ -588,6 +588,7 @@ export default function ExploreMap({
         ;(marker as any).__mode         = (loc as any).mapDisplayMode ?? 'dot'
         ;(marker as any).__category     = (loc as any).category ?? null
         ;(marker as any).__access       = loc.access
+        ;(marker as any).__tags         = Array.isArray(loc.tags) ? loc.tags : null
         ;(marker as any).__onLabelClick = onClick
         if (isActive) marker.bringToFront()
 
