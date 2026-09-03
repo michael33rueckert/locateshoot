@@ -1418,7 +1418,9 @@ body {
 .explore-map-col {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  /* No z-index so children (like the collapse button) can
+     participate in the parent stacking context and layer above
+     the sidebar when they need to. */
 }
 .explore-sidebar {
   position: absolute;
@@ -1433,10 +1435,6 @@ body {
   display: flex;
   flex-direction: column;
   z-index: 10;
-  /* Leave room at the top for the floating topbar overlay
-     (search pill + chip row) so the sidebar's own count header
-     doesn't collide with it. */
-  padding-top: 72px;
   transform: translateX(0);
   transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
@@ -1485,14 +1483,18 @@ body {
 .explore-mobile-toggle { display: none; }
 
 /* ── Floating topbar overlay (Google-Maps-style) ──
-   Sits above both sidebar and map. Search pill on the left,
-   filter chips flowing right. Wraps on narrow viewports.
+   Sits above the map, TO THE RIGHT of the sidebar on desktop
+   and tablet so the sidebar's list content isn't obscured.
+   When the sidebar collapses, the topbar slides left to the
+   map edge in sync. On mobile the sidebar takes the full width
+   so the topbar is repositioned to overlay the sidebar and the
+   sidebar itself is given padding-top to leave room for it.
    pointer-events:none on the wrapper + auto on the children so
    clicks pass through empty gaps to the map underneath. */
 .explore-topbar-overlay {
   position: absolute;
   top: 16px;
-  left: 16px;
+  left: 376px;             /* sidebar 360 + 16 gap */
   right: 16px;
   z-index: 20;
   display: flex;
@@ -1500,6 +1502,10 @@ body {
   align-items: flex-start;
   flex-wrap: wrap;
   pointer-events: none;
+  transition: left 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.explore-body:has(.explore-sidebar-collapsed) .explore-topbar-overlay {
+  left: 16px;
 }
 .explore-topbar-overlay > * { pointer-events: auto; }
 .explore-search-pill {
@@ -1598,10 +1604,13 @@ body {
   .dash-right-col  { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1rem !important; }
  
   /* Narrower sidebar so map gets more room. Collapse handle
-     re-anchors to the sidebar's right edge at this width. */
+     AND the floating topbar re-anchor to the sidebar's new
+     right edge. */
   .explore-sidebar { width: 260px !important; }
   .explore-sidebar-collapse-btn { left: 260px !important; }
+  .explore-topbar-overlay { left: 276px !important; }
   .explore-body:has(.explore-sidebar-collapsed) .explore-sidebar-collapse-btn { left: 0 !important; }
+  .explore-body:has(.explore-sidebar-collapsed) .explore-topbar-overlay { left: 16px !important; }
  
   .profile-outer { grid-template-columns: 200px 1fr !important; }
   .profile-main  { padding: 2rem 1.5rem !important; }
@@ -1640,10 +1649,17 @@ body {
      full-screen and slides off with translateX so switching to
      Map view has the same smooth motion the desktop collapse
      already gets. The mobile-toggle pill at the bottom flips
-     between the two. */
+     between the two.
+     Topbar overlay stays at left:16 (over both sidebar and map)
+     and the sidebar gets padding-top so its list clears the
+     wrapped search + chip stack. */
   .explore-sidebar {
     width: 100% !important;
-    padding-top: 72px !important;
+    /* Enough room for the search pill (48) + gap (8) + chip row
+       (36) + top offset (16) + bottom gap (12) = ~120. Bump
+       higher (150) so a wrapped chip row still doesn't overlap
+       the count header underneath. */
+    padding-top: 150px !important;
     border-right: none !important;
     box-shadow: none !important;
   }
@@ -1651,6 +1667,8 @@ body {
     transform: translateX(-100%) !important;
     pointer-events: none !important;
   }
+  .explore-topbar-overlay { left: 16px !important; }
+  .explore-body:has(.explore-sidebar-collapsed) .explore-topbar-overlay { left: 16px !important; }
   /* Desktop collapse handle is redundant on mobile — the pill
      at the bottom already handles switching between list + map. */
   .explore-sidebar-collapse-btn { display: none !important; }

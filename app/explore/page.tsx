@@ -1616,22 +1616,24 @@ export default function ExplorePage() {
           </div>
         </div>
 
+        {/* Desktop/tablet sidebar collapse handle. Rendered as a
+            direct child of .explore-body (not inside .explore-map-col)
+            so its z-index can beat the sidebar's — otherwise it was
+            trapped inside the map-col's stacking context and always
+            painted behind the sidebar. Slides along with the sidebar
+            via a `left` transition. Hidden on mobile since the
+            .explore-mobile-toggle pill already covers that flow. */}
+        <button
+          className="explore-sidebar-collapse-btn"
+          onClick={() => setSidebarCollapsed(v => !v)}
+          title={sidebarCollapsed ? 'Show list' : 'Hide list'}
+          aria-label={sidebarCollapsed ? 'Show list' : 'Hide list'}
+        >
+          {sidebarCollapsed ? '›' : '‹'}
+        </button>
+
         {/* Map */}
         <div className="explore-map-col">
-          {/* Desktop-only sidebar collapse handle. Sits vertically
-              centered on the map's left edge — shows "‹" when the
-              sidebar is expanded so you can hide it, and "›" when
-              it's collapsed so you can bring it back. Hidden on
-              mobile via CSS since the ".explore-mobile-toggle"
-              button already covers that flow. */}
-          <button
-            className="explore-sidebar-collapse-btn"
-            onClick={() => setSidebarCollapsed(v => !v)}
-            title={sidebarCollapsed ? 'Show list' : 'Hide list'}
-            aria-label={sidebarCollapsed ? 'Show list' : 'Hide list'}
-          >
-            {sidebarCollapsed ? '›' : '‹'}
-          </button>
           {/* Search + filters live in the floating topbar overlay
               above (Google-Maps-style) — no longer duplicated here.
               On mobile map view the "← List" back button is
