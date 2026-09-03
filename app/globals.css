@@ -1418,9 +1418,13 @@ body {
 .explore-map-col {
   position: absolute;
   inset: 0;
-  /* No z-index so children (like the collapse button) can
-     participate in the parent stacking context and layer above
-     the sidebar when they need to. */
+  /* isolation:isolate creates a stacking context that BOUNDS
+     Leaflet's internal panes (which use z-index up to ~800 for
+     popups + controls). Without it, those inner layers escape
+     and cover the sidebar (z:10) and topbar (z:20). The map-col
+     itself paints at auto (below both), which is what we want:
+     map on the bottom, sidebar over it, topbar over both. */
+  isolation: isolate;
 }
 .explore-sidebar {
   position: absolute;
