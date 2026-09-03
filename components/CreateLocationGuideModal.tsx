@@ -433,7 +433,10 @@ export default function CreateLocationGuideModal({
           {/* Name */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={labelStyle}>Guide name *</label>
-            <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. Kansas City Guide · Smith Family Fall Photos · Golden Hour" autoFocus />
+            {/* autoFocus only on Create — on Edit the name is already
+                filled in and forcing focus pops the mobile keyboard
+                over the modal every time the photographer taps Edit. */}
+            <input value={sessionName} onChange={e => setSessionName(e.target.value)} style={inputStyle} placeholder="e.g. Kansas City Guide · Smith Family Fall Photos · Golden Hour" autoFocus={!isEdit} />
             <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 4, fontWeight: 300 }}>Clients see this at the top of their location picker.</div>
           </div>
 
