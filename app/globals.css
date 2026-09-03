@@ -1554,7 +1554,11 @@ body {
 }
 .explore-chip-active:hover { background: var(--ink-mid); color: var(--cream); }
 
-/* Explore filter panel — dropdown attached below the chip row */
+/* Explore filter panel — dropdown attached below the chip row.
+   Scoped to the available viewport height so the four filter
+   groups (Access, Location type, Min rating, Sort) don't run
+   off the bottom of the screen on shorter windows — the panel
+   scrolls internally when its content outgrows the box. */
 .explore-filter-panel {
   flex-basis: 100%;
   margin-top: 4px;
@@ -1566,9 +1570,9 @@ body {
   grid-template-columns: auto 1fr auto auto;
   gap: 1.5rem;
   align-items: start;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: calc(100vh - 140px);
   box-shadow: 0 4px 16px rgba(26, 22, 18, .12);
-  max-width: calc(100vw - 32px);
 }
 .explore-filter-section { display: flex; flex-wrap: wrap; gap: 6px; }
  
