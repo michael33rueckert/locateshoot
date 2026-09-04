@@ -1,13 +1,12 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { Map as MLMap, NavigationControl, Popup, setWorkerCount } from 'maplibre-gl'
+import { Map as MLMap, NavigationControl, Popup, setWorkerUrl } from 'maplibre-gl'
 
-// See ExploreMap.tsx for context — forces main-thread tile
-// processing so the map isn't stalled by Turbopack's failure
-// to serve the off-main-thread worker script.
+// Self-hosted worker path — see ExploreMap.tsx for context on
+// why Turbopack can't serve maplibre-gl's default worker URL.
 if (typeof window !== 'undefined') {
-  try { setWorkerCount(0) } catch { /* older maplibre — no-op */ }
+  try { setWorkerUrl('/maplibre-gl-worker.mjs') } catch { /* older maplibre — no-op */ }
 }
 import { getVectorStyle } from '@/lib/map-tiles'
 
