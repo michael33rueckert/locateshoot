@@ -194,7 +194,12 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
         </aside>
       )}
 
-      <nav className="app-topbar" style={{ position: 'sticky', top: 0, zIndex: 1500, isolation: 'isolate', background: 'rgba(26,22,18,.96)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 60 }}>
+      {/* Fully opaque background — no backdrop-filter blur. The
+          4% transparency the previous rgba(...96) allowed was not
+          visually meaningful, but the blur re-rasterized the
+          entire strip behind the nav on every animation frame,
+          crushing the Explore map's zoom perf on mobile. */}
+      <nav className="app-topbar" style={{ position: 'sticky', top: 0, zIndex: 1500, isolation: 'isolate', background: '#1a1612', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: 60 }}>
         <Link href={signedIn ? '/dashboard' : '/'} style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 18, fontWeight: 900, color: 'var(--cream)', display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', display: 'inline-block' }} />LocateShoot
         </Link>

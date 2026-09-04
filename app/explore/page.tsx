@@ -266,7 +266,12 @@ function DetailPanel({ loc, initialPhotoUrl, portfolioId, isFavorite, onToggleFa
       <div onClick={onClose} className="anim-backdrop-in" style={{position:'fixed',inset:0,background:'rgba(26,22,18,.5)',zIndex:1700}}/>
       <div className="anim-sheet-up" style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',willChange:'transform',contain:'layout style',width:'100%',maxWidth:600,background:'white',borderRadius:'16px 16px 0 0',zIndex:1800,maxHeight:'90svh',overflowY:'auto',boxShadow:'0 -8px 48px rgba(26,22,18,.25)'}}>
         <div style={{display:'flex',justifyContent:'center',padding:'12px 0 6px'}}><div style={{width:36,height:4,borderRadius:2,background:'var(--sand)'}}/></div>
-        <button onClick={onClose} style={{position:'absolute',top:14,right:14,width:32,height:32,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:16,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10}}>✕</button>
+        {/* touchAction:manipulation removes the 300ms tap delay
+            and stops iOS from waiting to see if the tap was
+            actually the start of a double-tap-to-zoom gesture,
+            which is why the X was sometimes eating the first tap.
+            Bumped to 40px for a comfortable Apple HIG tap target. */}
+        <button onClick={onClose} style={{position:'absolute',top:12,right:12,width:40,height:40,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:18,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10,touchAction:'manipulation',WebkitTapHighlightColor:'transparent'}}>✕</button>
 
         {/* Photo area — Google Places photos only. We removed community
             uploads + the Photographer / Add-yours tabs along with the rest
@@ -1492,6 +1497,7 @@ export default function ExplorePage() {
             state. isolation:isolate so the AddressSearch dropdown
             paints above Leaflet's own panes. */}
         <div className="explore-topbar-overlay">
+         <div className="explore-topbar-row">
           <div className="explore-search-pill">
             <AddressSearch
               variant="pill"
@@ -1518,6 +1524,7 @@ export default function ExplorePage() {
             {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} className="explore-chip explore-chip-active">{t} ✕</span>)}
             {activeFilterCount>0&&<button onClick={clearAllFilters} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:'0 8px',fontWeight:500}}>Clear all</button>}
           </div>
+         </div>
 
           {showFilters&&(
             <div className="explore-filter-panel anim-drop-in">

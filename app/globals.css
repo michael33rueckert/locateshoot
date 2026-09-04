@@ -1494,7 +1494,20 @@ body {
    so the topbar is repositioned to overlay the sidebar and the
    sidebar itself is given padding-top to leave room for it.
    pointer-events:none on the wrapper + auto on the children so
-   clicks pass through empty gaps to the map underneath. */
+   clicks pass through empty gaps to the map underneath.
+
+   Structure:
+     .explore-topbar-overlay   — absolute-positioned wrapper,
+                                 stacks children vertically so
+                                 the filter panel drops below
+                                 the row.
+     .explore-topbar-row       — search pill + chip row side by
+                                 side (desktop/tablet). Stacks
+                                 vertically on mobile.
+     .explore-chip-row         — SINGLE-ROW horizontal-scroll
+                                 chip strip on every viewport.
+                                 Vertically centered against the
+                                 search pill on desktop/tablet. */
 .explore-topbar-overlay {
   position: absolute;
   top: 16px;
@@ -1502,9 +1515,8 @@ body {
   right: 16px;
   z-index: 20;
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
   pointer-events: none;
   transition: left 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -1512,18 +1524,35 @@ body {
   left: 16px;
 }
 .explore-topbar-overlay > * { pointer-events: auto; }
+.explore-topbar-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
 .explore-search-pill {
   width: 320px;
-  max-width: calc(100% - 32px);
   flex-shrink: 0;
 }
+/* Single horizontal row + native scroll. Hidden scrollbar in
+   webkit + firefox so the strip reads as clean Google-Maps
+   chips (touch users can pan; trackpad users can two-finger
+   scroll). */
 .explore-chip-row {
   display: flex;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
   min-width: 0;
+  flex: 1;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0;
 }
+.explore-chip-row::-webkit-scrollbar { display: none; }
 .explore-chip {
   display: inline-flex;
   align-items: center;
@@ -1554,14 +1583,13 @@ body {
 }
 .explore-chip-active:hover { background: var(--ink-mid); color: var(--cream); }
 
-/* Explore filter panel — dropdown attached below the chip row.
+/* Explore filter panel — dropdown attached below the topbar
+   row (the topbar-overlay wrapper is a column flex container).
    Scoped to the available viewport height so the four filter
    groups (Access, Location type, Min rating, Sort) don't run
    off the bottom of the screen on shorter windows — the panel
    scrolls internally when its content outgrows the box. */
 .explore-filter-panel {
-  flex-basis: 100%;
-  margin-top: 4px;
   padding: 1rem 1.25rem 1.25rem;
   border: 1px solid var(--cream-dark);
   border-radius: 12px;
@@ -1571,7 +1599,7 @@ body {
   gap: 1.5rem;
   align-items: start;
   overflow: auto;
-  max-height: calc(100vh - 140px);
+  max-height: calc(100vh - 160px);
   box-shadow: 0 4px 16px rgba(26, 22, 18, .12);
 }
 .explore-filter-section { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1688,6 +1716,17 @@ body {
   }
   .explore-topbar-overlay { left: 16px !important; }
   .explore-body:has(.explore-sidebar-collapsed) .explore-topbar-overlay { left: 16px !important; }
+  /* Mobile: search on top, chip row (still horizontally
+     scrollable) drops below it. */
+  .explore-topbar-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .explore-search-pill {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
   /* Desktop collapse handle is redundant on mobile — the pill
      at the bottom already handles switching between list + map. */
   .explore-sidebar-collapse-btn { display: none !important; }
@@ -1717,14 +1756,6 @@ body {
     max-height: 60svh !important; overflow-y: auto !important;
     grid-template-columns: unset !important;
   }
-  /* Search pill takes full topbar width on phones so it stays
-     tappable; chips wrap below it. Override max-width too so
-     the pill isn't asymmetrically indented on the right. */
-  .explore-search-pill {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
- 
   /* ── Share ── */
   .share-outer   { display: block !important; height: 100svh !important; overflow: hidden !important; }
   .share-map-col { display: none !important; }
