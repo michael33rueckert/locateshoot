@@ -141,30 +141,38 @@ export default function ExploreMap({
       : USA_VIEW
     if (homeLocation) homeAppliedRef.current = true
 
+    // Debug: log container size + style spec at init time. Helps
+    // pinpoint whether the map is failing to init or just rendering
+    // to a 0×0 container.
+    const rect = containerRef.current.getBoundingClientRect()
+    // eslint-disable-next-line no-console
+    console.log('[ExploreMap] init — container size:', rect.width, '×', rect.height)
+
     const map = new MLMap({
       container: containerRef.current,
       style: getVectorStyle('light'),
       center: initial.center,
       zoom: initial.zoom,
-      // Interaction feel — MapLibre's defaults are already very
-      // close to Google Maps. cooperativeGestures is off so
-      // single-finger pan works (Google Maps mobile also does).
-      touchZoomRotate: true,
-      dragRotate: false,
-      pitchWithRotate: false,
-      // Higher devicePixelRatio ceiling on Retina without
-      // ballooning GPU memory. 2 is enough for crisp text.
-      maxPitch: 0,
-      minZoom: 2,
-      maxZoom: 20,
-      // Attribution moves to bottom-left so it doesn't collide
-      // with the sidebar-collapse handle on desktop.
-      attributionControl: { compact: true },
     })
     mapRef.current = map
 
     // Zoom control (bottom-right, matches the Leaflet placement).
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
+
+    // Catch style + tile errors so silent init failures show up in
+    // the console instead of just rendering blank.
+    map.on('error', (e: any) => {
+      // eslint-disable-next-line no-console
+      console.error('[ExploreMap] MapLibre error:', e?.error?.message ?? e)
+    })
+    map.on('load', () => {
+      // eslint-disable-next-line no-console
+      console.log('[ExploreMap] style loaded')
+    })
+    map.on('styledata', () => {
+      // eslint-disable-next-line no-console
+      console.log('[ExploreMap] styledata event')
+    })
 
     // moveend is Leaflet-nostalgic naming — MapLibre calls the
     // same event 'moveend'. Fires once per gesture end (debounced
