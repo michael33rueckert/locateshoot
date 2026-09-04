@@ -85,8 +85,6 @@ const ZOOM_THRESHOLD_ICONS    = 10
 const SRC_POINTS      = 'locations'
 const SRC_USER        = 'user-location'
 const SRC_HOME        = 'home-location'
-const LAYER_CLUSTERS      = 'clusters'
-const LAYER_CLUSTER_N     = 'cluster-count'
 const LAYER_POINTS        = 'unclustered-point'
 const LAYER_ICONS         = 'point-icons'
 const LAYER_LABELS        = 'point-labels'
@@ -125,7 +123,13 @@ function locationsToGeoJSON(locations: ExploreLocation[], photoMap: Record<strin
         mode,
         color: visual.color,
         emoji: visual.emoji,
-        iconKey: `cat-${visual.color.slice(1).toLowerCase()}-${visual.emoji}`,
+        // Encode the emoji by codepoint (base-10) rather than
+        // as a raw character — some emoji (especially those
+        // with variation selectors like 🏙︎) can normalize
+        // differently between the property setter and the
+        // styleimagemissing consumer, breaking the id lookup.
+        // Numeric codepoints are stable across both.
+        iconKey: `cat-${visual.color.slice(1).toLowerCase()}-${visual.emoji.codePointAt(0) ?? 0}`,
         hasPhoto: !!thumb,
         // Only set when a thumb is available — the label-badge
         // symbol layer filters on this. Empty string when
@@ -292,59 +296,18 @@ export default function ExploreMap({
       isReadyRef.current = true
 
       // ── Points source + clustering ────────────────────────────
+      // Points source — clustering off per product decision.
+      // Every pin renders individually at every zoom level
+      // (small colored dot until the icon threshold, colored
+      // emoji circle after) with WebGL handling the load.
       map.addSource(SRC_POINTS, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
-        cluster: true,
-        clusterMaxZoom: 12,   // pins split apart at zoom 13 (matches ZOOM_THRESHOLD_NAME)
-        clusterRadius: 50,
-        // Promote our own `id` property to the top-level feature
-        // id — required for map.setFeatureState({id: X, ...}) to
-        // hit the right feature (active-marker highlight).
+        // Promote our own `id` property to the top-level
+        // feature id — required for map.setFeatureState
+        // ({id: X, ...}) to hit the right feature (active-
+        // marker highlight).
         promoteId: 'id',
-      })
-
-      // Cluster bubbles — colored + sized by count. Kept small
-      // (11 → 17 px radius) so wide-zoom views don't look like
-      // giant blobs when there are lots of pins packed in.
-      map.addLayer({
-        id: LAYER_CLUSTERS,
-        type: 'circle',
-        source: SRC_POINTS,
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': [
-            'step', ['get', 'point_count'],
-            '#4a6741',  10,
-            '#c4922a',  50,
-            '#b54b2a',
-          ],
-          'circle-radius': [
-            'step', ['get', 'point_count'],
-            11,  10,
-            14,  50,
-            17,
-          ],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': 'rgba(255,255,255,0.9)',
-        },
-      })
-
-      map.addLayer({
-        id: LAYER_CLUSTER_N,
-        type: 'symbol',
-        source: SRC_POINTS,
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': ['get', 'point_count_abbreviated'],
-          'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
-          'text-size': 11,
-          'text-allow-overlap': true,
-          'text-ignore-placement': true,
-        },
-        paint: {
-          'text-color': '#ffffff',
-        },
       })
 
       // ── Pill background images (icon-text-fit pattern) ──
@@ -371,11 +334,16 @@ export default function ExploreMap({
       // demand — MapLibre fires `styleimagemissing` for any
       // icon-image the symbol layer needs but doesn't have.
       // Cheap: only the visuals actually visible get rasterised.
+      // id format: cat-{6hex}-{codepoint-number}
       map.on('styleimagemissing', (e) => {
         const id = e.id
-        const match = /^cat-([0-9a-f]{6})-(.+)$/.exec(id)
-        if (!match || map.hasImage(id)) return
-        const [, hex, emoji] = match
+        const match = /^cat-([0-9a-f]{6})-(\d+)$/.exec(id)
+        if (!match) return
+        if (map.hasImage(id)) return
+        const [, hex, cpStr] = match
+        const emoji = String.fromCodePoint(Number(cpStr))
+        // eslint-disable-next-line no-console
+        console.log('[ExploreMap] generating icon', id, emoji)
         const img = makeCategoryIcon('#' + hex, emoji)
         map.addImage(id, img.data, { pixelRatio: img.pixelRatio })
       })
@@ -388,7 +356,6 @@ export default function ExploreMap({
         id: LAYER_POINTS,
         type: 'circle',
         source: SRC_POINTS,
-        filter: ['!', ['has', 'point_count']],
         maxzoom: ZOOM_THRESHOLD_ICONS,
         paint: {
           'circle-color': [
@@ -416,7 +383,6 @@ export default function ExploreMap({
         id: LAYER_ICONS,
         type: 'symbol',
         source: SRC_POINTS,
-        filter: ['!', ['has', 'point_count']],
         minzoom: ZOOM_THRESHOLD_ICONS,
         layout: {
           'icon-image': ['get', 'iconKey'],
@@ -445,11 +411,7 @@ export default function ExploreMap({
         id: LAYER_LABEL_BADGES,
         type: 'symbol',
         source: SRC_POINTS,
-        filter: [
-          'all',
-          ['!', ['has', 'point_count']],
-          ['has', 'labelImageId'],
-        ],
+        filter: ['has', 'labelImageId'],
         layout: {
           'icon-image': ['get', 'labelImageId'],
           // Start small at ZOOM_THRESHOLD_FEATURED (9) so
@@ -478,7 +440,6 @@ export default function ExploreMap({
         source: SRC_POINTS,
         filter: [
           'all',
-          ['!', ['has', 'point_count']],
           ['!', ['has', 'labelImageId']],
           ['match',
             ['get', 'mode'],
@@ -518,22 +479,9 @@ export default function ExploreMap({
         minzoom: ZOOM_THRESHOLD_FEATURED,
       })
 
-      // Interaction: click on a cluster → zoom in. On a point →
-      // fire the parent's onMarkerClick with the pin id.
-      map.on('click', LAYER_CLUSTERS, (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
-        const feat = e.features?.[0]
-        if (!feat) return
-        const clusterId = feat.properties?.cluster_id
-        const source = map.getSource(SRC_POINTS) as GeoJSONSource
-        source.getClusterExpansionZoom(clusterId).then((zoom: number) => {
-          const geom = feat.geometry as GeoJSON.Point
-          map.easeTo({ center: geom.coordinates as [number, number], zoom, duration: 350 })
-        }).catch(() => { /* cluster gone (data changed) — ignore */ })
-      })
-
-      // Click handler is bound to base + icon + label layers so
-      // a tap on any of the three shapes (dot, category icon,
-      // pill) opens the detail panel for that pin.
+      // Click handler is bound to point + icon + label layers
+      // so a tap on any shape (dot, category icon, pill) opens
+      // the detail panel for that pin.
       const onPointClick = (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
         const feat = e.features?.[0]
         if (!feat) return
@@ -548,8 +496,6 @@ export default function ExploreMap({
       // Cursor feedback so the pins feel interactive.
       const setPointer = () => { map.getCanvas().style.cursor = 'pointer' }
       const clearPointer = () => { map.getCanvas().style.cursor = '' }
-      map.on('mouseenter', LAYER_CLUSTERS, setPointer)
-      map.on('mouseleave', LAYER_CLUSTERS, clearPointer)
       map.on('mouseenter', LAYER_POINTS,   setPointer)
       map.on('mouseleave', LAYER_POINTS,   clearPointer)
       map.on('mouseenter', LAYER_ICONS,    setPointer)
