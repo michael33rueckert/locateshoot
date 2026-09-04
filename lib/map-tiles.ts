@@ -81,42 +81,14 @@ export function getVectorStyle(variant: MapVariant = 'light'): StyleSpec {
     const style = variant === 'dark' ? 'alidade_smooth_dark' : 'alidade_smooth'
     return `https://tiles.stadiamaps.com/styles/${style}.json?api_key=${key}`
   }
-  // Keyless fallback — MapLibre-compatible inline style pointing
-  // at OSM raster tiles. Guaranteed to render because it needs
-  // no external style JSON; the tile URL is the only network
-  // dependency, same as the Leaflet path was.
-  // glyphs endpoint is required for any text-layer symbols to
-  // render — MapLibre's public font server ships Noto Sans and
-  // Open Sans for free.
-  return {
-    version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        maxzoom: 19,
-        attribution: OSM_ATTRIBUTION,
-      },
-    },
-    layers: [
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-        // Dark variant fakes a dark map via a raster-color filter
-        // (invert + hue-rotate) — matches the Leaflet fallback we
-        // used for HomeMap's hero.
-        ...(variant === 'dark' ? {
-          paint: {
-            'raster-brightness-min': 0.15,
-            'raster-brightness-max': 0.55,
-            'raster-saturation': -0.35,
-            'raster-contrast': 0.1,
-          },
-        } : {}),
-      },
-    ],
-  }
+  // Keyless fallback — MapLibre's own demo style. Guaranteed to
+  // render because MapLibre uses it in their own examples; the
+  // style JSON + vector tiles + glyphs are all on maplibre.org's
+  // infrastructure and don't depend on any bundler/CSP quirks
+  // that might trip up an inline-style spec.
+  // Not intended for production (rate-limited, non-branded),
+  // but at least the map isn't blank while running locally
+  // without a Stadia key.
+  void variant  // dark variant not distinct in the demo style
+  return 'https://demotiles.maplibre.org/style.json'
 }
