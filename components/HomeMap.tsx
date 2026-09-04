@@ -1,7 +1,14 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { Map as MLMap, NavigationControl, Popup } from 'maplibre-gl'
+import { Map as MLMap, NavigationControl, Popup, setWorkerCount } from 'maplibre-gl'
+
+// See ExploreMap.tsx for context — forces main-thread tile
+// processing so the map isn't stalled by Turbopack's failure
+// to serve the off-main-thread worker script.
+if (typeof window !== 'undefined') {
+  try { setWorkerCount(0) } catch { /* older maplibre — no-op */ }
+}
 import { getVectorStyle } from '@/lib/map-tiles'
 
 // ── HomeMap (WebGL, MapLibre GL JS) ─────────────────────────────────

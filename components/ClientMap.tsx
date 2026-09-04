@@ -1,8 +1,16 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { Map as MLMap, NavigationControl, LngLatBounds } from 'maplibre-gl'
+import { Map as MLMap, NavigationControl, LngLatBounds, setWorkerCount } from 'maplibre-gl'
 import type { GeoJSONSource, MapMouseEvent, MapGeoJSONFeature } from 'maplibre-gl'
+
+// Force MapLibre to run on main thread — Turbopack fails to
+// load the off-main-thread worker script, which stalls tile
+// processing and leaves the map blank. See ExploreMap for
+// full context.
+if (typeof window !== 'undefined') {
+  try { setWorkerCount(0) } catch { /* older maplibre — no-op */ }
+}
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
 

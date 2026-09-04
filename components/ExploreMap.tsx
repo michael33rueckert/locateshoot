@@ -1,8 +1,17 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { Map as MLMap, NavigationControl } from 'maplibre-gl'
+import { Map as MLMap, NavigationControl, setWorkerCount } from 'maplibre-gl'
 import type { GeoJSONSource, MapMouseEvent, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl'
+
+// Force MapLibre to run everything on the main thread. The
+// off-main-thread worker script fails to load under Next.js
+// Turbopack ("Failed to load module script: text/html" errors
+// on every navigation) which stalls tile processing and leaves
+// the map blank. Main-thread parsing is slower but works.
+if (typeof window !== 'undefined') {
+  try { setWorkerCount(0) } catch { /* older maplibre — no-op */ }
+}
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
 
