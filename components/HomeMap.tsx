@@ -1,7 +1,20 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { getTileConfig, needsDarkFilter } from '@/lib/map-tiles'
+import * as maplibregl from 'maplibre-gl'
+import type { Map as MLMap } from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
+import { getVectorStyle } from '@/lib/map-tiles'
+
+// ── HomeMap (WebGL, MapLibre GL JS) ─────────────────────────────────
+//
+// Landing-page decorative map. Same MapLibre engine + Stadia
+// Alidade Smooth style used by ExploreMap so the whole app is on
+// one map stack now.
+//
+// Hero variant = the background layer behind the marketing hero:
+// dark style, non-interactive, no controls. Main variant = a
+// standard interactive map with popups on the sample locations.
 
 interface HomeMapProps {
   variant: 'hero' | 'main'
@@ -19,95 +32,96 @@ const LOCATIONS = [
 
 export default function HomeMap({ variant, flyTo }: HomeMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef       = useRef<any>(null)
+  const mapRef       = useRef<MLMap | null>(null)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || mapRef.current) return
+    const isHero = variant === 'hero'
 
-    // Capture container in a local variable so cleanup can reference it
-    const container = containerRef.current
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: getVectorStyle(isHero ? 'dark' : 'light'),
+      center: [-95.5, 39.5],
+      zoom: isHero ? 6 : 7,
+      interactive: !isHero,
+      // Hero background — no attribution or zoom controls.
+      attributionControl: isHero ? false : { compact: true },
+      dragRotate: false,
+      pitchWithRotate: false,
+    })
+    mapRef.current = map
+    if (!isHero) {
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+    }
 
-    import('leaflet').then(L => {
-      // If container was removed or already has a Leaflet map, stop here
-      if (!container) return
-      if ((container as any)._leaflet_id) return
-
-      delete (L.Icon.Default.prototype as any)._getIconUrl
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-        iconUrl:       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-        shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    map.on('load', () => {
+      const features: GeoJSON.Feature[] = LOCATIONS.map(loc => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [loc.lng, loc.lat] },
+        properties: {
+          name:   loc.name,
+          rating: loc.rating,
+          featured: loc.type === 'featured',
+        },
+      }))
+      map.addSource('home-locations', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features },
       })
 
-      const isHero = variant === 'hero'
+      // Colored circles. Featured spots are gold + larger; public
+      // are sage green + smaller. Hero variant scales down since
+      // the map is decorative background, not a focus.
+      map.addLayer({
+        id: 'home-points',
+        type: 'circle',
+        source: 'home-locations',
+        paint: {
+          'circle-color': [
+            'case', ['get', 'featured'], '#c4922a', '#4a6741',
+          ],
+          'circle-radius': isHero
+            ? ['case', ['get', 'featured'], 6, 5]
+            : ['case', ['get', 'featured'], 10, 8],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff',
+        },
+      })
 
-      const map = L.map(container, {
-        zoomControl:        !isHero,
-        attributionControl: !isHero,
-        dragging:           !isHero,
-        scrollWheelZoom:    !isHero,
-      }).setView([39.5, -95.5], isHero ? 6 : 7)
-
-      // Basemap tiles via lib/map-tiles.ts. Stadia Alidade Smooth
-      // (light + dark variants) when NEXT_PUBLIC_STADIA_API_KEY is
-      // set; OSM standard as a keyless fallback. In fallback mode
-      // dark maps get a CSS invert filter on the tile pane to
-      // approximate a dark look (needsDarkFilter returns true).
-      const tiles = getTileConfig(isHero ? 'dark' : 'light')
-      L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom, attribution: tiles.attribution }).addTo(map)
-      if (isHero && needsDarkFilter('dark')) {
-        const pane = map.getPane('tilePane')
-        if (pane) pane.style.filter = 'invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)'
-      }
-
-      LOCATIONS.forEach(loc => {
-        const isFeatured = loc.type === 'featured'
-        const size  = isHero ? (isFeatured ? 11 : 9) : (isFeatured ? 18 : 14)
-        const color = isFeatured ? '#c4922a' : '#4a6741'
-
-        const icon = L.divIcon({
-          className: '',
-          html: `<div style="
-            width:${size}px; height:${size}px; border-radius:50%;
-            background:${color}; border:2px solid white;
-            box-shadow:0 2px 6px rgba(0,0,0,.35);
-          "></div>`,
-          iconSize:   [size, size],
-          iconAnchor: [size / 2, size / 2],
+      // Popups on the main variant only.
+      if (!isHero) {
+        map.on('click', 'home-points', (e: any) => {
+          const feat = e.features?.[0]
+          if (!feat) return
+          const { name, rating, featured } = feat.properties
+          const label = featured ? '⭐ Featured Venue' : '● Public Location'
+          new maplibregl.Popup({ offset: 12 })
+            .setLngLat((feat.geometry as GeoJSON.Point).coordinates as [number, number])
+            .setHTML(`
+              <strong>${name}</strong><br>
+              <span style="color:#6b5f52;font-size:12px;">${label}</span><br>
+              <span style="color:#c4922a;font-size:12px;">★ ${rating}</span>
+            `)
+            .addTo(map)
         })
-
-        const marker = L.marker([loc.lat, loc.lng], { icon }).addTo(map)
-
-        if (!isHero) {
-          const label = isFeatured ? '⭐ Featured Venue' : '● Public Location'
-          marker.bindPopup(
-            `<strong>${loc.name}</strong><br>
-             <span style="color:#6b5f52;font-size:12px;">${label}</span><br>
-             <span style="color:#c4922a;font-size:12px;">★ ${loc.rating}</span>`
-          )
-        }
-      })
-
-      mapRef.current = map
+        map.on('mouseenter', 'home-points', () => { map.getCanvas().style.cursor = 'pointer' })
+        map.on('mouseleave', 'home-points', () => { map.getCanvas().style.cursor = '' })
+      }
     })
 
     return () => {
-      if (mapRef.current) {
-        mapRef.current.remove()
-        mapRef.current = null
-      }
+      map.remove()
+      mapRef.current = null
     }
   }, [variant])
 
+  // Fly to a passed-in [lat, lng] (called from the marketing page's
+  // "See a location" CTA). MapLibre uses [lng, lat] so the input
+  // pair is swapped at the boundary.
   useEffect(() => {
     if (!flyTo || !mapRef.current) return
-    mapRef.current.flyTo(flyTo, 12, { duration: 1.2 })
+    mapRef.current.flyTo({ center: [flyTo[1], flyTo[0]], zoom: 12, duration: 1200 })
   }, [flyTo])
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ width: '100%', height: '100%' }}
-    />
-  )
+  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 }

@@ -1858,7 +1858,10 @@ export default function ExplorePage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* FIX 3: Force Leaflet map container to always fill its column */
+        /* Force the WebGL map canvas to always fill its column
+           (MapLibre root uses .maplibregl-map; Leaflet fallback
+           kept for any lingering map component). */
+        .explore-map-col .maplibregl-map,
         .explore-map-col .leaflet-container {
           height: 100% !important;
           min-height: 300px;

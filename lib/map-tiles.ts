@@ -53,3 +53,31 @@ export function getTileConfig(variant: MapVariant = 'light'): TileConfig {
 export function needsDarkFilter(variant: MapVariant): boolean {
   return variant === 'dark' && !process.env.NEXT_PUBLIC_STADIA_API_KEY
 }
+
+// ── MapLibre GL JS (WebGL) vector style ─────────────────────────────
+//
+// Vector tiles + WebGL rendering = the 60fps map perf story. Stadia
+// publishes MapLibre-compatible style JSONs for the same Alidade
+// Smooth palette we use on the raster path, so switching between the
+// two is invisible to the user visually but night-and-day for zoom
+// and pan smoothness. Uses the same NEXT_PUBLIC_STADIA_API_KEY.
+//
+// When no key is set we fall back to a MapLibre demo style (OSM
+// vector tiles from OpenFreeMap or MapLibre's demo tiles) so local
+// dev doesn't require a Stadia account. In production the key is
+// required — the demo tiles rate-limit aggressively.
+//
+// Returns the full style URL; callers pass it straight to
+// `new maplibregl.Map({ style: ... })`.
+export function getVectorStyle(variant: MapVariant = 'light'): string {
+  const key = process.env.NEXT_PUBLIC_STADIA_API_KEY
+  if (key) {
+    const style = variant === 'dark' ? 'alidade_smooth_dark' : 'alidade_smooth'
+    return `https://tiles.stadiamaps.com/styles/${style}.json?api_key=${key}`
+  }
+  // Keyless dev fallback — OpenFreeMap Positron is a free MapLibre
+  // vector style with no signup. Not intended for production use.
+  return variant === 'dark'
+    ? 'https://tiles.openfreemap.org/styles/dark'
+    : 'https://tiles.openfreemap.org/styles/positron'
+}
