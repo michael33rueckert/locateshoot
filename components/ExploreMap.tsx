@@ -217,19 +217,20 @@ export default function ExploreMap({
         // reposition every frame of zoom. canvas rendering pushes all
         // of them to the GPU as one layer.
         preferCanvas: true,
-        // Fractional zoom levels — makes pinch + wheel zoom feel
-        // continuous instead of snapping to whole levels. 0.25 is a
-        // good compromise between smoothness and marker/tile
-        // stability (0 works too but retriggers tile fetches on
-        // every microscopic zoom change).
-        zoomSnap: 0.25,
-        // Half-step +/- buttons match the finer granularity.
+        // Whole-level zoom snap — fractional levels (0.25) forced
+        // Leaflet to redraw tiles at intermediate scales and
+        // reproject markers more often, which was hurting mobile.
+        // Sticking with 1 lets the compositor own the in-between
+        // animation with a single transform on the tile pane.
+        zoomSnap: 1,
+        // Half-step +/- buttons still feel finer than default
+        // (which was 1) without paying the fractional-tile cost.
         zoomDelta: 0.5,
         // Slower wheel-per-zoom-level = smoother trackpad + mouse
         // wheel zoom. Default is 60; 120 nearly halves the zoom
         // speed and reads as smooth on precision trackpads.
         wheelPxPerZoomLevel: 120,
-        wheelDebounceTime: 20,
+        wheelDebounceTime: 40,
         // Soft bounce when hitting min/max zoom rather than a hard
         // stop — matches Google Maps' feel.
         bounceAtZoomLimits: true,
@@ -295,15 +296,14 @@ export default function ExploreMap({
       writeLabelScale()
 
       // ── Pinch-zoom momentum ──
-      // Leaflet's built-in touch zoom snaps to a target zoom on
-      // finger release; Google Maps continues zooming briefly in
-      // the direction of the pinch (fling). We approximate that by
-      // sampling the zoom level on 'zoom' events, tracking the
-      // recent velocity in zoom-levels-per-second, and if a pinch
-      // ends with meaningful velocity, calling setZoom() to
-      // continue with an exponential decay. Wheel + button zooms
-      // are excluded — we only kick in when a touch was recently
-      // active on the map container.
+      // Google Maps-style fling: after a fast pinch release the
+      // zoom keeps going briefly in the same direction, then
+      // decelerates. We sample zoom on 'zoom' events during the
+      // pinch, then on touchend fire ONE Leaflet setZoom call
+      // toward the extrapolated target zoom. Leaflet's own
+      // animation owns the interpolation — much cheaper on mobile
+      // than driving setZoom every rAF frame (which was
+      // reprojecting all markers 60x/second).
       let touchActive = false
       const touchStart = () => { touchActive = true }
       const touchEnd   = () => { touchActive = false; scheduleMomentum() }
@@ -325,54 +325,32 @@ export default function ExploreMap({
         }
       })
 
-      // On touchend, compute velocity from the last window of
-      // samples. If it's above the noise floor, kick off an
-      // exponential-decay setZoom over MOMENTUM_MS. All follow-up
-      // zooming is regular Leaflet zoom animation, so labels +
-      // markers + tiles animate along with it.
-      const MOMENTUM_MS         = 320
-      const MIN_VELOCITY        = 1.8    // zoom levels / second
-      const MAX_MOMENTUM_DELTA  = 1.2    // don't fling farther than 1.2 zoom levels
-      let momentumRafId: number | null = null
+      const MOMENTUM_MS         = 350
+      const MIN_VELOCITY        = 2.5    // zoom levels / second
+      const MAX_MOMENTUM_DELTA  = 1.0    // don't fling farther than 1 zoom level
       const scheduleMomentum = () => {
         if (zoomSamples.length < 2) return
         const first = zoomSamples[0]
         const last  = zoomSamples[zoomSamples.length - 1]
         const dt    = (last.t - first.t) / 1000
+        zoomSamples.length = 0
         if (dt <= 0) return
         const velocity = (last.z - first.z) / dt   // z per s
-        zoomSamples.length = 0
         if (Math.abs(velocity) < MIN_VELOCITY) return
 
-        // Extrapolate the fling: velocity * duration, clamped.
-        const rawDelta = velocity * (MOMENTUM_MS / 1000) * 0.6
-        const clamped  = Math.max(-MAX_MOMENTUM_DELTA, Math.min(MAX_MOMENTUM_DELTA, rawDelta))
-        const targetZoom = map.getZoom() + clamped
+        // Extrapolate the fling. Round to whole zoom levels since
+        // zoomSnap:1 will snap to them anyway — no point paying
+        // for an intermediate animate that immediately snaps.
+        const rawDelta   = velocity * (MOMENTUM_MS / 1000) * 0.55
+        const clamped    = Math.max(-MAX_MOMENTUM_DELTA, Math.min(MAX_MOMENTUM_DELTA, rawDelta))
+        const targetZoom = Math.round(map.getZoom() + clamped)
+        if (targetZoom === map.getZoom()) return
 
-        if (momentumRafId !== null) cancelAnimationFrame(momentumRafId)
-        const startZoom = map.getZoom()
-        const startTime = performance.now()
-        // Ease-out cubic — mimics the "keeps going, then settles"
-        // feel Google Maps uses on iOS/Android.
-        const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
-        const step = () => {
-          const elapsed = performance.now() - startTime
-          const t = Math.min(1, elapsed / MOMENTUM_MS)
-          const z = startZoom + (targetZoom - startZoom) * easeOut(t)
-          map.setZoomAround(map.getCenter(), z, { animate: false })
-          if (t < 1) {
-            momentumRafId = requestAnimationFrame(step)
-          } else {
-            momentumRafId = null
-          }
-        }
-        momentumRafId = requestAnimationFrame(step)
+        // Single Leaflet-native animated setZoom — the tile pane
+        // + markers + labels all animate together on one
+        // compositor pass, no per-frame JS work.
+        map.setZoom(targetZoom, { animate: true, duration: MOMENTUM_MS / 1000, easeLinearity: 0.25 })
       }
-      // Any new touch aborts an in-flight momentum so a fresh
-      // pinch always wins.
-      container.addEventListener('touchstart', () => {
-        if (momentumRafId !== null) { cancelAnimationFrame(momentumRafId); momentumRafId = null }
-      }, { passive: true })
 
       // Google-Maps-style label reveal — labels are bound to markers
       // on-demand based on per-marker mode + current zoom. Previous
