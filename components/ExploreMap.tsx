@@ -16,6 +16,7 @@ if (typeof window !== 'undefined') {
 }
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
+import { makeCategoryIcon, makePillImage } from '@/lib/map-images'
 
 // ── ExploreMap (WebGL, MapLibre GL JS) ──────────────────────────────
 //
@@ -83,6 +84,7 @@ const SRC_HOME        = 'home-location'
 const LAYER_CLUSTERS  = 'clusters'
 const LAYER_CLUSTER_N = 'cluster-count'
 const LAYER_POINTS    = 'unclustered-point'
+const LAYER_ICONS     = 'point-icons'
 const LAYER_LABELS    = 'point-labels'
 const LAYER_USER_DOT  = 'user-dot'
 const LAYER_HOME_DOT  = 'home-dot'
@@ -111,6 +113,11 @@ function locationsToGeoJSON(locations: ExploreLocation[], photoMap: Record<strin
         mode: loc.mapDisplayMode ?? 'dot',
         color: visual.color,
         emoji: visual.emoji,
+        // Stable icon-image id so MapLibre's styleimagemissing
+        // handler can rebuild the right {color, emoji} pin on
+        // demand. Encoded so the id is safe as a MapLibre
+        // image name (which allows arbitrary unicode).
+        iconKey: `cat-${visual.color.slice(1).toLowerCase()}-${visual.emoji}`,
         hasPhoto: !!photoMap[String(loc.id)],
       },
     })
@@ -211,8 +218,9 @@ export default function ExploreMap({
         promoteId: 'id',
       })
 
-      // Cluster bubbles — colored + sized by count. Circles are
-      // pure WebGL — thousands of them render at 60fps.
+      // Cluster bubbles — colored + sized by count. Kept small
+      // (11 → 17 px radius) so wide-zoom views don't look like
+      // giant blobs when there are lots of pins packed in.
       map.addLayer({
         id: LAYER_CLUSTERS,
         type: 'circle',
@@ -227,11 +235,11 @@ export default function ExploreMap({
           ],
           'circle-radius': [
             'step', ['get', 'point_count'],
-            18,  10,
-            22,  50,
-            28,
+            11,  10,
+            14,  50,
+            17,
           ],
-          'circle-stroke-width': 2.5,
+          'circle-stroke-width': 2,
           'circle-stroke-color': 'rgba(255,255,255,0.9)',
         },
       })
@@ -244,7 +252,7 @@ export default function ExploreMap({
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
           'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
-          'text-size': 13,
+          'text-size': 11,
           'text-allow-overlap': true,
           'text-ignore-placement': true,
         },
@@ -253,49 +261,91 @@ export default function ExploreMap({
         },
       })
 
-      // Unclustered individual points. Data-driven radius + color:
-      // active pin (via feature-state) is gold + larger; featured
-      // and portfolio pins are slightly larger + colored per
-      // category; default pins are their category color.
+      // ── Pill background images (icon-text-fit pattern) ──
+      // Registered once at load-time. The label symbol layer
+      // below references them by name and MapLibre stretches
+      // the flat middle of the pill to fit the text at each
+      // zoom level. Corners stay perfectly round.
+      const featuredPill = makePillImage('rgba(255,255,255,0.95)')
+      map.addImage('pill-featured', featuredPill.data, {
+        pixelRatio: featuredPill.pixelRatio,
+        stretchX: featuredPill.stretchX,
+        stretchY: featuredPill.stretchY,
+        content: featuredPill.content,
+      })
+      const portfolioPill = makePillImage('rgba(255,255,255,0.95)', { color: '#c4922a', width: 2 })
+      map.addImage('pill-portfolio', portfolioPill.data, {
+        pixelRatio: portfolioPill.pixelRatio,
+        stretchX: portfolioPill.stretchX,
+        stretchY: portfolioPill.stretchY,
+        content: portfolioPill.content,
+      })
+
+      // Category emoji + colored circle icons are generated on
+      // demand — MapLibre fires `styleimagemissing` for any
+      // icon-image the symbol layer needs but doesn't have.
+      // Cheap: only the visuals actually visible get rasterised.
+      map.on('styleimagemissing', (e) => {
+        const id = e.id
+        const match = /^cat-([0-9a-f]{6})-(.+)$/.exec(id)
+        if (!match || map.hasImage(id)) return
+        const [, hex, emoji] = match
+        const img = makeCategoryIcon('#' + hex, emoji)
+        map.addImage(id, img.data, { pixelRatio: img.pixelRatio })
+      })
+
+      // Unclustered individual points. Small colored circle
+      // that gives a low-density scan at wide zoom — replaced
+      // by the emoji icon layer at zoom >= ZOOM_THRESHOLD_ICONS
+      // via maxzoom, so both layers never render at once.
       map.addLayer({
         id: LAYER_POINTS,
         type: 'circle',
         source: SRC_POINTS,
         filter: ['!', ['has', 'point_count']],
+        maxzoom: ZOOM_THRESHOLD_ICONS,
         paint: {
           'circle-color': [
             'case',
             ['boolean', ['feature-state', 'active'], false], '#c4922a',
-            ['==', ['get', 'mode'], 'portfolio'], '#c4922a',
             ['get', 'color'],
           ],
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            6,  ['case', ['boolean', ['feature-state', 'active'], false], 5,
-                 ['match', ['get', 'mode'], ['featured', 'portfolio'], 5, 3]],
-            13, ['case', ['boolean', ['feature-state', 'active'], false], 10,
-                 ['match', ['get', 'mode'], ['featured', 'portfolio'], 9, 6]],
-            18, ['case', ['boolean', ['feature-state', 'active'], false], 14,
-                 ['match', ['get', 'mode'], ['featured', 'portfolio'], 12, 9]],
+            6,  ['case', ['boolean', ['feature-state', 'active'], false], 5, 3],
+            12, ['case', ['boolean', ['feature-state', 'active'], false], 8, 5],
           ],
-          'circle-stroke-width': [
-            'case',
-            ['boolean', ['feature-state', 'active'], false], 3,
-            ['==', ['get', 'mode'], 'portfolio'], 3,
-            2,
-          ],
-          'circle-stroke-color': [
-            'case',
-            ['==', ['get', 'mode'], 'portfolio'], '#c4922a',
-            '#ffffff',
-          ],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#ffffff',
         },
       })
 
-      // Text labels for `name`, `featured`, and `portfolio` modes.
-      // MapLibre resolves the reveal threshold via a data-driven
-      // minzoom expression, so pins in different modes light up
-      // at their own zoom levels — no JS zoomend rebinding needed.
+      // Category icons — colored circle with an emoji baked
+      // in. Kicks in past the same zoom the labels do so wide
+      // zooms stay clean. Active pin is highlighted by scaling
+      // the icon up 30%.
+      map.addLayer({
+        id: LAYER_ICONS,
+        type: 'symbol',
+        source: SRC_POINTS,
+        filter: ['!', ['has', 'point_count']],
+        minzoom: ZOOM_THRESHOLD_ICONS,
+        layout: {
+          'icon-image': ['get', 'iconKey'],
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            13, ['case', ['boolean', ['feature-state', 'active'], false], 0.65, 0.5],
+            17, ['case', ['boolean', ['feature-state', 'active'], false], 0.85, 0.7],
+          ],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      })
+
+      // Text labels for `name`, `featured`, and `portfolio`
+      // modes. Uses icon-text-fit with a pill background image
+      // so labels get a proper Google-Maps-style rounded pill
+      // background — no fake text-halo pill.
       map.addLayer({
         id: LAYER_LABELS,
         type: 'symbol',
@@ -320,18 +370,27 @@ export default function ExploreMap({
           'text-size': [
             'interpolate', ['linear'], ['zoom'],
             11, 11,
-            15, 13,
+            15, 12,
           ],
           'text-anchor': 'top',
-          'text-offset': [0, 0.9],
+          // Sit above the pin — offset scales with zoom via
+          // constant since pin size doesn't grow linearly.
+          'text-offset': [0, 1.4],
           'text-max-width': 10,
-          'text-optional': true,
+          // Pill background: portfolio pins get the gold-
+          // bordered pill, everything else the plain white.
+          'icon-image': [
+            'case',
+            ['==', ['get', 'mode'], 'portfolio'], 'pill-portfolio',
+            'pill-featured',
+          ],
+          'icon-text-fit': 'both',
+          'icon-text-fit-padding': [4, 10, 4, 10],
+          'icon-allow-overlap': false,
+          'text-optional': false,
         },
         paint: {
           'text-color': '#1a1612',
-          'text-halo-color': 'rgba(255,255,255,0.92)',
-          'text-halo-width': 1.6,
-          'text-halo-blur': 0.4,
         },
         minzoom: ZOOM_THRESHOLD_FEATURED,
       })
@@ -349,18 +408,30 @@ export default function ExploreMap({
         }).catch(() => { /* cluster gone (data changed) — ignore */ })
       })
 
-      map.on('click', LAYER_POINTS, (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+      // Click handler is bound to base + icon + label layers so
+      // a tap on any of the three shapes (dot, category icon,
+      // pill) opens the detail panel for that pin.
+      const onPointClick = (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
         const feat = e.features?.[0]
         if (!feat) return
         const id = feat.properties?.id
         if (id != null) onMarkerClickRef.current(id)
-      })
+      }
+      map.on('click', LAYER_POINTS, onPointClick)
+      map.on('click', LAYER_ICONS,  onPointClick)
+      map.on('click', LAYER_LABELS, onPointClick)
 
       // Cursor feedback so the pins feel interactive.
-      map.on('mouseenter', LAYER_CLUSTERS, () => { map.getCanvas().style.cursor = 'pointer' })
-      map.on('mouseleave', LAYER_CLUSTERS, () => { map.getCanvas().style.cursor = '' })
-      map.on('mouseenter', LAYER_POINTS,   () => { map.getCanvas().style.cursor = 'pointer' })
-      map.on('mouseleave', LAYER_POINTS,   () => { map.getCanvas().style.cursor = '' })
+      const setPointer = () => { map.getCanvas().style.cursor = 'pointer' }
+      const clearPointer = () => { map.getCanvas().style.cursor = '' }
+      map.on('mouseenter', LAYER_CLUSTERS, setPointer)
+      map.on('mouseleave', LAYER_CLUSTERS, clearPointer)
+      map.on('mouseenter', LAYER_POINTS,   setPointer)
+      map.on('mouseleave', LAYER_POINTS,   clearPointer)
+      map.on('mouseenter', LAYER_ICONS,    setPointer)
+      map.on('mouseleave', LAYER_ICONS,    clearPointer)
+      map.on('mouseenter', LAYER_LABELS,   setPointer)
+      map.on('mouseleave', LAYER_LABELS,   clearPointer)
 
       // ── User + home locations (separate sources so they don't
       //     participate in cluster / point layer paint expressions)
