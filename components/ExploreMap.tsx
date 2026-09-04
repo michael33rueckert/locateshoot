@@ -217,53 +217,14 @@ export default function ExploreMap({
         // reposition every frame of zoom. canvas rendering pushes all
         // of them to the GPU as one layer.
         preferCanvas: true,
-        // Whole-level zoom snap — fractional levels (0.25) forced
-        // Leaflet to redraw tiles at intermediate scales and
-        // reproject markers more often, which was hurting mobile.
-        // Sticking with 1 lets the compositor own the in-between
-        // animation with a single transform on the tile pane.
-        zoomSnap: 1,
-        // Half-step +/- buttons still feel finer than default
-        // (which was 1) without paying the fractional-tile cost.
-        zoomDelta: 0.5,
-        // Slower wheel-per-zoom-level = smoother trackpad + mouse
-        // wheel zoom. Default is 60; 120 nearly halves the zoom
-        // speed and reads as smooth on precision trackpads.
-        wheelPxPerZoomLevel: 120,
-        wheelDebounceTime: 40,
-        // Soft bounce when hitting min/max zoom rather than a hard
-        // stop — matches Google Maps' feel.
-        bounceAtZoomLimits: true,
-        // Markers animate their positions along with the zoom
-        // instead of snapping at zoomend.
-        markerZoomAnimation: true,
-        // Inertia (pan-fling) — Leaflet doesn't ship pinch-zoom
-        // inertia, but pan inertia here makes drag gestures feel
-        // continuous with the zoom animation.
-        inertia: true,
-        inertiaDeceleration: 3000,
       }).setView(initial.center, initial.zoom)
       if (homeLocation) initialViewApplied.current = true
 
       // Basemap tiles routed through lib/map-tiles.ts — Stadia
       // Alidade Smooth when NEXT_PUBLIC_STADIA_API_KEY is set,
       // OpenStreetMap standard as a keyless fallback.
-      // updateWhenIdle:true + updateWhenZooming:false — defer
-      // tile fetches / DOM inserts until the map has fully
-      // settled after a zoom/pan. Mid-zoom, Leaflet transforms
-      // the existing tile pane on the compositor (cheap); new
-      // tiles for the destination zoom don't start streaming
-      // until the gesture is done. Big win on mobile CPUs.
-      // keepBuffer:4 keeps a few extra tile rings cached so
-      // panning to an already-seen area doesn't re-fetch.
       const tiles = getTileConfig('light')
-      L.tileLayer(tiles.url, {
-        maxZoom: tiles.maxZoom,
-        attribution: tiles.attribution,
-        updateWhenIdle: true,
-        updateWhenZooming: false,
-        keepBuffer: 4,
-      }).addTo(map)
+      L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom, attribution: tiles.attribution }).addTo(map)
 
       L.control.zoom({ position: 'bottomright' }).addTo(map)
 
@@ -283,21 +244,20 @@ export default function ExploreMap({
       // never on .leaflet-tooltip itself — Leaflet uses that
       // element's `transform` for pin-anchor positioning).
       //
-      // Previously this ran every frame of the zoom animation via
-      // 'zoom' event + rAF, which forced a style recalc on every
-      // visible label per frame — the single biggest source of zoom
-      // lag with ~30 in-view labels. Now the CSS var only updates
-      // on zoomend, and globals.css transitions transform smoothly
-      // via CSS (see .explore-map-label-inner). Result: labels
-      // still animate to their new size, but the browser owns the
-      // interpolation on the compositor thread instead of the main
-      // thread re-computing 30 transforms per frame.
+      // Listens to Leaflet's 'zoom' event so the scale updates every
+      // frame of the zoom animation (smooth grow/shrink), throttled
+      // via requestAnimationFrame so we never write the CSS var more
+      // than once per browser frame. No CSS transition on the inner
+      // span — it would queue up an animation every frame and defeat
+      // the direct-per-frame update.
       const ZOOM_SCALE_MIN = 11
       const ZOOM_SCALE_MAX = 16
       const MIN_SCALE      = 0.55
       const MAX_SCALE      = 1
+      let scaleRafId: number | null = null
       let lastScaleWritten = ''
       const writeLabelScale = () => {
+        scaleRafId = null
         const z = map.getZoom()
         const t = (z - ZOOM_SCALE_MIN) / (ZOOM_SCALE_MAX - ZOOM_SCALE_MIN)
         const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, MIN_SCALE + t * (MAX_SCALE - MIN_SCALE)))
@@ -306,65 +266,13 @@ export default function ExploreMap({
         lastScaleWritten = s
         container.style.setProperty('--label-scale', s)
       }
-      map.on('zoomend', writeLabelScale)
-      writeLabelScale()
-
-      // ── Pinch-zoom momentum ──
-      // Google Maps-style fling: after a fast pinch release the
-      // zoom keeps going briefly in the same direction, then
-      // decelerates. We sample zoom on 'zoom' events during the
-      // pinch, then on touchend fire ONE Leaflet setZoom call
-      // toward the extrapolated target zoom. Leaflet's own
-      // animation owns the interpolation — much cheaper on mobile
-      // than driving setZoom every rAF frame (which was
-      // reprojecting all markers 60x/second).
-      let touchActive = false
-      const touchStart = () => { touchActive = true }
-      const touchEnd   = () => { touchActive = false; scheduleMomentum() }
-      container.addEventListener('touchstart', touchStart, { passive: true })
-      container.addEventListener('touchend',   touchEnd,   { passive: true })
-      container.addEventListener('touchcancel', touchEnd,  { passive: true })
-
-      // Rolling window of {t, zoom} samples from the last ~120ms
-      // of pinch activity — enough resolution to estimate velocity
-      // without over-weighting a single jittery frame.
-      const zoomSamples: { t: number; z: number }[] = []
-      const VELOCITY_WINDOW_MS = 120
-      map.on('zoom', () => {
-        if (!touchActive) return
-        const now = performance.now()
-        zoomSamples.push({ t: now, z: map.getZoom() })
-        while (zoomSamples.length > 0 && now - zoomSamples[0].t > VELOCITY_WINDOW_MS) {
-          zoomSamples.shift()
-        }
-      })
-
-      const MOMENTUM_MS         = 350
-      const MIN_VELOCITY        = 2.5    // zoom levels / second
-      const MAX_MOMENTUM_DELTA  = 1.0    // don't fling farther than 1 zoom level
-      const scheduleMomentum = () => {
-        if (zoomSamples.length < 2) return
-        const first = zoomSamples[0]
-        const last  = zoomSamples[zoomSamples.length - 1]
-        const dt    = (last.t - first.t) / 1000
-        zoomSamples.length = 0
-        if (dt <= 0) return
-        const velocity = (last.z - first.z) / dt   // z per s
-        if (Math.abs(velocity) < MIN_VELOCITY) return
-
-        // Extrapolate the fling. Round to whole zoom levels since
-        // zoomSnap:1 will snap to them anyway — no point paying
-        // for an intermediate animate that immediately snaps.
-        const rawDelta   = velocity * (MOMENTUM_MS / 1000) * 0.55
-        const clamped    = Math.max(-MAX_MOMENTUM_DELTA, Math.min(MAX_MOMENTUM_DELTA, rawDelta))
-        const targetZoom = Math.round(map.getZoom() + clamped)
-        if (targetZoom === map.getZoom()) return
-
-        // Single Leaflet-native animated setZoom — the tile pane
-        // + markers + labels all animate together on one
-        // compositor pass, no per-frame JS work.
-        map.setZoom(targetZoom, { animate: true, duration: MOMENTUM_MS / 1000, easeLinearity: 0.25 })
+      const scheduleScaleUpdate = () => {
+        if (scaleRafId !== null) return
+        scaleRafId = requestAnimationFrame(writeLabelScale)
       }
+      map.on('zoom', scheduleScaleUpdate)
+      map.on('zoomend', scheduleScaleUpdate)
+      writeLabelScale()
 
       // Google-Maps-style label reveal — labels are bound to markers
       // on-demand based on per-marker mode + current zoom. Previous

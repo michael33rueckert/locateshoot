@@ -996,27 +996,6 @@ body {
    pass across the tooltip DOM subtree every frame. */
 .leaflet-tooltip-pane { will-change: transform; }
 
-/* Hide labels + category icon overlays during Leaflet's zoom
-   animation. Leaflet adds .leaflet-zoom-anim on the map root
-   for the duration of the pinch/wheel/setZoom animation, so
-   this CSS toggle happens with zero JS overhead.
-   Why: mid-zoom the browser has to composite the transform on
-   every visible tooltip pill (~30) AND every category icon
-   overlay (~50) per frame, which was the biggest remaining
-   source of jank on mobile CPUs. Hiding them lets the tile
-   pane animate on its own (a single compositor transform) and
-   the labels fade back in after zoom settles — the same
-   pattern Google Maps uses. */
-.leaflet-tooltip-pane,
-.explore-map-cat-icon {
-  transition: opacity 0.16s ease;
-}
-.leaflet-zoom-anim .leaflet-tooltip-pane,
-.leaflet-zoom-anim .explore-map-cat-icon {
-  opacity: 0;
-  transition: none;
-}
-
 /* Featured / portfolio pill — outer .leaflet-tooltip element stays
    transparent + unstyled here because Leaflet uses THAT element's
    `transform` property for pin-anchor positioning. If our CSS wrote
@@ -1044,14 +1023,15 @@ body {
   border-radius: 24px;
   box-shadow: 0 3px 10px rgba(0, 0, 0, .22);
   position: relative;
-  /* The --label-scale CSS var only updates on zoomend now (see
-     writeLabelScale in ExploreMap.tsx). CSS transition owns the
-     interpolation between old and new scale, so the browser
-     compositor animates it smoothly on the GPU without any
-     per-frame JS or style recalc during pinch/wheel zoom. */
+  /* Scale updates every frame during a Leaflet zoom animation
+     (writeLabelScale is rAF-throttled to at most one write per
+     frame). No transition here — it would queue a duplicate
+     animation on top of every per-frame update and produce the
+     opposite of smoothness. will-change flags the element for GPU
+     compositing so the browser doesn't repaint the whole pill on
+     each scale write. */
   transform: scale(var(--label-scale, 1));
   transform-origin: 50% 100%;
-  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
 }
 .explore-map-label-thumb {
