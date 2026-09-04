@@ -217,6 +217,30 @@ export default function ExploreMap({
         // reposition every frame of zoom. canvas rendering pushes all
         // of them to the GPU as one layer.
         preferCanvas: true,
+        // Fractional zoom levels — makes pinch + wheel zoom feel
+        // continuous instead of snapping to whole levels. 0.25 is a
+        // good compromise between smoothness and marker/tile
+        // stability (0 works too but retriggers tile fetches on
+        // every microscopic zoom change).
+        zoomSnap: 0.25,
+        // Half-step +/- buttons match the finer granularity.
+        zoomDelta: 0.5,
+        // Slower wheel-per-zoom-level = smoother trackpad + mouse
+        // wheel zoom. Default is 60; 120 nearly halves the zoom
+        // speed and reads as smooth on precision trackpads.
+        wheelPxPerZoomLevel: 120,
+        wheelDebounceTime: 20,
+        // Soft bounce when hitting min/max zoom rather than a hard
+        // stop — matches Google Maps' feel.
+        bounceAtZoomLimits: true,
+        // Markers animate their positions along with the zoom
+        // instead of snapping at zoomend.
+        markerZoomAnimation: true,
+        // Inertia (pan-fling) — Leaflet doesn't ship pinch-zoom
+        // inertia, but pan inertia here makes drag gestures feel
+        // continuous with the zoom animation.
+        inertia: true,
+        inertiaDeceleration: 3000,
       }).setView(initial.center, initial.zoom)
       if (homeLocation) initialViewApplied.current = true
 
@@ -244,20 +268,21 @@ export default function ExploreMap({
       // never on .leaflet-tooltip itself — Leaflet uses that
       // element's `transform` for pin-anchor positioning).
       //
-      // Listens to Leaflet's 'zoom' event so the scale updates every
-      // frame of the zoom animation (smooth grow/shrink), throttled
-      // via requestAnimationFrame so we never write the CSS var more
-      // than once per browser frame. No CSS transition on the inner
-      // span — it would queue up an animation every frame and defeat
-      // the direct-per-frame update.
+      // Previously this ran every frame of the zoom animation via
+      // 'zoom' event + rAF, which forced a style recalc on every
+      // visible label per frame — the single biggest source of zoom
+      // lag with ~30 in-view labels. Now the CSS var only updates
+      // on zoomend, and globals.css transitions transform smoothly
+      // via CSS (see .explore-map-label-inner). Result: labels
+      // still animate to their new size, but the browser owns the
+      // interpolation on the compositor thread instead of the main
+      // thread re-computing 30 transforms per frame.
       const ZOOM_SCALE_MIN = 11
       const ZOOM_SCALE_MAX = 16
       const MIN_SCALE      = 0.55
       const MAX_SCALE      = 1
-      let scaleRafId: number | null = null
       let lastScaleWritten = ''
       const writeLabelScale = () => {
-        scaleRafId = null
         const z = map.getZoom()
         const t = (z - ZOOM_SCALE_MIN) / (ZOOM_SCALE_MAX - ZOOM_SCALE_MIN)
         const clamped = Math.min(MAX_SCALE, Math.max(MIN_SCALE, MIN_SCALE + t * (MAX_SCALE - MIN_SCALE)))
@@ -266,13 +291,88 @@ export default function ExploreMap({
         lastScaleWritten = s
         container.style.setProperty('--label-scale', s)
       }
-      const scheduleScaleUpdate = () => {
-        if (scaleRafId !== null) return
-        scaleRafId = requestAnimationFrame(writeLabelScale)
-      }
-      map.on('zoom', scheduleScaleUpdate)
-      map.on('zoomend', scheduleScaleUpdate)
+      map.on('zoomend', writeLabelScale)
       writeLabelScale()
+
+      // ── Pinch-zoom momentum ──
+      // Leaflet's built-in touch zoom snaps to a target zoom on
+      // finger release; Google Maps continues zooming briefly in
+      // the direction of the pinch (fling). We approximate that by
+      // sampling the zoom level on 'zoom' events, tracking the
+      // recent velocity in zoom-levels-per-second, and if a pinch
+      // ends with meaningful velocity, calling setZoom() to
+      // continue with an exponential decay. Wheel + button zooms
+      // are excluded — we only kick in when a touch was recently
+      // active on the map container.
+      let touchActive = false
+      const touchStart = () => { touchActive = true }
+      const touchEnd   = () => { touchActive = false; scheduleMomentum() }
+      container.addEventListener('touchstart', touchStart, { passive: true })
+      container.addEventListener('touchend',   touchEnd,   { passive: true })
+      container.addEventListener('touchcancel', touchEnd,  { passive: true })
+
+      // Rolling window of {t, zoom} samples from the last ~120ms
+      // of pinch activity — enough resolution to estimate velocity
+      // without over-weighting a single jittery frame.
+      const zoomSamples: { t: number; z: number }[] = []
+      const VELOCITY_WINDOW_MS = 120
+      map.on('zoom', () => {
+        if (!touchActive) return
+        const now = performance.now()
+        zoomSamples.push({ t: now, z: map.getZoom() })
+        while (zoomSamples.length > 0 && now - zoomSamples[0].t > VELOCITY_WINDOW_MS) {
+          zoomSamples.shift()
+        }
+      })
+
+      // On touchend, compute velocity from the last window of
+      // samples. If it's above the noise floor, kick off an
+      // exponential-decay setZoom over MOMENTUM_MS. All follow-up
+      // zooming is regular Leaflet zoom animation, so labels +
+      // markers + tiles animate along with it.
+      const MOMENTUM_MS         = 320
+      const MIN_VELOCITY        = 1.8    // zoom levels / second
+      const MAX_MOMENTUM_DELTA  = 1.2    // don't fling farther than 1.2 zoom levels
+      let momentumRafId: number | null = null
+      const scheduleMomentum = () => {
+        if (zoomSamples.length < 2) return
+        const first = zoomSamples[0]
+        const last  = zoomSamples[zoomSamples.length - 1]
+        const dt    = (last.t - first.t) / 1000
+        if (dt <= 0) return
+        const velocity = (last.z - first.z) / dt   // z per s
+        zoomSamples.length = 0
+        if (Math.abs(velocity) < MIN_VELOCITY) return
+
+        // Extrapolate the fling: velocity * duration, clamped.
+        const rawDelta = velocity * (MOMENTUM_MS / 1000) * 0.6
+        const clamped  = Math.max(-MAX_MOMENTUM_DELTA, Math.min(MAX_MOMENTUM_DELTA, rawDelta))
+        const targetZoom = map.getZoom() + clamped
+
+        if (momentumRafId !== null) cancelAnimationFrame(momentumRafId)
+        const startZoom = map.getZoom()
+        const startTime = performance.now()
+        // Ease-out cubic — mimics the "keeps going, then settles"
+        // feel Google Maps uses on iOS/Android.
+        const easeOut = (t: number) => 1 - Math.pow(1 - t, 3)
+        const step = () => {
+          const elapsed = performance.now() - startTime
+          const t = Math.min(1, elapsed / MOMENTUM_MS)
+          const z = startZoom + (targetZoom - startZoom) * easeOut(t)
+          map.setZoomAround(map.getCenter(), z, { animate: false })
+          if (t < 1) {
+            momentumRafId = requestAnimationFrame(step)
+          } else {
+            momentumRafId = null
+          }
+        }
+        momentumRafId = requestAnimationFrame(step)
+      }
+      // Any new touch aborts an in-flight momentum so a fresh
+      // pinch always wins.
+      container.addEventListener('touchstart', () => {
+        if (momentumRafId !== null) { cancelAnimationFrame(momentumRafId); momentumRafId = null }
+      }, { passive: true })
 
       // Google-Maps-style label reveal — labels are bound to markers
       // on-demand based on per-marker mode + current zoom. Previous

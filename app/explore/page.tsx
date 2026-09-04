@@ -79,10 +79,14 @@ function ReportModal({ locName, locId, onClose }: { locName:string; locId:any; o
 // Google photos are loaded inside a try/catch wrapper to prevent crashes
 // from taking down the whole panel.
 
-function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete, onAdminManagePhotos, onViewPublicListing, photoRefreshTick }: {
+function DetailPanel({ loc, initialPhotoUrl, portfolioId, isFavorite, onToggleFavorite, onClose, onAddToPortfolio, onSignIn, onOpenLightbox, user, isAdmin, onAdminEdit, onAdminDelete, onAdminManagePhotos, onViewPublicListing, photoRefreshTick }: {
   loc:any; portfolioId:string|null; isFavorite:boolean; onToggleFavorite:(id:any)=>void; onClose:()=>void; onAddToPortfolio:(id:any)=>void; onSignIn:()=>void; onOpenLightbox:(src:string|string[], start?:number)=>void; user:any
   isAdmin:boolean; onAdminEdit:(locId:string)=>void; onAdminDelete:(locId:string)=>Promise<void>
   onAdminManagePhotos:(locId:string, locName:string)=>void
+  /** First-photo URL from the sidebar's cached photoMap — shown
+   *  immediately on open so the panel isn't a blank spinner while
+   *  the real carousel (user uploads + Google Places) fetches. */
+  initialPhotoUrl: string | null
   // When the current pin is a portfolio pin that maps to a public
   // location (either linked via source_location_id or a manual pin
   // that near-matches a public row), the parent passes a handler that
@@ -309,9 +313,24 @@ function DetailPanel({ loc, portfolioId, isFavorite, onToggleFavorite, onClose, 
                 ))}
               </div>
             )
-            :googleLoading
-              ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
-              :<div className={loc.bg} style={{position:'absolute',inset:0}}/>}
+            /* Instant placeholder — sidebar already has the thumb
+               loaded in photoMap, so pass it through and show it
+               the moment the panel opens instead of waiting for
+               the location_photos query + Google Places fetch.
+               A tiny spinner overlays in the corner so the user
+               knows more photos are coming. */
+            :initialPhotoUrl
+              ?<>
+                <img
+                  src={initialPhotoUrl}
+                  alt={loc.name}
+                  style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
+                />
+                {googleLoading&&<div style={{position:'absolute',top:14,left:14,width:20,height:20,border:'2px solid rgba(255,255,255,.35)',borderTop:'2px solid rgba(255,255,255,.9)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:2}}/>}
+              </>
+              :googleLoading
+                ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
+                :<div className={loc.bg} style={{position:'absolute',inset:0}}/>}
           <div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>
           {hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
         </div>
@@ -1713,6 +1732,13 @@ export default function ExplorePage() {
       {detailLoc&&(
         <DetailPanel
           loc={detailLoc}
+          /* First-photo URL from the shared photoMap that already
+             powers the sidebar + map-pill thumbs. The DetailPanel
+             uses this as an instant placeholder so users see
+             something IMMEDIATELY on open (200–2000ms of Google
+             Places call in the background); once the real carousel
+             loads it replaces this. */
+          initialPhotoUrl={photoMap[detailLoc.id] ?? null}
           /* Portfolio pin (both manual + linked) carries the
              portfolio_location_id directly — the map row was built
              from portfolio_locations so we already have it. Public

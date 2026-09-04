@@ -1023,15 +1023,14 @@ body {
   border-radius: 24px;
   box-shadow: 0 3px 10px rgba(0, 0, 0, .22);
   position: relative;
-  /* Scale updates every frame during a Leaflet zoom animation
-     (writeLabelScale is rAF-throttled to at most one write per
-     frame). No transition here — it would queue a duplicate
-     animation on top of every per-frame update and produce the
-     opposite of smoothness. will-change flags the element for GPU
-     compositing so the browser doesn't repaint the whole pill on
-     each scale write. */
+  /* The --label-scale CSS var only updates on zoomend now (see
+     writeLabelScale in ExploreMap.tsx). CSS transition owns the
+     interpolation between old and new scale, so the browser
+     compositor animates it smoothly on the GPU without any
+     per-frame JS or style recalc during pinch/wheel zoom. */
   transform: scale(var(--label-scale, 1));
   transform-origin: 50% 100%;
+  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
 }
 .explore-map-label-thumb {
