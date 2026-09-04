@@ -337,7 +337,10 @@ function DetailPanel({ loc, initialPhotoUrl, portfolioId, isFavorite, onToggleFa
                 ?<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}><div className={loc.bg} style={{position:'absolute',inset:0,opacity:.4}}/><div style={{width:24,height:24,border:'2px solid rgba(255,255,255,.2)',borderTop:'2px solid rgba(255,255,255,.7)',borderRadius:'50%',animation:'spin .7s linear infinite',zIndex:1}}/></div>
                 :<div className={loc.bg} style={{position:'absolute',inset:0}}/>}
           <div style={{position:'absolute',top:10,left:10,padding:'4px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:loc.access==='public'?'rgba(74,103,65,.85)':'rgba(181,75,42,.85)',color:loc.access==='public'?'#c8e8c4':'#ffd0c0',backdropFilter:'blur(4px)'}}>{loc.access==='public'?'● Public':'🔒 Private'}</div>
-          {hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',top:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.8)'}}>{activePhoto+1} / {googlePhotos.length}</div>}
+          {/* Photo-count chip. Moved from top-right to
+              bottom-right so it doesn't sit behind the ✕
+              close button in the sheet's top-right corner. */}
+          {hasGoogle&&googlePhotos.length>1&&<div style={{position:'absolute',bottom:10,right:10,background:'rgba(26,22,18,.7)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'rgba(255,255,255,.85)',pointerEvents:'none'}}>{activePhoto+1} / {googlePhotos.length}</div>}
         </div>
 
         {hasGoogle&&googlePhotos.length>1&&<div style={{display:'flex',gap:4,padding:'8px 1.25rem',overflowX:'auto',borderBottom:'1px solid var(--cream-dark)'}}>
@@ -1697,10 +1700,14 @@ export default function ExplorePage() {
                 }}
                 style={{
                   position: 'absolute',
-                  top: mobileMapVisible ? 68 : 12,
+                  // Sit BELOW the floating topbar overlay (which
+                  // is at top:16 with ~44px search pill + wrap
+                  // room). Was top:12, which put this button
+                  // BEHIND the topbar's stacking context.
+                  top: mobileMapVisible ? 140 : 80,
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  zIndex: 500,
+                  zIndex: 25,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
@@ -1826,24 +1833,29 @@ export default function ExplorePage() {
           onCreate={adminCreateLocation}
         />
       )}
-      {/* Admin-only floating "add" button. Same z-index tier as the
-          toast so it clears the DetailPanel + filters, but sits
-          bottom-left instead of bottom-right so it doesn't compete
-          with the toast, "View Map" pill, or scroll-back buttons. */}
+      {/* Admin-only floating "add" button. Moved from
+          bottom-left to top-right — bottom-left was colliding
+          with the click-anchor banner + the mobile-toggle pill,
+          and top-right sits cleanly above the map on the same
+          row as the topbar overlay without covering any other
+          UI. z-index 25 puts it above the topbar overlay (20)
+          so it stays visible even when the sidebar is open. */}
       {isAdmin && (
         <button
           onClick={() => setAdminAddOpen(true)}
           title="Add a new location (admin)"
           style={{
-            position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0) + 1.5rem)', left: '1.5rem',
-            width: 52, height: 52, borderRadius: 26,
+            position: 'fixed',
+            top: 'calc(env(safe-area-inset-top, 0) + 76px)',
+            right: 'calc(env(safe-area-inset-right, 0) + 16px)',
+            width: 44, height: 44, borderRadius: 22,
             background: 'var(--gold)', color: 'var(--ink)',
             border: '1px solid rgba(26,22,18,.15)',
-            boxShadow: '0 8px 24px rgba(0,0,0,.25)',
-            fontSize: 24, fontWeight: 700,
+            boxShadow: '0 4px 14px rgba(0,0,0,.22)',
+            fontSize: 22, fontWeight: 700, lineHeight: 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer', fontFamily: 'inherit',
-            zIndex: 9998,
+            zIndex: 25,
           }}
         >+</button>
       )}
@@ -1865,6 +1877,13 @@ export default function ExplorePage() {
         .explore-map-col .leaflet-container {
           height: 100% !important;
           min-height: 300px;
+        }
+        /* Push the +/- zoom control up so it clears the
+           Help + Feedback launchers pinned to the bottom-
+           right of the viewport (FeedbackButton at bottom:14,
+           HelpChatLauncher at bottom:60, each ~40px tall). */
+        .explore-map-col .maplibregl-ctrl-bottom-right {
+          bottom: calc(env(safe-area-inset-bottom, 0) + 110px) !important;
         }
         /* Mobile-only back-to-Dashboard chip next to hamburger */
         .explore-back-dash { display: none; }

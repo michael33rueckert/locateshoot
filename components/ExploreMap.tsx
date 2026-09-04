@@ -174,7 +174,18 @@ export default function ExploreMap({
     })
     mapRef.current = map
 
-    // Zoom control (bottom-right, matches the Leaflet placement).
+    // Faster wheel / trackpad zoom. Defaults are 1/450 and
+    // 1/100 which feel sluggish — bumped 3-4× so a normal
+    // scroll gesture covers a few zoom levels quickly. Pinch
+    // zoom on touch is controlled by finger movement so it
+    // doesn't need explicit tuning here.
+    map.scrollZoom.setWheelZoomRate(1 / 120)
+    map.scrollZoom.setZoomRate(1 / 40)
+
+    // Zoom control (bottom-right, pushed up via CSS so it
+    // clears the Help + Feedback launchers). NavigationControl
+    // stays here because Google Maps also has +/- at the
+    // bottom-right on desktop.
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
 
     // Catch style + tile errors so silent init failures show up in
@@ -404,7 +415,7 @@ export default function ExploreMap({
         const source = map.getSource(SRC_POINTS) as GeoJSONSource
         source.getClusterExpansionZoom(clusterId).then((zoom: number) => {
           const geom = feat.geometry as GeoJSON.Point
-          map.easeTo({ center: geom.coordinates as [number, number], zoom })
+          map.easeTo({ center: geom.coordinates as [number, number], zoom, duration: 350 })
         }).catch(() => { /* cluster gone (data changed) — ignore */ })
       })
 
@@ -550,7 +561,7 @@ export default function ExploreMap({
     if (!map || !isReadyRef.current) return
     if (homeAppliedRef.current) return
     if (!homeLocation || !isFiniteLatLng(homeLocation.lat, homeLocation.lng)) return
-    map.easeTo({ center: [homeLocation.lng, homeLocation.lat], zoom: HOME_CITY_ZOOM, duration: 600 })
+    map.easeTo({ center: [homeLocation.lng, homeLocation.lat], zoom: HOME_CITY_ZOOM, duration: 400 })
     homeAppliedRef.current = true
   }, [homeLocation])
 
@@ -561,7 +572,7 @@ export default function ExploreMap({
     const map = mapRef.current
     if (!map || !isReadyRef.current) return
     if (!userLocation || !isFiniteLatLng(userLocation.lat, userLocation.lng)) return
-    map.easeTo({ center: [userLocation.lng, userLocation.lat], zoom: 13, duration: 700 })
+    map.easeTo({ center: [userLocation.lng, userLocation.lat], zoom: 13, duration: 450 })
   }, [userLocation])
 
   // Fly to the active marker on activeId change (sidebar card
@@ -575,7 +586,7 @@ export default function ExploreMap({
     if (activeId == null) return
     const loc = locations.find(l => l.id === activeId)
     if (!loc || !isFiniteLatLng(loc.lat, loc.lng)) return
-    map.easeTo({ center: [loc.lng, loc.lat], zoom: Math.max(map.getZoom(), 14), duration: 600 })
+    map.easeTo({ center: [loc.lng, loc.lat], zoom: Math.max(map.getZoom(), 14), duration: 400 })
   }, [activeId, locations])
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
