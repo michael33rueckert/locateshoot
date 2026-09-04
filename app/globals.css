@@ -996,6 +996,27 @@ body {
    pass across the tooltip DOM subtree every frame. */
 .leaflet-tooltip-pane { will-change: transform; }
 
+/* Hide labels + category icon overlays during Leaflet's zoom
+   animation. Leaflet adds .leaflet-zoom-anim on the map root
+   for the duration of the pinch/wheel/setZoom animation, so
+   this CSS toggle happens with zero JS overhead.
+   Why: mid-zoom the browser has to composite the transform on
+   every visible tooltip pill (~30) AND every category icon
+   overlay (~50) per frame, which was the biggest remaining
+   source of jank on mobile CPUs. Hiding them lets the tile
+   pane animate on its own (a single compositor transform) and
+   the labels fade back in after zoom settles — the same
+   pattern Google Maps uses. */
+.leaflet-tooltip-pane,
+.explore-map-cat-icon {
+  transition: opacity 0.16s ease;
+}
+.leaflet-zoom-anim .leaflet-tooltip-pane,
+.leaflet-zoom-anim .explore-map-cat-icon {
+  opacity: 0;
+  transition: none;
+}
+
 /* Featured / portfolio pill — outer .leaflet-tooltip element stays
    transparent + unstyled here because Leaflet uses THAT element's
    `transform` property for pin-anchor positioning. If our CSS wrote

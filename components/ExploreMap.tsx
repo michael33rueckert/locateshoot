@@ -248,8 +248,22 @@ export default function ExploreMap({
       // Basemap tiles routed through lib/map-tiles.ts — Stadia
       // Alidade Smooth when NEXT_PUBLIC_STADIA_API_KEY is set,
       // OpenStreetMap standard as a keyless fallback.
+      // updateWhenIdle:true + updateWhenZooming:false — defer
+      // tile fetches / DOM inserts until the map has fully
+      // settled after a zoom/pan. Mid-zoom, Leaflet transforms
+      // the existing tile pane on the compositor (cheap); new
+      // tiles for the destination zoom don't start streaming
+      // until the gesture is done. Big win on mobile CPUs.
+      // keepBuffer:4 keeps a few extra tile rings cached so
+      // panning to an already-seen area doesn't re-fetch.
       const tiles = getTileConfig('light')
-      L.tileLayer(tiles.url, { maxZoom: tiles.maxZoom, attribution: tiles.attribution }).addTo(map)
+      L.tileLayer(tiles.url, {
+        maxZoom: tiles.maxZoom,
+        attribution: tiles.attribution,
+        updateWhenIdle: true,
+        updateWhenZooming: false,
+        keepBuffer: 4,
+      }).addTo(map)
 
       L.control.zoom({ position: 'bottomright' }).addTo(map)
 
