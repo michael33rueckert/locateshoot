@@ -2,6 +2,10 @@ import type { Metadata } from 'next'
 import { Playfair_Display, DM_Sans } from 'next/font/google'
 import './globals.css'
 import 'leaflet/dist/leaflet.css'
+// MapLibre core CSS — sizes the WebGL canvas, positions controls,
+// styles popups. Without it the map container collapses to 0×0
+// and the map renders blank.
+import 'maplibre-gl/dist/maplibre-gl.css'
 import MfaGate from '@/components/MfaGate'
 import InstallPrompt from '@/components/InstallPrompt'
 import FeedbackButton from '@/components/FeedbackButton'

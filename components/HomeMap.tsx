@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import * as maplibregl from 'maplibre-gl'
-import type { Map as MLMap } from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import { Map as MLMap, NavigationControl, Popup } from 'maplibre-gl'
 import { getVectorStyle } from '@/lib/map-tiles'
 
 // ── HomeMap (WebGL, MapLibre GL JS) ─────────────────────────────────
@@ -38,7 +36,7 @@ export default function HomeMap({ variant, flyTo }: HomeMapProps) {
     if (!containerRef.current || mapRef.current) return
     const isHero = variant === 'hero'
 
-    const map = new maplibregl.Map({
+    const map = new MLMap({
       container: containerRef.current,
       style: getVectorStyle(isHero ? 'dark' : 'light'),
       center: [-95.5, 39.5],
@@ -51,7 +49,7 @@ export default function HomeMap({ variant, flyTo }: HomeMapProps) {
     })
     mapRef.current = map
     if (!isHero) {
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+      map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
     }
 
     map.on('load', () => {
@@ -95,7 +93,7 @@ export default function HomeMap({ variant, flyTo }: HomeMapProps) {
           if (!feat) return
           const { name, rating, featured } = feat.properties
           const label = featured ? '⭐ Featured Venue' : '● Public Location'
-          new maplibregl.Popup({ offset: 12 })
+          new Popup({ offset: 12 })
             .setLngLat((feat.geometry as GeoJSON.Point).coordinates as [number, number])
             .setHTML(`
               <strong>${name}</strong><br>

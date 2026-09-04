@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import * as maplibregl from 'maplibre-gl'
-import type { Map as MLMap, GeoJSONSource, MapMouseEvent, MapGeoJSONFeature } from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import { Map as MLMap, NavigationControl, LngLatBounds } from 'maplibre-gl'
+import type { GeoJSONSource, MapMouseEvent, MapGeoJSONFeature } from 'maplibre-gl'
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
 
@@ -104,7 +103,7 @@ export default function ClientMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
-    const map = new maplibregl.Map({
+    const map = new MLMap({
       container: containerRef.current,
       // Dark style matches the guide page's dark chrome. Stadia
       // Alidade Smooth Dark under the hood.
@@ -119,7 +118,7 @@ export default function ClientMap({
       attributionControl: { compact: true },
     })
     mapRef.current = map
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+    map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
 
     map.on('load', () => {
       isReadyRef.current = true
@@ -310,7 +309,7 @@ export default function ClientMap({
     requestAnimationFrame(() => {
       if (didInitialFitRef.current) return
       map.resize()
-      const bounds = new maplibregl.LngLatBounds()
+      const bounds = new LngLatBounds()
       valid.forEach(l => bounds.extend([l.lng, l.lat]))
       map.fitBounds(bounds, { padding: 48, maxZoom: 15, duration: 0 })
       didInitialFitRef.current = true

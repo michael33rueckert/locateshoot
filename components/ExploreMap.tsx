@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import * as maplibregl from 'maplibre-gl'
-import type { Map as MLMap, GeoJSONSource, MapMouseEvent, MapGeoJSONFeature } from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import { Map as MLMap, NavigationControl } from 'maplibre-gl'
+import type { GeoJSONSource, MapMouseEvent, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl'
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
 
@@ -142,7 +141,7 @@ export default function ExploreMap({
       : USA_VIEW
     if (homeLocation) homeAppliedRef.current = true
 
-    const map = new maplibregl.Map({
+    const map = new MLMap({
       container: containerRef.current,
       style: getVectorStyle('light'),
       center: initial.center,
@@ -165,7 +164,7 @@ export default function ExploreMap({
     mapRef.current = map
 
     // Zoom control (bottom-right, matches the Leaflet placement).
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
+    map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
 
     // moveend is Leaflet-nostalgic naming — MapLibre calls the
     // same event 'moveend'. Fires once per gesture end (debounced
