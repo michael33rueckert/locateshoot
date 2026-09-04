@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
 }
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
-import { makeCategoryIcon, makePillImage, makeLabelBadgeImage } from '@/lib/map-images'
+import { makeCategoryIcon, makePillImage } from '@/lib/map-images'
 
 // ── ExploreMap (WebGL, MapLibre GL JS) ──────────────────────────────
 //
@@ -88,7 +88,6 @@ const SRC_HOME        = 'home-location'
 const LAYER_POINTS        = 'unclustered-point'
 const LAYER_ICONS         = 'point-icons'
 const LAYER_LABELS        = 'point-labels'
-const LAYER_LABEL_BADGES  = 'point-label-badges'
 const LAYER_USER_DOT      = 'user-dot'
 const LAYER_HOME_DOT      = 'home-dot'
 
@@ -107,11 +106,6 @@ function locationsToGeoJSON(locations: ExploreLocation[], photoMap: Record<strin
     const visual = getCategoryVisual(loc.category, loc.access, loc.tags)
     const mode = loc.mapDisplayMode ?? 'dot'
     const thumb = photoMap[String(loc.id)]
-    // Featured / portfolio pins that HAVE a loaded thumbnail
-    // get the full pill+thumb composite label via labelImageId.
-    // Pins without a thumb (or in name/dot mode) fall back to
-    // the text-only pill layer below.
-    const wantsBadge = (mode === 'featured' || mode === 'portfolio') && !!thumb
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [loc.lng, loc.lat] },
@@ -131,10 +125,6 @@ function locationsToGeoJSON(locations: ExploreLocation[], photoMap: Record<strin
         // Numeric codepoints are stable across both.
         iconKey: `cat-${visual.color.slice(1).toLowerCase()}-${visual.emoji.codePointAt(0) ?? 0}`,
         hasPhoto: !!thumb,
-        // Only set when a thumb is available — the label-badge
-        // symbol layer filters on this. Empty string when
-        // missing so [has, labelImageId] can distinguish.
-        ...(wantsBadge ? { labelImageId: `label-${loc.id}` } : {}),
       },
     })
   }
@@ -352,11 +342,17 @@ export default function ExploreMap({
       // that gives a low-density scan at wide zoom — replaced
       // by the emoji icon layer at zoom >= ZOOM_THRESHOLD_ICONS
       // via maxzoom, so both layers never render at once.
+      // Colored dots. Rendered at ALL zoom levels — the icon
+      // layer above (zoom >= ICON threshold) simply covers them
+      // because the icon bitmap is larger than the dot radius.
+      // Kept simple: constant zoom-based interpolate (no case
+      // inside the output) — mixing feature-state into a zoom
+      // interpolate output was producing empty renders on some
+      // MapLibre versions.
       map.addLayer({
         id: LAYER_POINTS,
         type: 'circle',
         source: SRC_POINTS,
-        maxzoom: ZOOM_THRESHOLD_ICONS,
         paint: {
           'circle-color': [
             'case',
@@ -365,20 +361,18 @@ export default function ExploreMap({
           ],
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            6,  ['case', ['boolean', ['feature-state', 'active'], false], 5, 3],
-            12, ['case', ['boolean', ['feature-state', 'active'], false], 8, 5],
+            4,  3,
+            8,  4,
+            12, 5,
           ],
           'circle-stroke-width': 1.5,
           'circle-stroke-color': '#ffffff',
         },
       })
 
-      // Category icons — colored circle with an emoji baked
-      // in. Kicks in past the same zoom the labels do so wide
-      // zooms stay clean. icon-size 1.0 = the natural 32px
-      // rasterised in lib/map-images.ts (matches the previous
-      // Leaflet .explore-map-cat-icon-inner 30px size).
-      // Active pin scales up ~30%.
+      // Category icons — colored circle with an emoji baked in.
+      // Simple zoom-based size ramp (no feature-state inside
+      // interpolate output for the same reason as above).
       map.addLayer({
         id: LAYER_ICONS,
         type: 'symbol',
@@ -386,66 +380,32 @@ export default function ExploreMap({
         minzoom: ZOOM_THRESHOLD_ICONS,
         layout: {
           'icon-image': ['get', 'iconKey'],
-          // Ramp starts smaller (0.55 at zoom 10) so many icons
-          // in one view read as pins, not a wall of circles.
-          // Grows to natural 1.0 by zoom 14 and beyond.
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            10, ['case', ['boolean', ['feature-state', 'active'], false], 0.75, 0.55],
-            14, ['case', ['boolean', ['feature-state', 'active'], false], 1.2, 0.95],
-            17, ['case', ['boolean', ['feature-state', 'active'], false], 1.4, 1.1],
+            10, 0.55,
+            14, 0.95,
+            17, 1.1,
           ],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
         },
       })
 
-      // Pre-composited badge labels for featured / portfolio
-      // pins that have a loaded thumbnail. The image is baked
-      // (pill + circular thumb + name + optional subtitle) via
-      // makeLabelBadgeImage so what you see here is exactly
-      // what the Leaflet .explore-map-label-featured /
-      // .explore-map-label-portfolio elements used to look
-      // like. Loaded async by ensureBadgeImages() below.
-      map.addLayer({
-        id: LAYER_LABEL_BADGES,
-        type: 'symbol',
-        source: SRC_POINTS,
-        filter: ['has', 'labelImageId'],
-        layout: {
-          'icon-image': ['get', 'labelImageId'],
-          // Start small at ZOOM_THRESHOLD_FEATURED (9) so
-          // badges surface early without eating the whole
-          // viewport. Grow toward natural size by zoom 15.
-          'icon-size': [
-            'interpolate', ['linear'], ['zoom'],
-            9,  0.42,
-            12, 0.7,
-            15, 0.9,
-          ],
-          'icon-anchor': 'bottom',
-          'icon-offset': [0, -8],
-          'icon-allow-overlap': false,
-          'icon-optional': true,   // don't hide pin if image still loading
-        },
-        minzoom: ZOOM_THRESHOLD_FEATURED,
-      })
-
-      // Text labels for `name` mode and for featured / portfolio
-      // pins that DON'T have a thumbnail loaded — falls back to
-      // the plain pill + text via icon-text-fit.
+      // Text labels for `name`, `featured`, and `portfolio`
+      // modes. Uniform pill background per mode — portfolio
+      // pins get the gold-bordered pill + "In your portfolio"
+      // subtitle; featured and name pins get the plain white
+      // pill + name. No async-loaded per-pin thumbnails so
+      // every portfolio pin looks the same.
       map.addLayer({
         id: LAYER_LABELS,
         type: 'symbol',
         source: SRC_POINTS,
         filter: [
-          'all',
-          ['!', ['has', 'labelImageId']],
-          ['match',
+          'match',
             ['get', 'mode'],
             ['name', 'featured', 'portfolio'], true,
             false,
-          ],
         ],
         layout: {
           'text-field': [
@@ -488,10 +448,9 @@ export default function ExploreMap({
         const id = feat.properties?.id
         if (id != null) onMarkerClickRef.current(id)
       }
-      map.on('click', LAYER_POINTS,       onPointClick)
-      map.on('click', LAYER_ICONS,        onPointClick)
-      map.on('click', LAYER_LABELS,       onPointClick)
-      map.on('click', LAYER_LABEL_BADGES, onPointClick)
+      map.on('click', LAYER_POINTS, onPointClick)
+      map.on('click', LAYER_ICONS,  onPointClick)
+      map.on('click', LAYER_LABELS, onPointClick)
 
       // Cursor feedback so the pins feel interactive.
       const setPointer = () => { map.getCanvas().style.cursor = 'pointer' }
@@ -502,9 +461,6 @@ export default function ExploreMap({
       map.on('mouseleave', LAYER_ICONS,    clearPointer)
       map.on('mouseenter', LAYER_LABELS,       setPointer)
       map.on('mouseleave', LAYER_LABELS,       clearPointer)
-      map.on('mouseenter', LAYER_LABEL_BADGES, setPointer)
-      map.on('mouseleave', LAYER_LABEL_BADGES, clearPointer)
-
       // ── User + home locations (separate sources so they don't
       //     participate in cluster / point layer paint expressions)
       map.addSource(SRC_USER, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
@@ -594,44 +550,6 @@ export default function ExploreMap({
   useEffect(() => { locationsRef.current    = locations;    (mapRef.current as any)?.__pushLocations?.() }, [locations, photoMap])
   useEffect(() => { userLocationRef.current = userLocation; (mapRef.current as any)?.__pushUser?.() },      [userLocation])
 
-  // ── Async badge-image loader ─────────────────────────────────
-  // For each featured / portfolio pin that has a photoMap entry,
-  // load the thumb → composite pill+thumb+text canvas → register
-  // as a MapLibre image. Once registered, the LAYER_LABEL_BADGES
-  // symbol layer picks it up on the next redraw. Dedup keyed by
-  // pin id so we never re-load or re-generate.
-  const loadedBadgesRef = useRef<Set<string>>(new Set())
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !isReadyRef.current) return
-    const pm = photoMap ?? {}
-    let cancelled = false
-    ;(async () => {
-      for (const loc of locations) {
-        const mode = loc.mapDisplayMode ?? 'dot'
-        if (mode !== 'featured' && mode !== 'portfolio') continue
-        const thumb = pm[String(loc.id)]
-        if (!thumb) continue
-        const imageId = `label-${loc.id}`
-        if (loadedBadgesRef.current.has(imageId)) continue
-        if (map.hasImage(imageId)) { loadedBadgesRef.current.add(imageId); continue }
-        loadedBadgesRef.current.add(imageId)
-        try {
-          const badge = await makeLabelBadgeImage({ thumbUrl: thumb, name: loc.name, variant: mode })
-          if (cancelled) return
-          if (!map.hasImage(imageId)) {
-            map.addImage(imageId, badge.data, { pixelRatio: badge.pixelRatio })
-          }
-        } catch {
-          // Thumb failed to load (CORS, 404, etc.) — leave the
-          // dedup flag set so we don't spin trying again. The
-          // pin falls back to the text-based pill via the
-          // LAYER_LABELS filter (!has labelImageId).
-        }
-      }
-    })()
-    return () => { cancelled = true }
-  }, [locations, photoMap])
   useEffect(() => { homeLocationRef.current = homeLocation; (mapRef.current as any)?.__pushHome?.() },      [homeLocation])
 
   // ── Active marker highlight via feature-state ─────────────────
