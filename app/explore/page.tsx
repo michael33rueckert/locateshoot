@@ -1526,6 +1526,12 @@ export default function ExplorePage() {
             {accessFilter!=='All'&&<span onClick={()=>setAccessFilter('All')} className="explore-chip explore-chip-active">{accessFilter} ✕</span>}
             {selectedTags.map(t=><span key={t} onClick={()=>toggleTag(t)} className="explore-chip explore-chip-active">{t} ✕</span>)}
             {activeFilterCount>0&&<button onClick={clearAllFilters} style={{fontSize:11,color:'var(--rust)',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:'0 8px',fontWeight:500}}>Clear all</button>}
+            {/* Admin-only add-location chip — lives at the end of
+                the scrollable chip row so it moves with the other
+                pills instead of floating over the map corner. */}
+            {isAdmin&&<button onClick={()=>setAdminAddOpen(true)} title="Add a new location (admin)" className="explore-chip" style={{background:'var(--gold)',color:'var(--ink)',fontWeight:600,border:'none'}}>
+              <span style={{fontSize:15,marginRight:4,lineHeight:1}}>＋</span>Add location
+            </button>}
           </div>
          </div>
 
@@ -1833,32 +1839,10 @@ export default function ExplorePage() {
           onCreate={adminCreateLocation}
         />
       )}
-      {/* Admin-only floating "add" button. Moved from
-          bottom-left to top-right — bottom-left was colliding
-          with the click-anchor banner + the mobile-toggle pill,
-          and top-right sits cleanly above the map on the same
-          row as the topbar overlay without covering any other
-          UI. z-index 25 puts it above the topbar overlay (20)
-          so it stays visible even when the sidebar is open. */}
-      {isAdmin && (
-        <button
-          onClick={() => setAdminAddOpen(true)}
-          title="Add a new location (admin)"
-          style={{
-            position: 'fixed',
-            top: 'calc(env(safe-area-inset-top, 0) + 76px)',
-            right: 'calc(env(safe-area-inset-right, 0) + 16px)',
-            width: 44, height: 44, borderRadius: 22,
-            background: 'var(--gold)', color: 'var(--ink)',
-            border: '1px solid rgba(26,22,18,.15)',
-            boxShadow: '0 4px 14px rgba(0,0,0,.22)',
-            fontSize: 22, fontWeight: 700, lineHeight: 1,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', fontFamily: 'inherit',
-            zIndex: 25,
-          }}
-        >+</button>
-      )}
+      {/* Admin add-location button now lives inline in the
+          topbar chip row (see .explore-chip-row above) so it
+          scrolls with the other pills and doesn't cover the
+          bottom-left corner. */}
       {authOpen&&<AuthModal initialMode={authOpen} onClose={()=>setAuthOpen(null)}/>}
       <ImageLightbox src={lightboxSrc} startIndex={lightboxStart} onClose={()=>setLightboxSrc(null)}/>
 

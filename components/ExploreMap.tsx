@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
 }
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
-import { makeCategoryIcon, makePillImage } from '@/lib/map-images'
+import { makeCategoryIcon, makePillImage, makeLabelBadgeImage } from '@/lib/map-images'
 
 // ── ExploreMap (WebGL, MapLibre GL JS) ──────────────────────────────
 //
@@ -81,13 +81,14 @@ const ZOOM_THRESHOLD_ICONS    = 13
 const SRC_POINTS      = 'locations'
 const SRC_USER        = 'user-location'
 const SRC_HOME        = 'home-location'
-const LAYER_CLUSTERS  = 'clusters'
-const LAYER_CLUSTER_N = 'cluster-count'
-const LAYER_POINTS    = 'unclustered-point'
-const LAYER_ICONS     = 'point-icons'
-const LAYER_LABELS    = 'point-labels'
-const LAYER_USER_DOT  = 'user-dot'
-const LAYER_HOME_DOT  = 'home-dot'
+const LAYER_CLUSTERS      = 'clusters'
+const LAYER_CLUSTER_N     = 'cluster-count'
+const LAYER_POINTS        = 'unclustered-point'
+const LAYER_ICONS         = 'point-icons'
+const LAYER_LABELS        = 'point-labels'
+const LAYER_LABEL_BADGES  = 'point-label-badges'
+const LAYER_USER_DOT      = 'user-dot'
+const LAYER_HOME_DOT      = 'home-dot'
 
 function isFiniteLatLng(lat: any, lng: any): boolean {
   return Number.isFinite(lat) && Number.isFinite(lng)
@@ -102,6 +103,13 @@ function locationsToGeoJSON(locations: ExploreLocation[], photoMap: Record<strin
   for (const loc of locations) {
     if (!isFiniteLatLng(loc.lat, loc.lng)) continue
     const visual = getCategoryVisual(loc.category, loc.access, loc.tags)
+    const mode = loc.mapDisplayMode ?? 'dot'
+    const thumb = photoMap[String(loc.id)]
+    // Featured / portfolio pins that HAVE a loaded thumbnail
+    // get the full pill+thumb composite label via labelImageId.
+    // Pins without a thumb (or in name/dot mode) fall back to
+    // the text-only pill layer below.
+    const wantsBadge = (mode === 'featured' || mode === 'portfolio') && !!thumb
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [loc.lng, loc.lat] },
@@ -110,15 +118,15 @@ function locationsToGeoJSON(locations: ExploreLocation[], photoMap: Record<strin
         name: loc.name,
         city: loc.city,
         access: loc.access,
-        mode: loc.mapDisplayMode ?? 'dot',
+        mode,
         color: visual.color,
         emoji: visual.emoji,
-        // Stable icon-image id so MapLibre's styleimagemissing
-        // handler can rebuild the right {color, emoji} pin on
-        // demand. Encoded so the id is safe as a MapLibre
-        // image name (which allows arbitrary unicode).
         iconKey: `cat-${visual.color.slice(1).toLowerCase()}-${visual.emoji}`,
-        hasPhoto: !!photoMap[String(loc.id)],
+        hasPhoto: !!thumb,
+        // Only set when a thumb is available — the label-badge
+        // symbol layer filters on this. Empty string when
+        // missing so [has, labelImageId] can distinguish.
+        ...(wantsBadge ? { labelImageId: `label-${loc.id}` } : {}),
       },
     })
   }
@@ -212,6 +220,51 @@ export default function ExploreMap({
       const c = map.getCenter()
       cb({ lat: c.lat, lng: c.lng }, map.getZoom())
     })
+
+    // ── Pinch-zoom momentum (Google Maps-style fling) ─────────
+    // MapLibre's built-in touchZoom snaps to the target zoom on
+    // finger lift. We sample zoom levels during the pinch, and
+    // if the user was still zooming when they released, fire ONE
+    // easeTo toward the extrapolated target so the zoom "keeps
+    // going" briefly before decelerating. Same pattern as native
+    // Google Maps.
+    const containerEl = containerRef.current
+    const zoomSamples: { t: number; z: number }[] = []
+    const VELOCITY_WINDOW_MS = 120
+    let touchActive = false
+    const onTouchStart = () => {
+      touchActive = true
+      zoomSamples.length = 0
+    }
+    const onTouchEnd = () => {
+      touchActive = false
+      if (zoomSamples.length < 2) return
+      const first = zoomSamples[0]
+      const last  = zoomSamples[zoomSamples.length - 1]
+      const dt    = (last.t - first.t) / 1000
+      zoomSamples.length = 0
+      if (dt <= 0) return
+      const velocity = (last.z - first.z) / dt      // zoom levels / sec
+      if (Math.abs(velocity) < 1.5) return          // ignore slow pinches
+      // Extrapolate the fling. Clamped so it never adds more
+      // than ~0.8 zoom levels — subtle, not a big jump.
+      const delta      = Math.max(-0.8, Math.min(0.8, velocity * 0.22))
+      const targetZoom = Math.max(2, Math.min(20, map.getZoom() + delta))
+      // 380ms with default ease — MapLibre's easeTo handles all
+      // interpolation on the GPU, so no per-frame JS work.
+      map.easeTo({ zoom: targetZoom, duration: 380 })
+    }
+    map.on('zoom', () => {
+      if (!touchActive) return
+      const now = performance.now()
+      zoomSamples.push({ t: now, z: map.getZoom() })
+      while (zoomSamples.length > 0 && now - zoomSamples[0].t > VELOCITY_WINDOW_MS) {
+        zoomSamples.shift()
+      }
+    })
+    containerEl.addEventListener('touchstart',  onTouchStart, { passive: true })
+    containerEl.addEventListener('touchend',    onTouchEnd,   { passive: true })
+    containerEl.addEventListener('touchcancel', onTouchEnd,   { passive: true })
 
     map.on('load', () => {
       isReadyRef.current = true
@@ -333,8 +386,10 @@ export default function ExploreMap({
 
       // Category icons — colored circle with an emoji baked
       // in. Kicks in past the same zoom the labels do so wide
-      // zooms stay clean. Active pin is highlighted by scaling
-      // the icon up 30%.
+      // zooms stay clean. icon-size 1.0 = the natural 32px
+      // rasterised in lib/map-images.ts (matches the previous
+      // Leaflet .explore-map-cat-icon-inner 30px size).
+      // Active pin scales up ~30%.
       map.addLayer({
         id: LAYER_ICONS,
         type: 'symbol',
@@ -345,18 +400,48 @@ export default function ExploreMap({
           'icon-image': ['get', 'iconKey'],
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            13, ['case', ['boolean', ['feature-state', 'active'], false], 0.65, 0.5],
-            17, ['case', ['boolean', ['feature-state', 'active'], false], 0.85, 0.7],
+            13, ['case', ['boolean', ['feature-state', 'active'], false], 1.15, 0.9],
+            17, ['case', ['boolean', ['feature-state', 'active'], false], 1.4, 1.1],
           ],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
         },
       })
 
-      // Text labels for `name`, `featured`, and `portfolio`
-      // modes. Uses icon-text-fit with a pill background image
-      // so labels get a proper Google-Maps-style rounded pill
-      // background — no fake text-halo pill.
+      // Pre-composited badge labels for featured / portfolio
+      // pins that have a loaded thumbnail. The image is baked
+      // (pill + circular thumb + name + optional subtitle) via
+      // makeLabelBadgeImage so what you see here is exactly
+      // what the Leaflet .explore-map-label-featured /
+      // .explore-map-label-portfolio elements used to look
+      // like. Loaded async by ensureBadgeImages() below.
+      map.addLayer({
+        id: LAYER_LABEL_BADGES,
+        type: 'symbol',
+        source: SRC_POINTS,
+        filter: [
+          'all',
+          ['!', ['has', 'point_count']],
+          ['has', 'labelImageId'],
+        ],
+        layout: {
+          'icon-image': ['get', 'labelImageId'],
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            11, 0.6,
+            15, 0.85,
+          ],
+          'icon-anchor': 'bottom',
+          'icon-offset': [0, -8],
+          'icon-allow-overlap': false,
+          'icon-optional': true,   // don't hide pin if image still loading
+        },
+        minzoom: ZOOM_THRESHOLD_FEATURED,
+      })
+
+      // Text labels for `name` mode and for featured / portfolio
+      // pins that DON'T have a thumbnail loaded — falls back to
+      // the plain pill + text via icon-text-fit.
       map.addLayer({
         id: LAYER_LABELS,
         type: 'symbol',
@@ -364,6 +449,7 @@ export default function ExploreMap({
         filter: [
           'all',
           ['!', ['has', 'point_count']],
+          ['!', ['has', 'labelImageId']],
           ['match',
             ['get', 'mode'],
             ['name', 'featured', 'portfolio'], true,
@@ -384,12 +470,8 @@ export default function ExploreMap({
             15, 12,
           ],
           'text-anchor': 'top',
-          // Sit above the pin — offset scales with zoom via
-          // constant since pin size doesn't grow linearly.
           'text-offset': [0, 1.4],
           'text-max-width': 10,
-          // Pill background: portfolio pins get the gold-
-          // bordered pill, everything else the plain white.
           'icon-image': [
             'case',
             ['==', ['get', 'mode'], 'portfolio'], 'pill-portfolio',
@@ -428,9 +510,10 @@ export default function ExploreMap({
         const id = feat.properties?.id
         if (id != null) onMarkerClickRef.current(id)
       }
-      map.on('click', LAYER_POINTS, onPointClick)
-      map.on('click', LAYER_ICONS,  onPointClick)
-      map.on('click', LAYER_LABELS, onPointClick)
+      map.on('click', LAYER_POINTS,       onPointClick)
+      map.on('click', LAYER_ICONS,        onPointClick)
+      map.on('click', LAYER_LABELS,       onPointClick)
+      map.on('click', LAYER_LABEL_BADGES, onPointClick)
 
       // Cursor feedback so the pins feel interactive.
       const setPointer = () => { map.getCanvas().style.cursor = 'pointer' }
@@ -441,8 +524,10 @@ export default function ExploreMap({
       map.on('mouseleave', LAYER_POINTS,   clearPointer)
       map.on('mouseenter', LAYER_ICONS,    setPointer)
       map.on('mouseleave', LAYER_ICONS,    clearPointer)
-      map.on('mouseenter', LAYER_LABELS,   setPointer)
-      map.on('mouseleave', LAYER_LABELS,   clearPointer)
+      map.on('mouseenter', LAYER_LABELS,       setPointer)
+      map.on('mouseleave', LAYER_LABELS,       clearPointer)
+      map.on('mouseenter', LAYER_LABEL_BADGES, setPointer)
+      map.on('mouseleave', LAYER_LABEL_BADGES, clearPointer)
 
       // ── User + home locations (separate sources so they don't
       //     participate in cluster / point layer paint expressions)
@@ -532,6 +617,45 @@ export default function ExploreMap({
   const homeLocationRef = useRef(homeLocation)
   useEffect(() => { locationsRef.current    = locations;    (mapRef.current as any)?.__pushLocations?.() }, [locations, photoMap])
   useEffect(() => { userLocationRef.current = userLocation; (mapRef.current as any)?.__pushUser?.() },      [userLocation])
+
+  // ── Async badge-image loader ─────────────────────────────────
+  // For each featured / portfolio pin that has a photoMap entry,
+  // load the thumb → composite pill+thumb+text canvas → register
+  // as a MapLibre image. Once registered, the LAYER_LABEL_BADGES
+  // symbol layer picks it up on the next redraw. Dedup keyed by
+  // pin id so we never re-load or re-generate.
+  const loadedBadgesRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isReadyRef.current) return
+    const pm = photoMap ?? {}
+    let cancelled = false
+    ;(async () => {
+      for (const loc of locations) {
+        const mode = loc.mapDisplayMode ?? 'dot'
+        if (mode !== 'featured' && mode !== 'portfolio') continue
+        const thumb = pm[String(loc.id)]
+        if (!thumb) continue
+        const imageId = `label-${loc.id}`
+        if (loadedBadgesRef.current.has(imageId)) continue
+        if (map.hasImage(imageId)) { loadedBadgesRef.current.add(imageId); continue }
+        loadedBadgesRef.current.add(imageId)
+        try {
+          const badge = await makeLabelBadgeImage({ thumbUrl: thumb, name: loc.name, variant: mode })
+          if (cancelled) return
+          if (!map.hasImage(imageId)) {
+            map.addImage(imageId, badge.data, { pixelRatio: badge.pixelRatio })
+          }
+        } catch {
+          // Thumb failed to load (CORS, 404, etc.) — leave the
+          // dedup flag set so we don't spin trying again. The
+          // pin falls back to the text-based pill via the
+          // LAYER_LABELS filter (!has labelImageId).
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [locations, photoMap])
   useEffect(() => { homeLocationRef.current = homeLocation; (mapRef.current as any)?.__pushHome?.() },      [homeLocation])
 
   // ── Active marker highlight via feature-state ─────────────────
