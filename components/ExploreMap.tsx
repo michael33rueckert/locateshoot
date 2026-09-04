@@ -69,12 +69,16 @@ interface ExploreMapProps {
 const USA_VIEW = { center: [-98.5, 39.5] as [number, number], zoom: 4 }
 const HOME_CITY_ZOOM = 11
 
-// Zoom thresholds. Match the previous Leaflet-era values so the
-// per-mode reveal behavior stays consistent for admin's saved
-// map_display_mode setting.
-const ZOOM_THRESHOLD_NAME     = 13
-const ZOOM_THRESHOLD_FEATURED = 11
-const ZOOM_THRESHOLD_ICONS    = 13
+// Zoom thresholds for the per-mode label / icon reveal.
+//   * NAME     — text-only pill starts showing at this zoom
+//   * FEATURED — featured + portfolio pill/badge starts showing
+//   * ICONS    — category emoji icon replaces the plain dot
+// All three dropped from their Leaflet-era values so pins pick
+// up their rich visuals much sooner as the user zooms in
+// (previously you had to be nearly at street level to see them).
+const ZOOM_THRESHOLD_NAME     = 12
+const ZOOM_THRESHOLD_FEATURED = 9
+const ZOOM_THRESHOLD_ICONS    = 10
 
 // GeoJSON source id + layer ids — module-level constants so
 // helpers and effects reference the same strings without typos.
@@ -221,50 +225,68 @@ export default function ExploreMap({
       cb({ lat: c.lat, lng: c.lng }, map.getZoom())
     })
 
-    // ── Pinch-zoom momentum (Google Maps-style fling) ─────────
-    // MapLibre's built-in touchZoom snaps to the target zoom on
-    // finger lift. We sample zoom levels during the pinch, and
-    // if the user was still zooming when they released, fire ONE
-    // easeTo toward the extrapolated target so the zoom "keeps
-    // going" briefly before decelerating. Same pattern as native
-    // Google Maps.
+    // ── Pinch / wheel zoom momentum (Google Maps-style fling) ─
+    // MapLibre's built-in touchZoom + scrollZoom both snap to
+    // the target zoom the moment input stops. We sample zoom
+    // levels during any active gesture (touch pinch OR wheel /
+    // trackpad pinch — both fire the 'zoom' event) and, on
+    // gesture end, fire ONE easeTo toward the extrapolated
+    // target so the zoom "keeps going" briefly before
+    // decelerating. Same pattern as native Google Maps on both
+    // desktop trackpad and phone pinch.
     const containerEl = containerRef.current
     const zoomSamples: { t: number; z: number }[] = []
     const VELOCITY_WINDOW_MS = 120
     let touchActive = false
-    const onTouchStart = () => {
-      touchActive = true
-      zoomSamples.length = 0
-    }
-    const onTouchEnd = () => {
-      touchActive = false
-      if (zoomSamples.length < 2) return
+    let wheelEndTimer: ReturnType<typeof setTimeout> | null = null
+    const applyMomentum = () => {
+      if (zoomSamples.length < 2) { zoomSamples.length = 0; return }
       const first = zoomSamples[0]
       const last  = zoomSamples[zoomSamples.length - 1]
       const dt    = (last.t - first.t) / 1000
       zoomSamples.length = 0
       if (dt <= 0) return
       const velocity = (last.z - first.z) / dt      // zoom levels / sec
-      if (Math.abs(velocity) < 1.5) return          // ignore slow pinches
+      if (Math.abs(velocity) < 1.5) return          // ignore slow gestures
       // Extrapolate the fling. Clamped so it never adds more
       // than ~0.8 zoom levels — subtle, not a big jump.
       const delta      = Math.max(-0.8, Math.min(0.8, velocity * 0.22))
       const targetZoom = Math.max(2, Math.min(20, map.getZoom() + delta))
-      // 380ms with default ease — MapLibre's easeTo handles all
-      // interpolation on the GPU, so no per-frame JS work.
+      // 380ms with MapLibre's default ease — interpolation
+      // runs on the GPU, no per-frame JS.
       map.easeTo({ zoom: targetZoom, duration: 380 })
     }
     map.on('zoom', () => {
-      if (!touchActive) return
+      // Sample only while the user is actively gesturing —
+      // programmatic easeTo calls also fire 'zoom' but we
+      // don't want their frames counted toward user velocity.
+      if (!touchActive && wheelEndTimer === null) return
       const now = performance.now()
       zoomSamples.push({ t: now, z: map.getZoom() })
       while (zoomSamples.length > 0 && now - zoomSamples[0].t > VELOCITY_WINDOW_MS) {
         zoomSamples.shift()
       }
     })
+    // Touch pinch (mobile / tablet).
+    const onTouchStart = () => { touchActive = true; zoomSamples.length = 0 }
+    const onTouchEnd   = () => { touchActive = false; applyMomentum() }
     containerEl.addEventListener('touchstart',  onTouchStart, { passive: true })
     containerEl.addEventListener('touchend',    onTouchEnd,   { passive: true })
     containerEl.addEventListener('touchcancel', onTouchEnd,   { passive: true })
+    // Wheel / trackpad pinch (desktop). Debounce a 'wheel end'
+    // 90ms after the last wheel event — that's how long you
+    // typically have to pause a trackpad pinch or scroll wheel
+    // before it counts as "released".
+    const WHEEL_END_DELAY = 90
+    const onWheel = () => {
+      if (wheelEndTimer !== null) { clearTimeout(wheelEndTimer); wheelEndTimer = null }
+      else zoomSamples.length = 0   // first wheel event of a fresh gesture
+      wheelEndTimer = setTimeout(() => {
+        wheelEndTimer = null
+        applyMomentum()
+      }, WHEEL_END_DELAY)
+    }
+    containerEl.addEventListener('wheel', onWheel, { passive: true })
 
     map.on('load', () => {
       isReadyRef.current = true
@@ -398,9 +420,13 @@ export default function ExploreMap({
         minzoom: ZOOM_THRESHOLD_ICONS,
         layout: {
           'icon-image': ['get', 'iconKey'],
+          // Ramp starts smaller (0.55 at zoom 10) so many icons
+          // in one view read as pins, not a wall of circles.
+          // Grows to natural 1.0 by zoom 14 and beyond.
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            13, ['case', ['boolean', ['feature-state', 'active'], false], 1.15, 0.9],
+            10, ['case', ['boolean', ['feature-state', 'active'], false], 0.75, 0.55],
+            14, ['case', ['boolean', ['feature-state', 'active'], false], 1.2, 0.95],
             17, ['case', ['boolean', ['feature-state', 'active'], false], 1.4, 1.1],
           ],
           'icon-allow-overlap': true,
@@ -426,10 +452,14 @@ export default function ExploreMap({
         ],
         layout: {
           'icon-image': ['get', 'labelImageId'],
+          // Start small at ZOOM_THRESHOLD_FEATURED (9) so
+          // badges surface early without eating the whole
+          // viewport. Grow toward natural size by zoom 15.
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            11, 0.6,
-            15, 0.85,
+            9,  0.42,
+            12, 0.7,
+            15, 0.9,
           ],
           'icon-anchor': 'bottom',
           'icon-offset': [0, -8],
