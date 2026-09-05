@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
 }
 import { getVectorStyle } from '@/lib/map-tiles'
 import { getCategoryVisual } from '@/lib/map-categories'
-import { makeCategoryIcon, makePillImage } from '@/lib/map-images'
+import { makeCategoryIcon, makePillImage, makeLabelBadgeImage } from '@/lib/map-images'
 
 // ── ExploreMap (WebGL, MapLibre GL JS) ──────────────────────────────
 //
@@ -88,6 +88,7 @@ const SRC_HOME        = 'home-location'
 const LAYER_POINTS        = 'unclustered-point'
 const LAYER_ICONS         = 'point-icons'
 const LAYER_LABELS        = 'point-labels'
+const LAYER_LABEL_BADGES  = 'point-label-badges'
 const LAYER_USER_DOT      = 'user-dot'
 const LAYER_HOME_DOT      = 'home-dot'
 
@@ -125,6 +126,13 @@ function locationsToGeoJSON(locations: ExploreLocation[], photoMap: Record<strin
         // Numeric codepoints are stable across both.
         iconKey: `cat-${visual.color.slice(1).toLowerCase()}-${visual.emoji.codePointAt(0) ?? 0}`,
         hasPhoto: !!thumb,
+        // Set on every featured / portfolio pin regardless of
+        // whether a thumb has loaded yet. The badge composite
+        // falls back to a colored emoji circle if no thumb is
+        // available, so all pins in these modes look uniform.
+        ...((mode === 'featured' || mode === 'portfolio')
+          ? { labelImageId: `label-${loc.id}` }
+          : {}),
       },
     })
   }
@@ -391,21 +399,52 @@ export default function ExploreMap({
         },
       })
 
-      // Text labels for `name`, `featured`, and `portfolio`
-      // modes. Uniform pill background per mode — portfolio
-      // pins get the gold-bordered pill + "In your portfolio"
-      // subtitle; featured and name pins get the plain white
-      // pill + name. No async-loaded per-pin thumbnails so
-      // every portfolio pin looks the same.
+      // Pre-composited badge for featured / portfolio pins:
+      // pill + circular thumbnail (or category emoji fallback)
+      // + name + optional "IN YOUR PORTFOLIO" subtitle. Baked
+      // per pin by makeLabelBadgeImage below and registered
+      // via map.addImage. Filter matches only pins whose id
+      // has been registered — pins waiting on thumb load fall
+      // through to the text-pill layer below.
+      map.addLayer({
+        id: LAYER_LABEL_BADGES,
+        type: 'symbol',
+        source: SRC_POINTS,
+        filter: ['has', 'labelImageId'],
+        layout: {
+          'icon-image': ['get', 'labelImageId'],
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            9,  0.42,
+            12, 0.65,
+            15, 0.85,
+          ],
+          'icon-anchor': 'bottom',
+          'icon-offset': [0, -8],
+          'icon-allow-overlap': false,
+          // Optional so a pin still shows if the image is
+          // mid-load (parent renders the underlying dot).
+          'icon-optional': true,
+        },
+        minzoom: ZOOM_THRESHOLD_FEATURED,
+      })
+
+      // Text-only pill for `name`-mode pins (no photo, just
+      // location name). Featured + portfolio pins that already
+      // have a badge image skip this layer via the ['!', ['has',
+      // 'labelImageId']] clause.
       map.addLayer({
         id: LAYER_LABELS,
         type: 'symbol',
         source: SRC_POINTS,
         filter: [
-          'match',
+          'all',
+          ['!', ['has', 'labelImageId']],
+          ['match',
             ['get', 'mode'],
-            ['name', 'featured', 'portfolio'], true,
+            ['name'], true,
             false,
+          ],
         ],
         layout: {
           'text-field': [
@@ -448,9 +487,10 @@ export default function ExploreMap({
         const id = feat.properties?.id
         if (id != null) onMarkerClickRef.current(id)
       }
-      map.on('click', LAYER_POINTS, onPointClick)
-      map.on('click', LAYER_ICONS,  onPointClick)
-      map.on('click', LAYER_LABELS, onPointClick)
+      map.on('click', LAYER_POINTS,       onPointClick)
+      map.on('click', LAYER_ICONS,        onPointClick)
+      map.on('click', LAYER_LABELS,       onPointClick)
+      map.on('click', LAYER_LABEL_BADGES, onPointClick)
 
       // Cursor feedback so the pins feel interactive.
       const setPointer = () => { map.getCanvas().style.cursor = 'pointer' }
@@ -461,6 +501,8 @@ export default function ExploreMap({
       map.on('mouseleave', LAYER_ICONS,    clearPointer)
       map.on('mouseenter', LAYER_LABELS,       setPointer)
       map.on('mouseleave', LAYER_LABELS,       clearPointer)
+      map.on('mouseenter', LAYER_LABEL_BADGES, setPointer)
+      map.on('mouseleave', LAYER_LABEL_BADGES, clearPointer)
       // ── User + home locations (separate sources so they don't
       //     participate in cluster / point layer paint expressions)
       map.addSource(SRC_USER, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
@@ -551,6 +593,52 @@ export default function ExploreMap({
   useEffect(() => { userLocationRef.current = userLocation; (mapRef.current as any)?.__pushUser?.() },      [userLocation])
 
   useEffect(() => { homeLocationRef.current = homeLocation; (mapRef.current as any)?.__pushHome?.() },      [homeLocation])
+
+  // ── Async badge-image loader ─────────────────────────────────
+  // For each featured / portfolio pin, generate the composite
+  // badge image (pill + thumb-or-emoji + name + optional
+  // subtitle) and register it under `label-{id}`. Once
+  // registered, LAYER_LABEL_BADGES picks it up on next paint.
+  // Dedup keyed by pin id so we don't re-render on every
+  // photoMap or locations update.
+  const loadedBadgesRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isReadyRef.current) return
+    const pm = photoMap ?? {}
+    let cancelled = false
+    ;(async () => {
+      for (const loc of locations) {
+        const mode = loc.mapDisplayMode ?? 'dot'
+        if (mode !== 'featured' && mode !== 'portfolio') continue
+        const imageId = `label-${loc.id}`
+        // Skip if we've already generated a badge for this pin
+        // in this session. If a new photo lands later the pin
+        // will just keep its emoji-fallback badge until reload
+        // — acceptable trade-off for keeping this loop cheap.
+        if (loadedBadgesRef.current.has(imageId)) continue
+        if (map.hasImage(imageId)) { loadedBadgesRef.current.add(imageId); continue }
+        loadedBadgesRef.current.add(imageId)
+        const visual = getCategoryVisual(loc.category, loc.access, loc.tags)
+        try {
+          const badge = await makeLabelBadgeImage({
+            thumbUrl: pm[String(loc.id)] || undefined,
+            name:     loc.name,
+            variant:  mode,
+            fallback: { color: visual.color, emoji: visual.emoji },
+          })
+          if (cancelled) return
+          if (!map.hasImage(imageId)) {
+            map.addImage(imageId, badge.data, { pixelRatio: badge.pixelRatio })
+          }
+        } catch {
+          // Fully broken — nothing more to do, pin will show
+          // the underlying dot without a label.
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [locations, photoMap])
 
   // ── Active marker highlight via feature-state ─────────────────
   const lastActiveIdRef = useRef<number | null>(null)

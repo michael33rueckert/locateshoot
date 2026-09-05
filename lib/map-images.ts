@@ -87,23 +87,38 @@ export interface LabelBadgeImage {
   cssHeight: number
 }
 export async function makeLabelBadgeImage(opts: {
-  thumbUrl: string
+  /** If provided, drawn as a circular photo inside the pill.
+   *  If missing or load fails, we fall back to a colored
+   *  emoji circle from the fallback field so every
+   *  featured/portfolio pin looks consistent. */
+  thumbUrl?: string | null
   name: string
   variant: 'featured' | 'portfolio'
+  /** Category color + emoji, used as the fallback when there's
+   *  no thumb (or the thumb fetch fails). */
+  fallback: { color: string; emoji: string }
 }): Promise<LabelBadgeImage> {
-  const { thumbUrl, name, variant } = opts
+  const { thumbUrl, name, variant, fallback } = opts
   const pixelRatio = 2
 
-  // Load the thumbnail as a bitmap. crossOrigin needed so the
-  // resulting canvas isn't tainted — Supabase Storage + Google
-  // Places both send CORS headers so this works for our URLs.
-  const img: HTMLImageElement = await new Promise((resolve, reject) => {
-    const el = new window.Image()
-    el.crossOrigin = 'anonymous'
-    el.onload  = () => resolve(el)
-    el.onerror = () => reject(new Error('thumb load failed'))
-    el.src = thumbUrl
-  })
+  // Try to load the thumbnail. crossOrigin needed so the
+  // canvas isn't tainted — Supabase Storage + Google Places
+  // both send CORS headers so this works for our URLs. When
+  // the fetch fails we composite the fallback emoji circle
+  // instead, so all featured/portfolio pins get the same
+  // consistent pill shape.
+  let img: HTMLImageElement | null = null
+  if (thumbUrl) {
+    try {
+      img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new window.Image()
+        el.crossOrigin = 'anonymous'
+        el.onload  = () => resolve(el)
+        el.onerror = () => reject(new Error('thumb load failed'))
+        el.src = thumbUrl
+      })
+    } catch { /* fall through to emoji fallback */ }
+  }
 
   const heightPx  = 52
   const thumbPx   = 44
@@ -154,22 +169,37 @@ export async function makeLabelBadgeImage(opts: {
   ctx.shadowBlur    = 0
   ctx.shadowOffsetY = 0
 
-  // Thumbnail — clipped to a circle inside the pill.
+  // Thumbnail — clipped to a circle inside the pill. If no
+  // image loaded, we draw a colored emoji circle in the same
+  // spot instead so pins without photos still look like the
+  // rest of the featured/portfolio badges.
   const thumbCx = (padPx + thumbPx / 2) * pixelRatio
   const thumbCy = height / 2
   const thumbR  = (thumbPx / 2 - 2) * pixelRatio
-  ctx.save()
-  ctx.beginPath()
-  ctx.arc(thumbCx, thumbCy, thumbR, 0, Math.PI * 2)
-  ctx.closePath()
-  ctx.clip()
-  // Cover-fit the image into the circle bounds.
-  const size = thumbR * 2
-  const ratio = Math.max(size / img.naturalWidth, size / img.naturalHeight)
-  const drawW = img.naturalWidth  * ratio
-  const drawH = img.naturalHeight * ratio
-  ctx.drawImage(img, thumbCx - drawW / 2, thumbCy - drawH / 2, drawW, drawH)
-  ctx.restore()
+  if (img) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(thumbCx, thumbCy, thumbR, 0, Math.PI * 2)
+    ctx.closePath()
+    ctx.clip()
+    const size = thumbR * 2
+    const ratio = Math.max(size / img.naturalWidth, size / img.naturalHeight)
+    const drawW = img.naturalWidth  * ratio
+    const drawH = img.naturalHeight * ratio
+    ctx.drawImage(img, thumbCx - drawW / 2, thumbCy - drawH / 2, drawW, drawH)
+    ctx.restore()
+  } else {
+    // Colored emoji circle — matches the category-icon look
+    // that regular dot-mode pins get at close zoom.
+    ctx.fillStyle = fallback.color
+    ctx.beginPath()
+    ctx.arc(thumbCx, thumbCy, thumbR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.font = `${18 * pixelRatio}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(fallback.emoji, thumbCx, thumbCy + pixelRatio)
+  }
 
   // Portfolio pins get a gold ring around the thumb and a
   // small camera badge on the bottom-right of the thumb — same
