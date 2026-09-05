@@ -161,7 +161,16 @@ export default function ClientPickerPage() {
   // uses this combined signal to decide when to run the initial fitBounds —
   // otherwise the first fit happens while the container is display:none and
   // leaflet stays parked on the fallback center.
-  const [isDesktopViewport, setIsDesktopViewport] = useState(true)
+  // Read the initial value from matchMedia so mobile clients
+  // don't briefly render with isDesktopViewport=true — that
+  // brief true state was causing ClientMap to see visible=true
+  // on mount and init MapLibre against a display:none container.
+  // Server render always sees `true` (no window) so hydration
+  // doesn't mismatch the desktop-first HTML.
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return true
+    return window.matchMedia('(min-width: 769px)').matches
+  })
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return
     const mql = window.matchMedia('(min-width: 769px)')
