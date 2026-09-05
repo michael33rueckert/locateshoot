@@ -805,9 +805,13 @@ export default function ExploreMap({
           borderRadius: 6,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
+          // Preview shows the OPPOSITE mode — matches Google
+          // Maps' UX where the button shows what you'll get.
+          // Both are real tiles at the same coord (Kansas City,
+          // z12) so the "before/after" reads clearly at 34px.
           backgroundImage: viewMode === 'streets'
             ? 'url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/12/1585/936")'
-            : 'linear-gradient(135deg, #eef2f6, #d7dbe0)',
+            : 'url("https://tile.openstreetmap.org/12/1585/936.png")',
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'center',
@@ -816,7 +820,12 @@ export default function ExploreMap({
           textTransform: 'uppercase',
           letterSpacing: 0.4,
           paddingBottom: 2,
-          textShadow: viewMode === 'streets' ? '0 1px 2px rgba(0,0,0,0.55)' : 'none',
+          // Dark text on light OSM tile, white text on dark
+          // satellite — halo shadow in the opposite color so
+          // the label stays readable on either background.
+          textShadow: viewMode === 'streets'
+            ? '0 1px 2px rgba(0,0,0,0.55)'
+            : '0 1px 2px rgba(255,255,255,0.65)',
         }}>
           <span style={{ color: viewMode === 'streets' ? '#fff' : '#1a1612' }}>
             {viewMode === 'streets' ? 'Sat' : 'Map'}
