@@ -111,6 +111,9 @@ export default function ClientMap({
   // changes (e.g. mobile display:none → display:block).
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    // eslint-disable-next-line no-console
+    console.log('[ClientMap] init — container:', rect.width, '×', rect.height, 'display:', getComputedStyle(containerRef.current).display, 'parent display:', containerRef.current.parentElement && getComputedStyle(containerRef.current.parentElement).display)
 
     const map = new MLMap({
       container: containerRef.current,
@@ -120,8 +123,13 @@ export default function ClientMap({
     })
     mapRef.current = map
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
-
+    map.on('error', (e: any) => {
+      // eslint-disable-next-line no-console
+      console.error('[ClientMap] error:', e?.error?.message ?? e)
+    })
     map.on('load', () => {
+      // eslint-disable-next-line no-console
+      console.log('[ClientMap] load fired — container:', containerRef.current?.getBoundingClientRect())
       isReadyRef.current = true
 
       map.addSource(SRC_POINTS, {

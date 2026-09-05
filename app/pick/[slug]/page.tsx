@@ -148,6 +148,20 @@ export default function ClientPickerPage() {
     if (typeof window === 'undefined') return false
     return new URLSearchParams(window.location.search).get('preview') === '1'
   }, [])
+
+  // Load Eruda (mobile console) when ?debug=1 is in the URL.
+  // Temporary — lets us inspect console output + network on
+  // phones where remote debugging isn't easy.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (new URLSearchParams(window.location.search).get('debug') !== '1') return
+    if (document.getElementById('eruda-loader')) return
+    const s = document.createElement('script')
+    s.id = 'eruda-loader'
+    s.src = 'https://cdn.jsdelivr.net/npm/eruda'
+    s.onload = () => { (window as any).eruda?.init() }
+    document.body.appendChild(s)
+  }, [])
   const [infoCollected,    setInfoCollected]    = useState(isPreview)
   const [infoError,        setInfoError]        = useState('')
   // Transient banner for non-blocking notices: max-pick reached when
