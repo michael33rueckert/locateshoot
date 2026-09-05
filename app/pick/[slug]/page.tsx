@@ -175,7 +175,17 @@ export default function ClientPickerPage() {
   // uses this combined signal to decide when to run the initial fitBounds —
   // otherwise the first fit happens while the container is display:none and
   // leaflet stays parked on the fallback center.
-  const [isDesktopViewport, setIsDesktopViewport] = useState(true)
+  // Read the initial value from matchMedia so mobile mounts
+  // don't briefly render with isDesktopViewport=true — that
+  // brief true state was flipping the everRenderedMap latch on
+  // mobile before the effect below corrected the viewport,
+  // which mounted ClientMap into a display:none .pick-map-col
+  // (confirmed by "[ClientMap] init — container: 0 × 0 …
+  // parent display: none" diagnostic).
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return true
+    return window.matchMedia('(min-width: 769px)').matches
+  })
   // Latch — flips true the first time the map container is
   // actually visible, and stays true. Gates the ClientMap mount
   // so MapLibre never inits into a display:none container.
