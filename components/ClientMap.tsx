@@ -106,8 +106,15 @@ export default function ClientMap({
   useEffect(() => { onMarkerClickRef.current = onMarkerClick }, [onMarkerClick])
 
   // ── Init ────────────────────────────────────────────────────────
+  // Deferred until `visible === true` because on mobile the
+  // .pick-map-col is `display: none` before the user taps "View
+  // Map". Initing MapLibre against a 0×0 container leaves the
+  // WebGL canvas stuck at 0×0 on some browsers even after a
+  // later map.resize(). Waiting until the container is on-screen
+  // avoids that class of bug entirely.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
+    if (!visible) return
 
     const map = new MLMap({
       container: containerRef.current,
@@ -266,13 +273,23 @@ export default function ClientMap({
     }
     ;(map as any).__pushLocations = pushLocations
 
-    return () => {
-      isReadyRef.current = false
-      didInitialFitRef.current = false
-      map.remove()
+    // NOTE: no cleanup returned here on purpose — the map is
+    // created once (on first visible=true) and kept alive for
+    // the rest of the component's lifetime. Actual teardown
+    // lives in the dedicated unmount effect below so toggling
+    // "View Map" / "View List" doesn't tear the WebGL context
+    // down and rebuild it every time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
+
+  // ── Unmount cleanup ─────────────────────────────────────────────
+  useEffect(() => () => {
+    isReadyRef.current = false
+    didInitialFitRef.current = false
+    if (mapRef.current) {
+      mapRef.current.remove()
       mapRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Latest-value refs so pushLocations always sees current props.
