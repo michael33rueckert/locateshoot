@@ -92,3 +92,32 @@ export function getVectorStyle(variant: MapVariant = 'light'): StyleSpec {
   void variant  // dark variant not distinct in the demo style
   return 'https://demotiles.maplibre.org/style.json'
 }
+
+// Satellite basemap for the Explore map's view toggle. Stadia
+// doesn't currently ship a satellite style, so this uses Esri
+// World Imagery — a widely-used free raster source with global
+// coverage. Wrapped in a MapLibre-compatible inline style so
+// map.setStyle() can swap it in without any extra config.
+export function getSatelliteStyle(): StyleSpec {
+  return {
+    version: 8,
+    // Glyphs endpoint so overlay symbol layers (labels, cluster
+    // counts if we ever re-add them) still resolve text.
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {
+      satellite: {
+        type: 'raster',
+        tiles: [
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        ],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution:
+          'Imagery © <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics',
+      },
+    },
+    layers: [
+      { id: 'satellite', type: 'raster', source: 'satellite' },
+    ],
+  }
+}

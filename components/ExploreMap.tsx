@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Map as MLMap, NavigationControl, setWorkerUrl } from 'maplibre-gl'
 import type { GeoJSONSource, MapMouseEvent, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl'
 
@@ -85,12 +85,14 @@ const ZOOM_THRESHOLD_ICONS    = 10
 const SRC_POINTS      = 'locations'
 const SRC_USER        = 'user-location'
 const SRC_HOME        = 'home-location'
+const SRC_SATELLITE   = 'satellite'
 const LAYER_POINTS        = 'unclustered-point'
 const LAYER_ICONS         = 'point-icons'
 const LAYER_LABELS        = 'point-labels'
 const LAYER_LABEL_BADGES  = 'point-label-badges'
 const LAYER_USER_DOT      = 'user-dot'
 const LAYER_HOME_DOT      = 'home-dot'
+const LAYER_SATELLITE     = 'satellite'
 
 function isFiniteLatLng(lat: any, lng: any): boolean {
   return Number.isFinite(lat) && Number.isFinite(lng)
@@ -150,6 +152,11 @@ export default function ExploreMap({
 }: ExploreMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<MLMap | null>(null)
+  // Basemap toggle — streets (vector tiles) vs satellite
+  // (Esri raster overlay). Rendered as the two-state pill in
+  // the top-right of the map. Layer visibility swap only —
+  // vector base + pin overlays stay attached across toggles.
+  const [viewMode, setViewMode] = useState<'streets' | 'satellite'>('streets')
   const isReadyRef   = useRef(false)
   const homeAppliedRef = useRef(false)
 
@@ -196,11 +203,12 @@ export default function ExploreMap({
     map.scrollZoom.setWheelZoomRate(1 / 120)
     map.scrollZoom.setZoomRate(1 / 40)
 
-    // Zoom control (bottom-right, pushed up via CSS so it
-    // clears the Help + Feedback launchers). NavigationControl
-    // stays here because Google Maps also has +/- at the
-    // bottom-right on desktop.
-    map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
+    // Zoom control (bottom-right, pushed up via CSS so it clears
+    // the Help + Feedback launchers). showCompass:true is the
+    // north-reset button — MapLibre renders a small circular
+    // control that rotates to match the current bearing; tapping
+    // it eases back to north (same UX as Google Maps).
+    map.addControl(new NavigationControl({ showCompass: true, visualizePitch: false }), 'bottom-right')
 
     // Catch style + tile errors so silent init failures show up in
     // the console instead of just rendering blank.
@@ -292,6 +300,30 @@ export default function ExploreMap({
 
     map.on('load', () => {
       isReadyRef.current = true
+
+      // ── Satellite raster overlay (hidden until toggled) ──
+      // Instead of the more invasive map.setStyle() dance to
+      // swap basemaps, add the satellite tiles as a raster
+      // layer that sits ABOVE the vector base and BELOW all
+      // the pin overlays we add next. Toggling its visibility
+      // is a one-line setLayoutProperty call. When 'none' the
+      // vector base shows through; when 'visible' the raster
+      // covers it. Pin overlays render on top either way.
+      map.addSource(SRC_SATELLITE, {
+        type: 'raster',
+        tiles: [
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        ],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: 'Imagery © <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics',
+      })
+      map.addLayer({
+        id: LAYER_SATELLITE,
+        type: 'raster',
+        source: SRC_SATELLITE,
+        layout: { visibility: 'none' },
+      })
 
       // ── Points source + clustering ────────────────────────────
       // Points source — clustering off per product decision.
@@ -640,6 +672,18 @@ export default function ExploreMap({
     return () => { cancelled = true }
   }, [locations, photoMap])
 
+  // ── Basemap view toggle (streets / satellite) ─────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isReadyRef.current) return
+    if (!map.getLayer(LAYER_SATELLITE)) return
+    map.setLayoutProperty(
+      LAYER_SATELLITE,
+      'visibility',
+      viewMode === 'satellite' ? 'visible' : 'none',
+    )
+  }, [viewMode])
+
   // ── Active marker highlight via feature-state ─────────────────
   const lastActiveIdRef = useRef<number | null>(null)
   useEffect(() => {
@@ -695,5 +739,70 @@ export default function ExploreMap({
     map.easeTo({ center: [loc.lng, loc.lat], zoom: Math.max(map.getZoom(), 14), duration: 400 })
   }, [activeId, locations])
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {/* Streets / Satellite basemap toggle — same footprint as
+          Google Maps' Layers pill (top-right of the map). One
+          click flips between vector streets and Esri satellite
+          raster. */}
+      <button
+        type="button"
+        onClick={() => setViewMode(m => m === 'streets' ? 'satellite' : 'streets')}
+        title={viewMode === 'streets' ? 'Switch to satellite' : 'Switch to map'}
+        aria-label={viewMode === 'streets' ? 'Switch to satellite view' : 'Switch to map view'}
+        style={{
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          zIndex: 10,
+          padding: 3,
+          width: 48,
+          height: 48,
+          borderRadius: 8,
+          border: '1px solid rgba(0,0,0,0.15)',
+          background: 'white',
+          boxShadow: '0 1px 3px rgba(60,64,67,0.15), 0 2px 8px rgba(60,64,67,0.15)',
+          cursor: 'pointer',
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {/* Thumbnail-style preview of the OPPOSITE mode (matches
+            Google Maps' layers button UX — the pill shows what
+            you'll get if you tap). */}
+        <div style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: 6,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundImage: viewMode === 'streets'
+            // preview satellite when currently on streets
+            ? 'url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/12/1585/936")'
+            // preview streets when currently on satellite (a soft
+            // muted swatch — MapLibre's own demo tile server
+            // rate-limits so we don't hotlink it here).
+            : 'linear-gradient(135deg, #eef2f6, #d7dbe0)',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          color: '#1a1612',
+          fontSize: 10,
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+          textShadow: viewMode === 'streets'
+            ? '0 1px 2px rgba(0,0,0,0.5)' : 'none',
+          paddingBottom: 3,
+        }}>
+          <span style={{ color: viewMode === 'streets' ? '#fff' : '#1a1612' }}>
+            {viewMode === 'streets' ? 'Satellite' : 'Map'}
+          </span>
+        </div>
+      </button>
+    </div>
+  )
 }
