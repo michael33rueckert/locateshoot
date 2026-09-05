@@ -77,8 +77,13 @@ const HOME_CITY_ZOOM = 11
 // up their rich visuals much sooner as the user zooms in
 // (previously you had to be nearly at street level to see them).
 const ZOOM_THRESHOLD_NAME     = 12
-const ZOOM_THRESHOLD_FEATURED = 9
+const ZOOM_THRESHOLD_FEATURED = 8
 const ZOOM_THRESHOLD_ICONS    = 10
+// Below this zoom, no pins render at all — the map stays
+// clean the way Google Maps hides POIs on the continent /
+// country view. Pins start popping in around metro-area
+// zoom.
+const ZOOM_THRESHOLD_PIN_MIN  = 8
 
 // GeoJSON source id + layer ids — module-level constants so
 // helpers and effects reference the same strings without typos.
@@ -403,11 +408,17 @@ export default function ExploreMap({
         id: LAYER_POINTS,
         type: 'circle',
         source: SRC_POINTS,
-        // Featured / portfolio pins skip the base dot — their
-        // badge pill already carries the pin's visual weight,
-        // and layering a small dot underneath just looks like
-        // a stray artifact.
-        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
+        // No mode filter — every pin (dot / name / featured /
+        // portfolio) gets a base dot so the pin is never
+        // invisible if a downstream image (badge, icon)
+        // hasn't loaded yet. The badge pill for featured /
+        // portfolio sits above the dot (icon-anchor: bottom,
+        // -8 offset), so the visual reads as pin-with-bubble
+        // — same shape Google Maps uses.
+        // minzoom keeps the map clean on continent / country
+        // view: nothing appears until the user has zoomed
+        // past metro level.
+        minzoom: ZOOM_THRESHOLD_PIN_MIN,
         paint: {
           'circle-color': [
             'case',
@@ -416,8 +427,7 @@ export default function ExploreMap({
           ],
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            4,  3,
-            8,  4,
+            8,  3,
             12, 5,
           ],
           'circle-stroke-width': 1.5,
@@ -434,7 +444,11 @@ export default function ExploreMap({
         id: LAYER_ICONS,
         type: 'symbol',
         source: SRC_POINTS,
-        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
+        // No mode filter — every pin gets an emoji icon.
+        // Featured / portfolio still get their badge pill on
+        // top; the emoji circle underneath acts as the pin's
+        // "stem" (visible below the pill), plus it's the
+        // safety net if the badge image hasn't loaded.
         minzoom: ZOOM_THRESHOLD_ICONS,
         layout: {
           'icon-image': ['get', 'iconKey'],
@@ -514,7 +528,10 @@ export default function ExploreMap({
           'text-halo-width': 2,
           'text-halo-blur': 0.3,
         },
-        minzoom: ZOOM_THRESHOLD_FEATURED,
+        // Name-mode labels are permanent (no hover) — too many
+        // of them at wide zoom would clutter the map. Hold them
+        // back until neighborhood zoom, then let them ride.
+        minzoom: ZOOM_THRESHOLD_NAME,
       })
 
       // Hover-triggered name label for dot-mode pins on desktop.
@@ -528,10 +545,11 @@ export default function ExploreMap({
         id: LAYER_HOVER_LABELS,
         type: 'symbol',
         source: SRC_POINTS,
-        // Any pin that isn't already showing a permanent label —
-        // dot mode. name / featured / portfolio all have their
-        // own labels, so hover on those is redundant.
-        filter: ['==', ['get', 'mode'], 'dot'],
+        // Every pin gets a hover label — user asked for name-
+        // on-hover for ALL locations on desktop. Featured /
+        // portfolio pins get their name via the pill badge
+        // already, so the hover text is slightly redundant
+        // there, but it's cheap and consistent.
         layout: {
           'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
@@ -552,8 +570,8 @@ export default function ExploreMap({
             ['boolean', ['feature-state', 'hover'], false], 1,
             0,
           ],
-          'text-opacity-transition': { duration: 120, delay: 0 },
         },
+        minzoom: ZOOM_THRESHOLD_ICONS,
       })
 
       // Wire the hover state — set feature-state.hover on
@@ -699,43 +717,66 @@ export default function ExploreMap({
   // registered, LAYER_LABEL_BADGES picks it up on next paint.
   // Dedup keyed by pin id so we don't re-render on every
   // photoMap or locations update.
-  const loadedBadgesRef = useRef<Set<string>>(new Set())
+  // Successfully-registered badge ids. Kept separate from
+  // in-flight so a mid-generation failure can retry.
+  const loadedBadgesRef  = useRef<Set<string>>(new Set())
+  const pendingBadgesRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !isReadyRef.current) return
-    const pm = photoMap ?? {}
-    let cancelled = false
-    ;(async () => {
+    if (!map) return
+    // Wait for the map's 'load' event before touching layers —
+    // isReadyRef is a ref (won't retrigger this effect), so if
+    // it isn't ready yet, schedule a one-shot rerun via a
+    // 'load' listener instead of early-exiting for good.
+    if (!isReadyRef.current) {
+      const onLoad = () => {
+        // Bump the pending set to trigger a re-eval on the next
+        // effect run (via locations reference identity would be
+        // cleaner, but we don't own that). Simpler: just do the
+        // work here directly.
+        runBadgeLoad()
+      }
+      map.once('load', onLoad)
+      return () => { map.off('load', onLoad) }
+    }
+    runBadgeLoad()
+
+    function runBadgeLoad() {
+      const m = mapRef.current
+      if (!m) return
+      const pm = photoMap ?? {}
       for (const loc of locations) {
         const mode = loc.mapDisplayMode ?? 'dot'
         if (mode !== 'featured' && mode !== 'portfolio') continue
         const imageId = `label-${loc.id}`
-        // Skip if we've already generated a badge for this pin
-        // in this session. If a new photo lands later the pin
-        // will just keep its emoji-fallback badge until reload
-        // — acceptable trade-off for keeping this loop cheap.
         if (loadedBadgesRef.current.has(imageId)) continue
-        if (map.hasImage(imageId)) { loadedBadgesRef.current.add(imageId); continue }
-        loadedBadgesRef.current.add(imageId)
+        if (pendingBadgesRef.current.has(imageId)) continue
+        if (m.hasImage(imageId)) { loadedBadgesRef.current.add(imageId); continue }
+        pendingBadgesRef.current.add(imageId)
         const visual = getCategoryVisual(loc.category, loc.access, loc.tags)
-        try {
-          const badge = await makeLabelBadgeImage({
-            thumbUrl: pm[String(loc.id)] || undefined,
-            name:     loc.name,
-            variant:  mode,
-            fallback: { color: visual.color, emoji: visual.emoji },
-          })
-          if (cancelled) return
-          if (!map.hasImage(imageId)) {
-            map.addImage(imageId, badge.data, { pixelRatio: badge.pixelRatio })
+        ;(async () => {
+          try {
+            const badge = await makeLabelBadgeImage({
+              thumbUrl: pm[String(loc.id)] || undefined,
+              name:     loc.name,
+              variant:  mode,
+              fallback: { color: visual.color, emoji: visual.emoji },
+            })
+            if (mapRef.current !== m) return  // map torn down
+            if (!m.hasImage(imageId)) {
+              m.addImage(imageId, badge.data, { pixelRatio: badge.pixelRatio })
+            }
+            loadedBadgesRef.current.add(imageId)
+          } catch {
+            // Swallow — pin still shows via the base dot + icon
+            // layers, and dropping the id from `pending` lets a
+            // subsequent effect run retry the badge.
+          } finally {
+            pendingBadgesRef.current.delete(imageId)
           }
-        } catch {
-          // Fully broken — nothing more to do, pin will show
-          // the underlying dot without a label.
-        }
+        })()
       }
-    })()
-    return () => { cancelled = true }
+    }
   }, [locations, photoMap])
 
   // ── Basemap view toggle (streets / satellite) ─────────────────
