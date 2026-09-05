@@ -106,25 +106,14 @@ export default function ClientMap({
   useEffect(() => { onMarkerClickRef.current = onMarkerClick }, [onMarkerClick])
 
   // ── Init ────────────────────────────────────────────────────────
-  // Deferred until `visible === true` because on mobile the
-  // .pick-map-col is `display: none` before the user taps "View
-  // Map". Initing MapLibre against a 0×0 container leaves the
-  // WebGL canvas stuck at 0×0 on some browsers even after a
-  // later map.resize(). Waiting until the container is on-screen
-  // avoids that class of bug entirely.
+  // Same init pattern ExploreMap uses — mount-once, let
+  // MapLibre's built-in ResizeObserver detect container size
+  // changes (e.g. mobile display:none → display:block).
   useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log('[ClientMap] init effect fired — visible:', visible, 'container:', containerRef.current, 'mapRef:', mapRef.current)
     if (!containerRef.current || mapRef.current) return
-    if (!visible) return
-    const rect = containerRef.current.getBoundingClientRect()
-    // eslint-disable-next-line no-console
-    console.log('[ClientMap] initializing MapLibre — container size:', rect.width, '×', rect.height)
 
     const map = new MLMap({
       container: containerRef.current,
-      // Dark style matches the guide page's dark chrome. Stadia
-      // Alidade Smooth Dark under the hood.
       style: getVectorStyle('dark'),
       center: [-94.58, 39.09],
       zoom: 11,
@@ -132,27 +121,8 @@ export default function ClientMap({
     mapRef.current = map
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
 
-    // Surface silent init failures to the console — mirrors the
-    // debug hook in ExploreMap.
-    map.on('error', (e: any) => {
-      // eslint-disable-next-line no-console
-      console.error('[ClientMap] MapLibre error:', e?.error?.message ?? e)
-    })
-    map.on('styledata', () => {
-      // eslint-disable-next-line no-console
-      console.log('[ClientMap] styledata event')
-    })
     map.on('load', () => {
-      // eslint-disable-next-line no-console
-      console.log('[ClientMap] style loaded — container size:', containerRef.current?.getBoundingClientRect())
       isReadyRef.current = true
-      // Belt-and-suspenders: force MapLibre to re-measure the
-      // container on the next two frames, in case the container
-      // was 0×0 at some subframe between class-toggle and load.
-      requestAnimationFrame(() => {
-        map.resize()
-        requestAnimationFrame(() => map.resize())
-      })
 
       map.addSource(SRC_POINTS, {
         type: 'geojson',
@@ -291,23 +261,13 @@ export default function ClientMap({
     }
     ;(map as any).__pushLocations = pushLocations
 
-    // NOTE: no cleanup returned here on purpose — the map is
-    // created once (on first visible=true) and kept alive for
-    // the rest of the component's lifetime. Actual teardown
-    // lives in the dedicated unmount effect below so toggling
-    // "View Map" / "View List" doesn't tear the WebGL context
-    // down and rebuild it every time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible])
-
-  // ── Unmount cleanup ─────────────────────────────────────────────
-  useEffect(() => () => {
-    isReadyRef.current = false
-    didInitialFitRef.current = false
-    if (mapRef.current) {
-      mapRef.current.remove()
+    return () => {
+      isReadyRef.current = false
+      didInitialFitRef.current = false
+      map.remove()
       mapRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Latest-value refs so pushLocations always sees current props.
