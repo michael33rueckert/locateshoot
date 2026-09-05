@@ -113,8 +113,13 @@ export default function ClientMap({
   // later map.resize(). Waiting until the container is on-screen
   // avoids that class of bug entirely.
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[ClientMap] init effect fired — visible:', visible, 'container:', containerRef.current, 'mapRef:', mapRef.current)
     if (!containerRef.current || mapRef.current) return
     if (!visible) return
+    const rect = containerRef.current.getBoundingClientRect()
+    // eslint-disable-next-line no-console
+    console.log('[ClientMap] initializing MapLibre — container size:', rect.width, '×', rect.height)
 
     const map = new MLMap({
       container: containerRef.current,
@@ -133,8 +138,21 @@ export default function ClientMap({
       // eslint-disable-next-line no-console
       console.error('[ClientMap] MapLibre error:', e?.error?.message ?? e)
     })
+    map.on('styledata', () => {
+      // eslint-disable-next-line no-console
+      console.log('[ClientMap] styledata event')
+    })
     map.on('load', () => {
+      // eslint-disable-next-line no-console
+      console.log('[ClientMap] style loaded — container size:', containerRef.current?.getBoundingClientRect())
       isReadyRef.current = true
+      // Belt-and-suspenders: force MapLibre to re-measure the
+      // container on the next two frames, in case the container
+      // was 0×0 at some subframe between class-toggle and load.
+      requestAnimationFrame(() => {
+        map.resize()
+        requestAnimationFrame(() => map.resize())
+      })
 
       map.addSource(SRC_POINTS, {
         type: 'geojson',
