@@ -116,16 +116,16 @@ export default function ClientMap({
       style: getVectorStyle('dark'),
       center: [-94.58, 39.09],
       zoom: 11,
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchZoomRotate: true,
-      minZoom: 2,
-      maxZoom: 20,
-      attributionControl: { compact: true },
     })
     mapRef.current = map
     map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
 
+    // Surface silent init failures to the console — mirrors the
+    // debug hook in ExploreMap.
+    map.on('error', (e: any) => {
+      // eslint-disable-next-line no-console
+      console.error('[ClientMap] MapLibre error:', e?.error?.message ?? e)
+    })
     map.on('load', () => {
       isReadyRef.current = true
 

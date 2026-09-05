@@ -1479,7 +1479,16 @@ export default function ClientPickerPage() {
         /* Desktop ≥1024: sidebar + map side by side. */
         .pick-body { display: grid; grid-template-columns: 420px 1fr; }
         .pick-sidebar { overflow: hidden; }
-        .pick-map-col { position: relative; }
+        .pick-map-col { position: relative; height: 100%; }
+        /* Force the WebGL map canvas to fill the map column.
+           Same pattern as .explore-map-col — without this the
+           MapLibre root can render at 0×0 inside the grid cell
+           on some browsers. */
+        .pick-map-col .maplibregl-map,
+        .pick-map-col .leaflet-container {
+          height: 100% !important;
+          min-height: 300px;
+        }
         .pick-mobile-toggle { display: none; }
 
         /* Default 'card' layout — vertical-hero card with full-width
