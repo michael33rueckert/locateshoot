@@ -408,13 +408,11 @@ export default function ExploreMap({
         id: LAYER_POINTS,
         type: 'circle',
         source: SRC_POINTS,
-        // No mode filter — every pin (dot / name / featured /
-        // portfolio) gets a base dot so the pin is never
-        // invisible if a downstream image (badge, icon)
-        // hasn't loaded yet. The badge pill for featured /
-        // portfolio sits above the dot (icon-anchor: bottom,
-        // -8 offset), so the visual reads as pin-with-bubble
-        // — same shape Google Maps uses.
+        // Featured / portfolio pins skip the base dot — the
+        // badge pill (with its own tail pointing at the
+        // coordinate) IS the pin for these modes. No dot
+        // underneath.
+        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
         // minzoom keeps the map clean on continent / country
         // view: nothing appears until the user has zoomed
         // past metro level.
@@ -444,11 +442,14 @@ export default function ExploreMap({
         id: LAYER_ICONS,
         type: 'symbol',
         source: SRC_POINTS,
-        // No mode filter — every pin gets an emoji icon.
-        // Featured / portfolio still get their badge pill on
-        // top; the emoji circle underneath acts as the pin's
-        // "stem" (visible below the pill), plus it's the
-        // safety net if the badge image hasn't loaded.
+        // Skip featured / portfolio — the badge is their pin.
+        // Without this filter, the emoji-icon at zoom >= 10
+        // claimed placement priority (icon-ignore-placement:
+        // true) and MapLibre culled the badge pill (which has
+        // icon-allow-overlap: false), so featured pins would
+        // vanish somewhere around zoom 10 and reappear when
+        // the ramp changed at higher zoom.
+        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
         minzoom: ZOOM_THRESHOLD_ICONS,
         layout: {
           'icon-image': ['get', 'iconKey'],
@@ -483,11 +484,20 @@ export default function ExploreMap({
             12, 0.65,
             15, 0.85,
           ],
+          // The badge image bakes a small triangular tail at
+          // its bottom center — anchoring 'bottom' with no
+          // offset puts the tip of that tail exactly on the
+          // coordinate. That's the "point" that marks the
+          // location.
           'icon-anchor': 'bottom',
-          'icon-offset': [0, -8],
-          'icon-allow-overlap': false,
-          // Optional so a pin still shows if the image is
-          // mid-load (parent renders the underlying dot).
+          'icon-offset': [0, 0],
+          // Never let another symbol cull the badge. Without
+          // this, once the emoji-icon layer kicked in at zoom
+          // 10 it took placement priority and the badge would
+          // disappear at that zoom range and only come back
+          // when the icon shrank.
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
           'icon-optional': true,
         },
         minzoom: ZOOM_THRESHOLD_FEATURED,

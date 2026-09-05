@@ -120,12 +120,20 @@ export async function makeLabelBadgeImage(opts: {
     } catch { /* fall through to emoji fallback */ }
   }
 
-  const heightPx  = 52
-  const thumbPx   = 44
-  const padPx     = 4
-  const gapPx     = 8
-  const namePx    = 13
-  const subPx     = 9
+  const pillHeightPx = 52
+  const thumbPx      = 44
+  const padPx        = 4
+  const gapPx        = 8
+  const namePx       = 13
+  const subPx        = 9
+  // Little downward-pointing triangle baked into the bottom
+  // of the image. The badge is anchored 'bottom' with zero
+  // offset, so the tip of this tail sits exactly on the
+  // location's lng/lat — that's the "point" that marks
+  // where the pin actually is.
+  const tailHeightPx = 7
+  const tailWidthPx  = 12
+  const heightPx     = pillHeightPx + tailHeightPx
 
   // Measure text width using a throwaway canvas ctx.
   const measure = document.createElement('canvas').getContext('2d')!
@@ -142,16 +150,21 @@ export async function makeLabelBadgeImage(opts: {
   const rightPad = 14
   const widthPx  = padPx + thumbPx + gapPx + textW + rightPad
 
-  const width  = widthPx  * pixelRatio
-  const height = heightPx * pixelRatio
+  const width      = widthPx      * pixelRatio
+  const height     = heightPx     * pixelRatio
+  const pillHeight = pillHeightPx * pixelRatio
+  const tailH      = tailHeightPx * pixelRatio
+  const tailW      = tailWidthPx  * pixelRatio
   const canvas = document.createElement('canvas')
   canvas.width  = width
   canvas.height = height
   const ctx = canvas.getContext('2d')!
 
   // Pill background — rounded rectangle with a soft shadow
-  // baked in so it floats over the map tiles.
-  const cornerR = height / 2
+  // baked in so it floats over the map tiles. Sits in the
+  // TOP of the canvas; the bottom `tailH` px is reserved for
+  // the pointer tail drawn next.
+  const cornerR = pillHeight / 2
   ctx.shadowColor   = 'rgba(0, 0, 0, 0.28)'
   ctx.shadowBlur    = 4 * pixelRatio
   ctx.shadowOffsetY = 1 * pixelRatio
@@ -160,8 +173,21 @@ export async function makeLabelBadgeImage(opts: {
   ctx.moveTo(cornerR, 0)
   ctx.lineTo(width - cornerR, 0)
   ctx.arc(width - cornerR, cornerR, cornerR, -Math.PI / 2, Math.PI / 2)
-  ctx.lineTo(cornerR, height)
+  ctx.lineTo(cornerR, pillHeight)
   ctx.arc(cornerR, cornerR, cornerR, Math.PI / 2, -Math.PI / 2)
+  ctx.closePath()
+  ctx.fill()
+
+  // Tail — small isosceles triangle pointing straight down
+  // from the pill's bottom center. Half-pixel overlap into
+  // the pill hides the seam. Shadow is still active so the
+  // tail casts one too, keeping it visually part of the pill.
+  const cx = width / 2
+  const tailBaseY = pillHeight - 0.5 * pixelRatio
+  ctx.beginPath()
+  ctx.moveTo(cx - tailW / 2, tailBaseY)
+  ctx.lineTo(cx,             pillHeight + tailH)
+  ctx.lineTo(cx + tailW / 2, tailBaseY)
   ctx.closePath()
   ctx.fill()
 
@@ -174,7 +200,10 @@ export async function makeLabelBadgeImage(opts: {
   // spot instead so pins without photos still look like the
   // rest of the featured/portfolio badges.
   const thumbCx = (padPx + thumbPx / 2) * pixelRatio
-  const thumbCy = height / 2
+  // Vertical center of the PILL (not the whole canvas — the
+  // canvas now includes the tail underneath, so `height / 2`
+  // would push everything downward and clip through the tail).
+  const thumbCy = pillHeight / 2
   const thumbR  = (thumbPx / 2 - 2) * pixelRatio
   if (img) {
     ctx.save()
