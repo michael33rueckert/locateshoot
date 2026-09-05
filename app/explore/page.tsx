@@ -1862,12 +1862,13 @@ export default function ExplorePage() {
           height: 100% !important;
           min-height: 300px;
         }
-        /* Push the +/- zoom control up so it clears the
-           Help + Feedback launchers pinned to the bottom-
-           right of the viewport (FeedbackButton at bottom:14,
-           HelpChatLauncher at bottom:60, each ~40px tall). */
+        /* Push the +/− zoom control (and the compass MapLibre
+           renders next to it) up so it clears Feedback (14),
+           Help (60), AND the new Satellite toggle (106) —
+           leaving all four stacks reachable on the right edge
+           of the viewport. */
         .explore-map-col .maplibregl-ctrl-bottom-right {
-          bottom: calc(env(safe-area-inset-bottom, 0) + 110px) !important;
+          bottom: calc(env(safe-area-inset-bottom, 0) + 164px) !important;
         }
         /* Mobile-only back-to-Dashboard chip next to hamburger */
         .explore-back-dash { display: none; }

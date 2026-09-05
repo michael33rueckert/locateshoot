@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Map as MLMap, NavigationControl, setWorkerUrl } from 'maplibre-gl'
+import { Map as MLMap, NavigationControl, AttributionControl, setWorkerUrl } from 'maplibre-gl'
 import type { GeoJSONSource, MapMouseEvent, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl'
 
 // Point MapLibre's tile-processing worker at a self-hosted
@@ -192,8 +192,17 @@ export default function ExploreMap({
       style: getVectorStyle('light'),
       center: initial.center,
       zoom: initial.zoom,
+      // Turn OFF the default attribution — we add a compact
+      // one manually below so it's just a small "i" bubble
+      // instead of the full attribution text sprawl.
+      attributionControl: false,
     })
     mapRef.current = map
+
+    // Compact attribution ("i" bubble) in the bottom-left. Small
+    // enough to sit alongside the Help + Feedback launchers
+    // without covering any map controls.
+    map.addControl(new AttributionControl({ compact: true }), 'bottom-left')
 
     // Faster wheel / trackpad zoom. Defaults are 1/450 and
     // 1/100 which feel sluggish — bumped 3-4× so a normal
@@ -742,23 +751,28 @@ export default function ExploreMap({
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      {/* Streets / Satellite basemap toggle — same footprint as
-          Google Maps' Layers pill (top-right of the map). One
-          click flips between vector streets and Esri satellite
-          raster. */}
+      {/* Streets / Satellite basemap toggle. Bottom-right of
+          the map, above Help+Feedback launchers and below the
+          zoom+compass control (which the CSS in explore/page
+          pushes up to bottom:164). Compact 40×40 button with
+          a tiny label — Google Maps also keeps this small so
+          it doesn't fight the map for attention. */}
       <button
         type="button"
         onClick={() => setViewMode(m => m === 'streets' ? 'satellite' : 'streets')}
-        title={viewMode === 'streets' ? 'Switch to satellite' : 'Switch to map'}
+        title={viewMode === 'streets' ? 'Switch to satellite view' : 'Switch to map view'}
         aria-label={viewMode === 'streets' ? 'Switch to satellite view' : 'Switch to map view'}
         style={{
           position: 'absolute',
-          top: 12,
-          right: 12,
+          // Sits above Help (bottom:60) with ~14px gap. Zoom is
+          // at bottom:164 via CSS, so 106 → ~146 for the 40px
+          // button leaves a comfortable 18px gap above.
+          bottom: 'calc(env(safe-area-inset-bottom, 0) + 106px)',
+          right: 14,
           zIndex: 10,
           padding: 3,
-          width: 48,
-          height: 48,
+          width: 40,
+          height: 40,
           borderRadius: 8,
           border: '1px solid rgba(0,0,0,0.15)',
           background: 'white',
@@ -768,11 +782,15 @@ export default function ExploreMap({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          // Mobile: waive the tap delay and disable the
+          // gray tap-highlight for a clean touch feel.
+          touchAction: 'manipulation',
+          WebkitTapHighlightColor: 'transparent',
         }}
       >
-        {/* Thumbnail-style preview of the OPPOSITE mode (matches
-            Google Maps' layers button UX — the pill shows what
-            you'll get if you tap). */}
+        {/* Thumbnail preview of the OPPOSITE mode with a
+            tiny 9px label overlay. Short two/three-letter
+            label fits comfortably in the 34px inner area. */}
         <div style={{
           width: '100%',
           height: '100%',
@@ -780,26 +798,20 @@ export default function ExploreMap({
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundImage: viewMode === 'streets'
-            // preview satellite when currently on streets
             ? 'url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/12/1585/936")'
-            // preview streets when currently on satellite (a soft
-            // muted swatch — MapLibre's own demo tile server
-            // rate-limits so we don't hotlink it here).
             : 'linear-gradient(135deg, #eef2f6, #d7dbe0)',
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'center',
-          color: '#1a1612',
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: 700,
           textTransform: 'uppercase',
-          letterSpacing: 0.5,
-          textShadow: viewMode === 'streets'
-            ? '0 1px 2px rgba(0,0,0,0.5)' : 'none',
-          paddingBottom: 3,
+          letterSpacing: 0.4,
+          paddingBottom: 2,
+          textShadow: viewMode === 'streets' ? '0 1px 2px rgba(0,0,0,0.55)' : 'none',
         }}>
           <span style={{ color: viewMode === 'streets' ? '#fff' : '#1a1612' }}>
-            {viewMode === 'streets' ? 'Satellite' : 'Map'}
+            {viewMode === 'streets' ? 'Sat' : 'Map'}
           </span>
         </div>
       </button>
