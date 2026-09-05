@@ -90,6 +90,7 @@ const LAYER_POINTS        = 'unclustered-point'
 const LAYER_ICONS         = 'point-icons'
 const LAYER_LABELS        = 'point-labels'
 const LAYER_LABEL_BADGES  = 'point-label-badges'
+const LAYER_HOVER_LABELS  = 'point-hover-labels'
 const LAYER_USER_DOT      = 'user-dot'
 const LAYER_HOME_DOT      = 'home-dot'
 const LAYER_SATELLITE     = 'satellite'
@@ -478,10 +479,12 @@ export default function ExploreMap({
         minzoom: ZOOM_THRESHOLD_FEATURED,
       })
 
-      // Text-only pill for `name`-mode pins (no photo, just
-      // location name). Featured + portfolio pins that already
-      // have a badge image skip this layer via the ['!', ['has',
-      // 'labelImageId']] clause.
+      // Permanent text-only label for `name`-mode pins. No
+      // pill / no background — Google-Maps-style place labels
+      // with a chunky white halo so the text stays legible
+      // over any basemap. Featured / portfolio pins skip this
+      // layer via the labelImageId filter (they have their own
+      // pill badge from LAYER_LABEL_BADGES).
       map.addLayer({
         id: LAYER_LABELS,
         type: 'symbol',
@@ -489,19 +492,10 @@ export default function ExploreMap({
         filter: [
           'all',
           ['!', ['has', 'labelImageId']],
-          ['match',
-            ['get', 'mode'],
-            ['name'], true,
-            false,
-          ],
+          ['==', ['get', 'mode'], 'name'],
         ],
         layout: {
-          'text-field': [
-            'case',
-            ['==', ['get', 'mode'], 'portfolio'],
-              ['concat', ['get', 'name'], '\n📷 In your portfolio'],
-            ['get', 'name'],
-          ],
+          'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
           'text-size': [
             'interpolate', ['linear'], ['zoom'],
@@ -509,23 +503,78 @@ export default function ExploreMap({
             15, 12,
           ],
           'text-anchor': 'top',
-          'text-offset': [0, 1.4],
+          'text-offset': [0, 1.0],
           'text-max-width': 10,
-          'icon-image': [
-            'case',
-            ['==', ['get', 'mode'], 'portfolio'], 'pill-portfolio',
-            'pill-featured',
-          ],
-          'icon-text-fit': 'both',
-          'icon-text-fit-padding': [4, 10, 4, 10],
-          'icon-allow-overlap': false,
+          'text-allow-overlap': false,
           'text-optional': false,
         },
         paint: {
           'text-color': '#1a1612',
+          'text-halo-color': 'rgba(255,255,255,0.92)',
+          'text-halo-width': 2,
+          'text-halo-blur': 0.3,
         },
         minzoom: ZOOM_THRESHOLD_FEATURED,
       })
+
+      // Hover-triggered name label for dot-mode pins on desktop.
+      // Text-only with a heavy halo (same visual as the
+      // permanent name labels). text-opacity flips 0 → 1 via
+      // feature-state.hover, so it stays 100% GPU-driven — no
+      // JS runs on mousemove other than a single setFeatureState
+      // per pin transition. Touch devices never fire hover so
+      // this layer is naturally desktop-only.
+      map.addLayer({
+        id: LAYER_HOVER_LABELS,
+        type: 'symbol',
+        source: SRC_POINTS,
+        // Any pin that isn't already showing a permanent label —
+        // dot mode. name / featured / portfolio all have their
+        // own labels, so hover on those is redundant.
+        filter: ['==', ['get', 'mode'], 'dot'],
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
+          'text-size': 12,
+          'text-anchor': 'top',
+          'text-offset': [0, 1.0],
+          'text-max-width': 10,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#1a1612',
+          'text-halo-color': 'rgba(255,255,255,0.92)',
+          'text-halo-width': 2,
+          'text-halo-blur': 0.3,
+          'text-opacity': [
+            'case',
+            ['boolean', ['feature-state', 'hover'], false], 1,
+            0,
+          ],
+          'text-opacity-transition': { duration: 120, delay: 0 },
+        },
+      })
+
+      // Wire the hover state — set feature-state.hover on
+      // whichever pin the pointer is currently over, clear it
+      // when the pointer leaves.
+      let hoveredPointId: string | number | null = null
+      const clearHover = () => {
+        if (hoveredPointId != null) {
+          map.setFeatureState({ source: SRC_POINTS, id: hoveredPointId }, { hover: false })
+          hoveredPointId = null
+        }
+      }
+      map.on('mousemove', LAYER_POINTS, (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+        const feat = e.features?.[0]
+        if (!feat || feat.id == null) return
+        if (hoveredPointId === feat.id) return
+        clearHover()
+        hoveredPointId = feat.id as string | number
+        map.setFeatureState({ source: SRC_POINTS, id: hoveredPointId }, { hover: true })
+      })
+      map.on('mouseleave', LAYER_POINTS, clearHover)
 
       // Click handler is bound to point + icon + label layers
       // so a tap on any shape (dot, category icon, pill) opens
