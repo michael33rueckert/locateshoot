@@ -271,7 +271,17 @@ function DetailPanel({ loc, initialPhotoUrl, portfolioId, isFavorite, onToggleFa
             actually the start of a double-tap-to-zoom gesture,
             which is why the X was sometimes eating the first tap.
             Bumped to 40px for a comfortable Apple HIG tap target. */}
-        <button onClick={onClose} style={{position:'absolute',top:12,right:12,width:40,height:40,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:18,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10,touchAction:'manipulation',WebkitTapHighlightColor:'transparent'}}>✕</button>
+        {/* onPointerDown instead of just onClick: after a photo
+            swipe, iOS sometimes cancels the click event on the
+            subsequent tap because it's still processing the
+            gesture. onPointerDown fires the moment the finger
+            lands, regardless of what came before. onClick stays
+            as the keyboard/mouse fallback. */}
+        <button
+          onClick={onClose}
+          onPointerDown={onClose}
+          style={{position:'absolute',top:12,right:12,width:40,height:40,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:18,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10,touchAction:'manipulation',WebkitTapHighlightColor:'transparent'}}
+        >✕</button>
 
         {/* Photo area — Google Places photos only. We removed community
             uploads + the Photographer / Add-yours tabs along with the rest
@@ -1869,6 +1879,20 @@ export default function ExplorePage() {
            of the viewport. */
         .explore-map-col .maplibregl-ctrl-bottom-right {
           bottom: calc(env(safe-area-inset-bottom, 0) + 164px) !important;
+        }
+        /* Push the compact attribution "i" up above the click-
+           anchor banner (which sits at bottom:24, left:16 on
+           the map). Keeps the "i" on the left but out from
+           behind the banner. */
+        .explore-map-col .maplibregl-ctrl-bottom-left {
+          bottom: calc(env(safe-area-inset-bottom, 0) + 130px) !important;
+        }
+        /* Red-north compass — replace MapLibre's default
+           needle SVG with a two-tone one where north is red
+           and south is gray, so at a glance it's obvious
+           which way is up. */
+        .explore-map-col .maplibregl-ctrl-compass .maplibregl-ctrl-icon {
+          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><polygon fill='%23e74c3c' points='12,4 15.5,12 12,10.5 8.5,12'/><polygon fill='%2395a5a6' points='12,20 15.5,12 12,13.5 8.5,12'/></svg>") !important;
         }
         /* Mobile-only back-to-Dashboard chip next to hamburger */
         .explore-back-dash { display: none; }

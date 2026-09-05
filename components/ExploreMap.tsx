@@ -402,6 +402,11 @@ export default function ExploreMap({
         id: LAYER_POINTS,
         type: 'circle',
         source: SRC_POINTS,
+        // Featured / portfolio pins skip the base dot — their
+        // badge pill already carries the pin's visual weight,
+        // and layering a small dot underneath just looks like
+        // a stray artifact.
+        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
         paint: {
           'circle-color': [
             'case',
@@ -422,10 +427,13 @@ export default function ExploreMap({
       // Category icons — colored circle with an emoji baked in.
       // Simple zoom-based size ramp (no feature-state inside
       // interpolate output for the same reason as above).
+      // Same filter as LAYER_POINTS — featured/portfolio pins
+      // only get the badge pill, not the emoji circle on top.
       map.addLayer({
         id: LAYER_ICONS,
         type: 'symbol',
         source: SRC_POINTS,
+        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
         minzoom: ZOOM_THRESHOLD_ICONS,
         layout: {
           'icon-image': ['get', 'iconKey'],
