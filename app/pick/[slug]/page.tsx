@@ -162,6 +162,10 @@ export default function ClientPickerPage() {
   // otherwise the first fit happens while the container is display:none and
   // leaflet stays parked on the fallback center.
   const [isDesktopViewport, setIsDesktopViewport] = useState(true)
+  // Latch — flips true the first time the map container is
+  // actually visible, and stays true. Gates the ClientMap mount
+  // so MapLibre never inits into a display:none container.
+  const [everRenderedMap, setEverRenderedMap] = useState(false)
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return
     const mql = window.matchMedia('(min-width: 769px)')
@@ -171,6 +175,9 @@ export default function ClientPickerPage() {
     return () => mql.removeEventListener('change', apply)
   }, [])
   const mapContainerVisible = isDesktopViewport || mobileMapVisible
+  useEffect(() => {
+    if (mapContainerVisible && !everRenderedMap) setEverRenderedMap(true)
+  }, [mapContainerVisible, everRenderedMap])
   const emailRef     = useRef<HTMLInputElement>(null)
   const firstNameRef = useRef<HTMLInputElement>(null)
 
@@ -1054,7 +1061,19 @@ export default function ClientPickerPage() {
               ← List
             </button>
           )}
-          <ClientMap locations={locations} activeId={activeId} chosenIds={chosenIds} disabledIds={disabledIds} onMarkerClick={handleMarkerClick} visible={mapContainerVisible} />
+          {/* Only mount ClientMap when the container is actually
+              visible. On mobile the .pick-map-col starts
+              display:none — mounting the map into that would init
+              MapLibre against a 0×0 container, which some
+              browsers can't recover from even after a later
+              resize. Gating the mount on mapContainerVisible
+              means MapLibre always inits with real dimensions.
+              Once mounted it stays mounted for the rest of the
+              session (see everRenderedMap below) so toggling
+              View Map / View List doesn't tear the map down. */}
+          {everRenderedMap && (
+            <ClientMap locations={locations} activeId={activeId} chosenIds={chosenIds} disabledIds={disabledIds} onMarkerClick={handleMarkerClick} visible={mapContainerVisible} />
+          )}
         </div>
       </div>
 
