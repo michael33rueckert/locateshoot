@@ -14,7 +14,7 @@ import LocationEditModal, { type ManagedLocation } from '@/components/admin/Loca
 import LocationPhotosModal from '@/components/admin/LocationPhotosModal'
 import AddLocationModal, { type NewLocation } from '@/components/admin/AddLocationModal'
 import { isAdminEmail } from '@/lib/admin'
-import { thumbUrl } from '@/lib/image'
+import { thumbUrl, tileUrl, mediumUrl } from '@/lib/image'
 import type { ExploreLocation } from '@/components/ExploreMap'
 
 const ExploreMap = dynamic(() => import('@/components/ExploreMap'), { ssr: false })
@@ -309,23 +309,42 @@ function DetailPanel({ loc, initialPhotoUrl, portfolioId, isFavorite, onToggleFa
                 transition:REST_TRANSITION,
                 willChange:'transform',
               }}>
-                {googlePhotos.map((p, i) => (
-                  <img
-                    key={i}
-                    src={p.url}
-                    alt={loc.name}
-                    onClick={onPhotoClick}
-                    draggable={false}
-                    style={{
-                      flex:'0 0 100%',
-                      width:'100%',
-                      height:'100%',
-                      objectFit:'cover',
-                      cursor:'zoom-in',
-                      userSelect:'none',
-                    }}
-                  />
-                ))}
+                {googlePhotos.map((p, i) => {
+                  // Photographer uploads land here as full-res
+                  // originals (5–8 MB each) — piping them through
+                  // Supabase's on-the-fly render endpoint at 1200
+                  // px drops that to ~200 KB with no visible loss
+                  // at carousel size, and makes decode fast enough
+                  // that swiping between them stays smooth on
+                  // mobile. External URLs (Google/Wiki) pass
+                  // through unchanged since they're already sized.
+                  // Non-adjacent photos get loading="lazy" +
+                  // decoding="async" so scrolling to photo 8
+                  // doesn't pay to decode photos 3–7 first.
+                  const src = mediumUrl(p.url) ?? p.url
+                  const adjacent = Math.abs(i - activePhoto) <= 1
+                  return (
+                    <img
+                      key={i}
+                      src={src}
+                      alt={loc.name}
+                      onClick={onPhotoClick}
+                      draggable={false}
+                      loading={adjacent ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={adjacent ? 'high' : 'low'}
+                      onError={e => { if (e.currentTarget.src !== p.url) e.currentTarget.src = p.url }}
+                      style={{
+                        flex:'0 0 100%',
+                        width:'100%',
+                        height:'100%',
+                        objectFit:'cover',
+                        cursor:'zoom-in',
+                        userSelect:'none',
+                      }}
+                    />
+                  )
+                })}
               </div>
             )
             /* Instant placeholder — sidebar already has the thumb
@@ -354,7 +373,16 @@ function DetailPanel({ loc, initialPhotoUrl, portfolioId, isFavorite, onToggleFa
         </div>
 
         {hasGoogle&&googlePhotos.length>1&&<div style={{display:'flex',gap:4,padding:'8px 1.25rem',overflowX:'auto',borderBottom:'1px solid var(--cream-dark)'}}>
-          {googlePhotos.map((p,i)=><div key={i} onClick={()=>setActivePhoto(i)} style={{width:56,height:56,borderRadius:6,flexShrink:0,overflow:'hidden',cursor:'pointer',border:`2px solid ${activePhoto===i?'var(--gold)':'transparent'}`}}><img src={p.url} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>)}
+          {/* 56×56 thumbs — tileUrl serves a 120×120 render
+              (~10–20 KB) instead of the multi-MB original. */}
+          {googlePhotos.map((p,i)=>{
+            const src = tileUrl(p.url) ?? p.url
+            return (
+              <div key={i} onClick={()=>setActivePhoto(i)} style={{width:56,height:56,borderRadius:6,flexShrink:0,overflow:'hidden',cursor:'pointer',border:`2px solid ${activePhoto===i?'var(--gold)':'transparent'}`}}>
+                <img src={src} alt="" loading="lazy" decoding="async" onError={e => { if (e.currentTarget.src !== p.url) e.currentTarget.src = p.url }} style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+              </div>
+            )
+          })}
         </div>}
         <div style={{padding:'6px 1.25rem',borderBottom:'1px solid var(--cream-dark)',display:'flex',alignItems:'center',gap:6}}><img src="https://developers.google.com/static/maps/documentation/images/google_on_white.png" alt="Google" style={{height:11,opacity:.4}}/><span style={{fontSize:10,color:'var(--ink-soft)'}}>Photos via Google · Not affiliated with LocateShoot</span></div>
 
