@@ -76,14 +76,26 @@ const HOME_CITY_ZOOM = 11
 // All three dropped from their Leaflet-era values so pins pick
 // up their rich visuals much sooner as the user zooms in
 // (previously you had to be nearly at street level to see them).
-const ZOOM_THRESHOLD_NAME     = 12
-const ZOOM_THRESHOLD_FEATURED = 8
-const ZOOM_THRESHOLD_ICONS    = 10
-// Below this zoom, no pins render at all — the map stays
-// clean the way Google Maps hides POIs on the continent /
-// country view. Pins start popping in around metro-area
-// zoom.
-const ZOOM_THRESHOLD_PIN_MIN  = 8
+// ── LOD zoom bands (Google-Maps-style tiers) ────────────
+// Featured (highest priority): visible from city view up.
+// Named   (medium priority):  visible from neighborhood up.
+// Dot     (lowest priority):  visible from street level up.
+// Higher tiers ALSO participate in collision at lower
+// tiers' zoom — a Named symbol at zoom 12 that would
+// collide with a Featured badge yields; a Dot at zoom 14
+// that would collide with either yields; etc.
+const ZOOM_THRESHOLD_FEATURED = 8   // city
+const ZOOM_THRESHOLD_NAME     = 12  // neighborhood
+const ZOOM_THRESHOLD_DOT      = 14  // street
+
+// ── Symbol sort keys (collision-tie priority) ───────────
+// MapLibre draws + places lower sort-key features first —
+// so lower value = higher priority. Cross-layer placement
+// priority is set by `addLayer` order, but we also stamp
+// sort keys explicitly so within-layer ties are stable.
+const SORT_FEATURED = 0
+const SORT_NAMED    = 1
+const SORT_DOT      = 2
 
 // GeoJSON source id + layer ids — module-level constants so
 // helpers and effects reference the same strings without typos.
@@ -202,6 +214,12 @@ export default function ExploreMap({
       // one manually below so it's just a small "i" bubble
       // instead of the full attribution text sprawl.
       attributionControl: false,
+      // Collision-driven show/hide fade duration (ms). When
+      // a marker crosses its zoom threshold and wins its
+      // collision, MapLibre eases opacity 0 → 1 over this
+      // window instead of pop-in. Applied on all symbol
+      // layers uniformly.
+      fadeDuration: 300,
     })
     mapRef.current = map
 
@@ -393,122 +411,68 @@ export default function ExploreMap({
         map.addImage(id, img.data, { pixelRatio: img.pixelRatio })
       })
 
-      // Unclustered individual points. Small colored circle
-      // that gives a low-density scan at wide zoom — replaced
-      // by the emoji icon layer at zoom >= ZOOM_THRESHOLD_ICONS
-      // via maxzoom, so both layers never render at once.
-      // Colored dots. Rendered at ALL zoom levels — the icon
-      // layer above (zoom >= ICON threshold) simply covers them
-      // because the icon bitmap is larger than the dot radius.
-      // Kept simple: constant zoom-based interpolate (no case
-      // inside the output) — mixing feature-state into a zoom
-      // interpolate output was producing empty renders on some
-      // MapLibre versions.
-      map.addLayer({
-        id: LAYER_POINTS,
-        type: 'circle',
-        source: SRC_POINTS,
-        // Featured / portfolio pins skip the base dot — the
-        // badge pill (with its own tail pointing at the
-        // coordinate) IS the pin for these modes. No dot
-        // underneath.
-        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
-        // minzoom keeps the map clean on continent / country
-        // view: nothing appears until the user has zoomed
-        // past metro level.
-        minzoom: ZOOM_THRESHOLD_PIN_MIN,
-        paint: {
-          'circle-color': [
-            'case',
-            ['boolean', ['feature-state', 'active'], false], '#c4922a',
-            ['get', 'color'],
-          ],
-          'circle-radius': [
-            'interpolate', ['linear'], ['zoom'],
-            8,  3,
-            12, 5,
-          ],
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': '#ffffff',
-        },
-      })
+      // ── LAYER ORDER MATTERS ─────────────────────────────
+      // MapLibre's cross-layer collision system places
+      // symbols in layer-add order. First layer added wins
+      // ties; later layers yield. To get the Featured →
+      // Named → Dot priority we want, they MUST be added
+      // in that order below. Visually, later layers draw
+      // on top — but strict collision (allow-overlap:false
+      // + ignore-placement:false on each layer) means the
+      // pins never actually stack anyway, so the visual
+      // z-order is moot.
+      // ────────────────────────────────────────────────────
 
-      // Category icons — colored circle with an emoji baked in.
-      // Simple zoom-based size ramp (no feature-state inside
-      // interpolate output for the same reason as above).
-      // Same filter as LAYER_POINTS — featured/portfolio pins
-      // only get the badge pill, not the emoji circle on top.
-      map.addLayer({
-        id: LAYER_ICONS,
-        type: 'symbol',
-        source: SRC_POINTS,
-        // Skip featured / portfolio — the badge is their pin.
-        // Without this filter, the emoji-icon at zoom >= 10
-        // claimed placement priority (icon-ignore-placement:
-        // true) and MapLibre culled the badge pill (which has
-        // icon-allow-overlap: false), so featured pins would
-        // vanish somewhere around zoom 10 and reappear when
-        // the ramp changed at higher zoom.
-        filter: ['!', ['match', ['get', 'mode'], ['featured', 'portfolio'], true, false]],
-        minzoom: ZOOM_THRESHOLD_ICONS,
-        layout: {
-          'icon-image': ['get', 'iconKey'],
-          'icon-size': [
-            'interpolate', ['linear'], ['zoom'],
-            10, 0.55,
-            14, 0.95,
-            17, 1.1,
-          ],
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-      })
-
-      // Pre-composited badge for featured / portfolio pins:
-      // pill + circular thumbnail (or category emoji fallback)
-      // + name + optional "IN YOUR PORTFOLIO" subtitle. Baked
-      // per pin by makeLabelBadgeImage below and registered
-      // via map.addImage. Filter matches only pins whose id
-      // has been registered — pins waiting on thumb load fall
-      // through to the text-pill layer below.
+      // ── Tier 1 · FEATURED (highest priority) ────────────
+      // Pill + thumbnail + name + tail pointer, baked per
+      // pin by makeLabelBadgeImage and registered via
+      // map.addImage. Visible from city view up. Placed
+      // FIRST, so any Named / Dot that would collide with
+      // this badge simply doesn't render.
       map.addLayer({
         id: LAYER_LABEL_BADGES,
         type: 'symbol',
         source: SRC_POINTS,
         filter: ['has', 'labelImageId'],
         layout: {
+          'symbol-sort-key': SORT_FEATURED,
           'icon-image': ['get', 'labelImageId'],
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            9,  0.42,
+            8,  0.40,
             12, 0.65,
             15, 0.85,
           ],
-          // The badge image bakes a small triangular tail at
-          // its bottom center — anchoring 'bottom' with no
-          // offset puts the tip of that tail exactly on the
-          // coordinate. That's the "point" that marks the
-          // location.
+          // Tail tip at the exact coordinate (see
+          // makeLabelBadgeImage — triangle is baked into
+          // the image's bottom-center).
           'icon-anchor': 'bottom',
           'icon-offset': [0, 0],
-          // Never let another symbol cull the badge. Without
-          // this, once the emoji-icon layer kicked in at zoom
-          // 10 it took placement priority and the badge would
-          // disappear at that zoom range and only come back
-          // when the icon shrank.
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
+          // Strict collision — Featured badges yield to
+          // one another when two pins sit right next to
+          // each other, matching Google Maps behavior.
+          // No allow-overlap: their icon must fit or it
+          // gets culled (only relevant when a Featured
+          // sits inside another Featured's bounding box,
+          // which is rare — but the sort-key + first-
+          // added guarantees a stable winner).
+          'icon-allow-overlap': false,
+          'icon-ignore-placement': false,
+          // Optional so a pin still resolves if its baked
+          // image hasn't loaded yet — MapLibre will fade
+          // it in when the addImage lands, without a hard
+          // pop.
           'icon-optional': true,
         },
         minzoom: ZOOM_THRESHOLD_FEATURED,
       })
 
-      // Permanent text-only label for `name`-mode pins. No
-      // pill / no background — Google-Maps-style place labels
-      // with a chunky white halo so the text stays legible
-      // over any basemap. Featured / portfolio pins skip this
-      // layer via the labelImageId filter (they have their own
-      // pill badge from LAYER_LABEL_BADGES).
+      // ── Tier 2 · NAMED (medium priority) ────────────────
+      // Permanent text-only label. Google-Maps-style place
+      // label with a chunky white halo. Visible from
+      // neighborhood zoom up. Placed AFTER Featured, so
+      // any Named that would collide with a Featured badge
+      // is culled entirely.
       map.addLayer({
         id: LAYER_LABELS,
         type: 'symbol',
@@ -519,17 +483,19 @@ export default function ExploreMap({
           ['==', ['get', 'mode'], 'name'],
         ],
         layout: {
+          'symbol-sort-key': SORT_NAMED,
           'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
           'text-size': [
             'interpolate', ['linear'], ['zoom'],
-            11, 11,
-            15, 12,
+            12, 11,
+            16, 12,
           ],
-          'text-anchor': 'top',
-          'text-offset': [0, 1.0],
+          'text-anchor': 'center',
           'text-max-width': 10,
+          // Strict collision — Named labels never stack.
           'text-allow-overlap': false,
+          'text-ignore-placement': false,
           'text-optional': false,
         },
         paint: {
@@ -538,10 +504,69 @@ export default function ExploreMap({
           'text-halo-width': 2,
           'text-halo-blur': 0.3,
         },
-        // Name-mode labels are permanent (no hover) — too many
-        // of them at wide zoom would clutter the map. Hold them
-        // back until neighborhood zoom, then let them ride.
         minzoom: ZOOM_THRESHOLD_NAME,
+      })
+
+      // ── Tier 3 · DOT emoji (low priority) ───────────────
+      // Colored circle with the category emoji baked in.
+      // Visible from street level up. Placed AFTER Named
+      // and Featured, so any Dot that would collide with a
+      // higher-tier symbol is culled.
+      map.addLayer({
+        id: LAYER_ICONS,
+        type: 'symbol',
+        source: SRC_POINTS,
+        // Only dot-mode gets the emoji icon. Name-mode
+        // pins render as text-only labels above; Featured
+        // pins render via LAYER_LABEL_BADGES.
+        filter: ['==', ['get', 'mode'], 'dot'],
+        minzoom: ZOOM_THRESHOLD_DOT,
+        layout: {
+          'symbol-sort-key': SORT_DOT,
+          'icon-image': ['get', 'iconKey'],
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            14, 0.75,
+            17, 1.10,
+          ],
+          // Strict collision — dots never stack.
+          'icon-allow-overlap': false,
+          'icon-ignore-placement': false,
+        },
+      })
+
+      // ── Tier 3b · DOT circle (renders below the emoji) ──
+      // Pure-visual circle underlay for dot-mode pins. The
+      // circle-type layer doesn't participate in symbol
+      // collision, so it only renders WHERE a dot-mode pin
+      // was already going to render — the LAYER_ICONS above
+      // gated at the same minzoom + same filter effectively
+      // controls visibility. Kept as a separate layer so
+      // active-state (setFeatureState) can recolor it via a
+      // simple paint expression.
+      map.addLayer({
+        id: LAYER_POINTS,
+        type: 'circle',
+        source: SRC_POINTS,
+        filter: ['==', ['get', 'mode'], 'dot'],
+        minzoom: ZOOM_THRESHOLD_DOT,
+        paint: {
+          'circle-color': [
+            'case',
+            ['boolean', ['feature-state', 'active'], false], '#c4922a',
+            ['get', 'color'],
+          ],
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            14, 3,
+            17, 5,
+          ],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#ffffff',
+          // Fade in as the layer becomes visible — matches
+          // the fadeDuration on the map for symbol layers.
+          'circle-opacity-transition': { duration: 300, delay: 0 },
+        },
       })
 
       // Hover-triggered name label for dot-mode pins on desktop.
@@ -581,12 +606,14 @@ export default function ExploreMap({
             0,
           ],
         },
-        minzoom: ZOOM_THRESHOLD_ICONS,
+        minzoom: ZOOM_THRESHOLD_DOT,
       })
 
       // Wire the hover state — set feature-state.hover on
-      // whichever pin the pointer is currently over, clear it
-      // when the pointer leaves.
+      // whichever pin the pointer is currently over, clear
+      // it when the pointer leaves. Bound to EVERY pin layer
+      // (dot / icon / named label / featured badge) so hover
+      // works on all three tiers, not just dots.
       let hoveredPointId: string | number | null = null
       const clearHover = () => {
         if (hoveredPointId != null) {
@@ -594,15 +621,22 @@ export default function ExploreMap({
           hoveredPointId = null
         }
       }
-      map.on('mousemove', LAYER_POINTS, (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+      const onHoverMove = (e: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
         const feat = e.features?.[0]
         if (!feat || feat.id == null) return
         if (hoveredPointId === feat.id) return
         clearHover()
         hoveredPointId = feat.id as string | number
         map.setFeatureState({ source: SRC_POINTS, id: hoveredPointId }, { hover: true })
-      })
-      map.on('mouseleave', LAYER_POINTS, clearHover)
+      }
+      map.on('mousemove', LAYER_POINTS,       onHoverMove)
+      map.on('mousemove', LAYER_ICONS,        onHoverMove)
+      map.on('mousemove', LAYER_LABELS,       onHoverMove)
+      map.on('mousemove', LAYER_LABEL_BADGES, onHoverMove)
+      map.on('mouseleave', LAYER_POINTS,       clearHover)
+      map.on('mouseleave', LAYER_ICONS,        clearHover)
+      map.on('mouseleave', LAYER_LABELS,       clearHover)
+      map.on('mouseleave', LAYER_LABEL_BADGES, clearHover)
 
       // Click handler is bound to point + icon + label layers
       // so a tap on any shape (dot, category icon, pill) opens
