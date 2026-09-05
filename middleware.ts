@@ -36,7 +36,24 @@ export function middleware(request: NextRequest) {
       || pathname === '/api/submit-pick'
       || pathname === '/api/submit-favorites'
       || pathname === '/api/place-photos'
-    const isStaticAsset = pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname === '/robots.txt' || pathname === '/sitemap.xml'
+    // Anything that looks like a static asset (has a file
+    // extension AND isn't an API route) is served on the
+    // custom domain without redirect. This covers the pick
+    // page's deps that were previously being bounced:
+    //   /sw.js                    → service worker
+    //   /maplibre-gl-worker.mjs   → MapLibre GL's tile worker
+    //   /maplibre-gl-shared.mjs   → MapLibre GL's shared dep
+    //   /manifest.json            → PWA manifest
+    //   /favicon-*.png, /icon-*.png, /apple-touch-icon.png
+    //   /marketing/**, /help/**   → static content
+    // Cross-origin redirects on those either break MapLibre
+    // (worker MIME failure) or blocked SW registration.
+    const hasFileExtension = /\.[a-z0-9]{2,5}$/i.test(pathname)
+    const isStaticAsset =
+         pathname.startsWith('/_next')
+      || (hasFileExtension && !pathname.startsWith('/api/'))
+      || pathname === '/robots.txt'
+      || pathname === '/sitemap.xml'
     if (!isPickRoute && !isStaticAsset) {
       const redirect = new URL(pathname + (request.nextUrl.search ?? ''), `https://${APEX_DOMAIN}`)
       return NextResponse.redirect(redirect, 307)
