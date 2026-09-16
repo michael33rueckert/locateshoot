@@ -276,10 +276,23 @@ function DetailPanel({ loc, initialPhotoUrl, portfolioId, isFavorite, onToggleFa
             subsequent tap because it's still processing the
             gesture. onPointerDown fires the moment the finger
             lands, regardless of what came before. onClick stays
-            as the keyboard/mouse fallback. */}
+            as the keyboard/mouse fallback.
+
+            preventDefault() here is required, not optional: without
+            it, this sheet (including this very button) unmounts on
+            pointerdown while the finger is still down, and the
+            browser then delivers the pending click to whatever is
+            newly revealed underneath at those same coordinates —
+            on mobile that's the search bar near the top of the
+            screen, which was popping the keyboard open every time
+            someone closed a location. preventDefault on pointerdown
+            suppresses that emulated click for real pointer input
+            (touch/mouse) without affecting keyboard activation
+            (Enter/Space), which never goes through pointer events —
+            so onClick above still covers that case. */}
         <button
           onClick={onClose}
-          onPointerDown={onClose}
+          onPointerDown={(e) => { e.preventDefault(); onClose() }}
           style={{position:'absolute',top:12,right:12,width:40,height:40,borderRadius:'50%',background:'rgba(26,22,18,.6)',border:'none',cursor:'pointer',fontSize:18,color:'white',display:'flex',alignItems:'center',justifyContent:'center',zIndex:10,touchAction:'manipulation',WebkitTapHighlightColor:'transparent'}}
         >✕</button>
 
