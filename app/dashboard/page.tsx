@@ -1474,8 +1474,8 @@ export default function DashboardPage() {
           flips Custom Location Guides above My Portfolio. */}
       {layoutFlipNoticeOpen && (
         <>
-          <div onClick={dismissLayoutFlipNotice} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.6)', backdropFilter: 'blur(6px)', zIndex: 9700 }} />
-          <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 12, width: 460, maxWidth: '94vw', padding: '1.5rem', zIndex: 9800, boxShadow: '0 24px 64px rgba(0,0,0,.35)' }}>
+          <div onClick={dismissLayoutFlipNotice} className="anim-backdrop-in" style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.6)', backdropFilter: 'blur(6px)', zIndex: 9700 }} />
+          <div className="anim-modal-in" style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 12, width: 460, maxWidth: '94vw', padding: '1.5rem', zIndex: 9800, boxShadow: '0 24px 64px rgba(0,0,0,.35)' }}>
             <div style={{ fontSize: 34, marginBottom: 8 }}>📚</div>
             <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 8, lineHeight: 1.2 }}>
               Nice — your first Location Guide is live.

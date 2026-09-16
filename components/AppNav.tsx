@@ -251,7 +251,7 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
               menu (999 vs 1000) but above per-page overlays like the
               Explore filter bar (900). */}
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 60, left: 0, right: 0, bottom: 0, zIndex: 999, background: 'transparent' }} />
-          <div className="mobile-menu" onClick={() => setOpen(false)}>
+          <div className="mobile-menu anim-drop-in" onClick={() => setOpen(false)}>
             {signedIn && LINKS.map(l => (
               <Link
                 key={l.href}
@@ -283,8 +283,8 @@ export default function AppNav({ rightExtra }: { rightExtra?: React.ReactNode })
 
       {installHint && (
         <>
-          <div onClick={() => setInstallHint(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.7)', backdropFilter: 'blur(4px)', zIndex: 9999 }} />
-          <div style={{ position: 'fixed', left: '50%', bottom: 'calc(env(safe-area-inset-bottom, 0) + 20px)', transform: 'translateX(-50%)', zIndex: 10000, maxWidth: 'min(94vw, 440px)', background: 'rgba(26,22,18,.98)', color: 'var(--cream)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, padding: '16px 18px', boxShadow: '0 16px 48px rgba(0,0,0,.4)', fontSize: 14, lineHeight: 1.55 }}>
+          <div onClick={() => setInstallHint(null)} className="anim-backdrop-in" style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.7)', backdropFilter: 'blur(4px)', zIndex: 9999 }} />
+          <div className="anim-sheet-up" style={{ position: 'fixed', left: '50%', bottom: 'calc(env(safe-area-inset-bottom, 0) + 20px)', transform: 'translateX(-50%)', zIndex: 10000, maxWidth: 'min(94vw, 440px)', background: 'rgba(26,22,18,.98)', color: 'var(--cream)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, padding: '16px 18px', boxShadow: '0 16px 48px rgba(0,0,0,.4)', fontSize: 14, lineHeight: 1.55 }}>
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Install LocateShoot</div>
             <div style={{ color: 'rgba(245,240,232,.8)' }}>
               {installHint === 'ios'

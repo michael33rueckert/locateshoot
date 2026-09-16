@@ -112,6 +112,7 @@ export default function PortfolioShareButton({
       {menuOpen && (
         <div
           role="menu"
+          className="anim-drop-in"
           style={{
             position: 'absolute',
             top: 'calc(100% + 4px)',

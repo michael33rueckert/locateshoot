@@ -180,7 +180,7 @@ export default function NotificationBell({ placement = 'left' }: { placement?: '
 
       {open && (
         <>
-          <div style={{ position: 'absolute', top: 44, ...(placement === 'right' ? { left: 0 } : { right: 0 }), zIndex: 9600, width: 320, maxWidth: '94vw', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, boxShadow: '0 16px 40px rgba(0,0,0,.25)', overflow: 'hidden' }}>
+          <div className="anim-drop-in" style={{ position: 'absolute', top: 44, ...(placement === 'right' ? { left: 0 } : { right: 0 }), zIndex: 9600, width: 320, maxWidth: '94vw', background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 10, boxShadow: '0 16px 40px rgba(0,0,0,.25)', overflow: 'hidden' }}>
             <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--cream-dark)', fontFamily: 'var(--font-playfair),serif', fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
               Notifications
             </div>

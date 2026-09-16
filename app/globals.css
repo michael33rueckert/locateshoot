@@ -31,6 +31,36 @@ body {
   overflow-x: hidden;
 }
 
+/* ── Global button micro-interactions ──
+   Most buttons across the site set their own colors inline but never
+   declared a `transition`, so hover/press states snapped instantly.
+   This gives every button a subtle, consistent hover lift + press
+   feel without touching each component's inline styles. Scoped to
+   `button`/[role=button] only (not `a`) so ordinary text links aren't
+   affected. Any component-specific hover/active rule declared later
+   in this file (e.g. .modal-close:hover) still wins on specificity
+   grounds where it sets the same properties. */
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]) {
+  transition: transform 0.12s ease, filter 0.12s ease, opacity 0.12s ease,
+    background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):hover, [role="button"]:not([aria-disabled="true"]):hover {
+    filter: brightness(1.06);
+  }
+}
+button:not(:disabled):active, [role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  button, [role="button"] {
+    transition-duration: 0.01s !important;
+  }
+  button:active, [role="button"]:active {
+    transform: none !important;
+  }
+}
+
 /* ── NAV ── */
 .nav {
   position: fixed;

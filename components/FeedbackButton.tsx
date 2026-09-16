@@ -114,9 +114,10 @@ export default function FeedbackButton() {
 
       {open && (
         <>
-          <div onClick={close} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.6)', backdropFilter: 'blur(6px)', zIndex: 9500 }} />
+          <div onClick={close} className="anim-backdrop-in" style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.6)', backdropFilter: 'blur(6px)', zIndex: 9500 }} />
           <div
             onClick={e => e.stopPropagation()}
+            className="anim-modal-in"
             style={{
               position: 'fixed',
               left: '50%',

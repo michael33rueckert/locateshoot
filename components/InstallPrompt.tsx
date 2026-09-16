@@ -127,7 +127,7 @@ export default function InstallPrompt() {
   }
 
   return (
-    <div style={pill}>
+    <div className="anim-sheet-up" style={pill}>
       <span style={{ width: 28, height: 28, borderRadius: 8, background: '#1a1612', border: '1px solid rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <span style={{ width: 12, height: 12, borderRadius: '50%', background: 'var(--gold)' }} />
       </span>

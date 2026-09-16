@@ -1430,8 +1430,8 @@ export default function ClientPickerPage() {
           so the client knows exactly what they're sending. */}
       {showFavoritesPrompt && (
         <>
-          <div onClick={() => setShowFavoritesPrompt(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 600 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 480, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', padding: '1.75rem', zIndex: 700 }}>
+          <div onClick={() => setShowFavoritesPrompt(false)} className="anim-backdrop-in" style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,.7)', backdropFilter: 'blur(6px)', zIndex: 600 }} />
+          <div className="anim-modal-in" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: 16, width: 480, maxWidth: '92vw', maxHeight: '92vh', overflowY: 'auto', padding: '1.75rem', zIndex: 700 }}>
             <div style={{ fontSize: 32, marginBottom: 8, textAlign: 'center' }}>💜</div>
             <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginBottom: 6, textAlign: 'center' }}>Send your favorites to discuss</div>
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 300, lineHeight: 1.55, marginBottom: '1.25rem', textAlign: 'center' }}>

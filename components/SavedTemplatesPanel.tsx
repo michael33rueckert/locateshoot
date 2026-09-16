@@ -245,7 +245,7 @@ export default function SavedTemplatesPanel({ userId, isPro, logoUrl, onLogoChan
           template" creates an unconfigured row that defaults to the
           existing Pick page render until edited. */}
       {showGallery && (
-        <div style={{ marginBottom: '1.25rem', padding: '1rem', background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 8 }}>
+        <div className="anim-drop-in" style={{ marginBottom: '1.25rem', padding: '1rem', background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div>
               <div style={{ fontFamily: 'var(--font-playfair),serif', fontSize: 15, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>Pick a starting template</div>

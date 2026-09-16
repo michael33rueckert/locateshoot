@@ -109,7 +109,7 @@ export default function PendingScanReviewOverlay({ onClose }: { onClose: () => v
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.85)', zIndex: 8000 }} />
+      <div onClick={onClose} className="anim-backdrop-in" style={{ position: 'fixed', inset: 0, background: 'rgba(10,8,6,.85)', zIndex: 8000 }} />
       {/* Layout budget (100dvh, not 100vh, so the mobile URL bar
           isn't counted when it's hidden — that's what was letting
           the buttons drift under the browser chrome on iPad).

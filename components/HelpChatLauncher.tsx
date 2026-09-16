@@ -78,6 +78,7 @@ export default function HelpChatLauncher() {
           <div
             onClick={() => setOpen(false)}
             aria-hidden
+            className="anim-backdrop-in"
             style={{
               position: 'fixed', inset: 0,
               background: 'rgba(10,8,6,.5)', backdropFilter: 'blur(6px)',
@@ -87,6 +88,7 @@ export default function HelpChatLauncher() {
           <div
             role="dialog"
             aria-label="Help assistant"
+            className="anim-drop-in"
             style={{
               position: 'fixed',
               bottom: 'calc(env(safe-area-inset-bottom, 0) + 14px)',
