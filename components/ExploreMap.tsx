@@ -85,13 +85,13 @@ const HOME_CITY_ZOOM = 11
 // Higher tiers ALSO participate in collision at lower
 // tiers' zoom — a Named symbol at zoom 12 that would
 // collide with a Featured badge yields; a Dot emoji at
-// zoom 14 that would collide with either yields; etc.
+// zoom 10 that would collide with either yields; etc.
 // (The plain circle underlay is NOT collision-checked — see
 // its own comment below.)
 const ZOOM_THRESHOLD_FEATURED = 8   // city — Featured/Portfolio pill
 const ZOOM_THRESHOLD_NAME     = 12  // neighborhood — text-only label
 const ZOOM_THRESHOLD_DOT      = 8   // city — plain dot appears
-const ZOOM_THRESHOLD_DOT_ICON = 14  // street — dot gains its emoji
+const ZOOM_THRESHOLD_DOT_ICON = 10  // just past city view — dot gains its emoji
 
 // ── Symbol sort keys (collision-tie priority) ───────────
 // MapLibre draws + places lower sort-key features first —
@@ -412,6 +412,40 @@ export default function ExploreMap({
         },
       })
 
+      // ── User + home location dots ───────────────────────
+      // Separate sources so they don't participate in the
+      // points layer's paint expressions. Circle-type, same
+      // as the plain dot above, so added here (BEFORE Featured
+      // / Named / the emoji icon) for the same reason — without
+      // this they'd paint on top of and cover a Featured or
+      // Portfolio badge whenever "my location" / the selected
+      // location happened to sit near one.
+      map.addSource(SRC_USER, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: LAYER_USER_DOT,
+        type: 'circle',
+        source: SRC_USER,
+        paint: {
+          'circle-color': '#3d6e8c',
+          'circle-radius': 8,
+          'circle-stroke-width': 3,
+          'circle-stroke-color': 'white',
+        },
+      })
+      map.addSource(SRC_HOME, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      map.addLayer({
+        id: LAYER_HOME_DOT,
+        type: 'circle',
+        source: SRC_HOME,
+        paint: {
+          'circle-color': '#4a6741',
+          'circle-radius': 5,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': 'white',
+          'circle-opacity': 0.9,
+        },
+      })
+
       // ── Pill background images (icon-text-fit pattern) ──
       // Registered once at load-time. The label symbol layer
       // below references them by name and MapLibre stretches
@@ -676,33 +710,6 @@ export default function ExploreMap({
       map.on('mouseleave', LAYER_LABELS,       clearPointer)
       map.on('mouseenter', LAYER_LABEL_BADGES, setPointer)
       map.on('mouseleave', LAYER_LABEL_BADGES, clearPointer)
-      // ── User + home locations (separate sources so they don't
-      //     participate in cluster / point layer paint expressions)
-      map.addSource(SRC_USER, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      map.addLayer({
-        id: LAYER_USER_DOT,
-        type: 'circle',
-        source: SRC_USER,
-        paint: {
-          'circle-color': '#3d6e8c',
-          'circle-radius': 8,
-          'circle-stroke-width': 3,
-          'circle-stroke-color': 'white',
-        },
-      })
-      map.addSource(SRC_HOME, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      map.addLayer({
-        id: LAYER_HOME_DOT,
-        type: 'circle',
-        source: SRC_HOME,
-        paint: {
-          'circle-color': '#4a6741',
-          'circle-radius': 5,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': 'white',
-          'circle-opacity': 0.9,
-        },
-      })
 
       // First data push — locations may already have arrived
       // before 'load' fired (the parent starts fetching on mount).
