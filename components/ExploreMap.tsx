@@ -79,14 +79,14 @@ const HOME_CITY_ZOOM = 11
 // ── LOD zoom bands (Google-Maps-style tiers) ────────────
 // Featured (highest priority): visible from city view up.
 // Named   (medium priority):  visible from neighborhood up.
-// Dot     (lowest priority):  visible from street level up.
+// Dot     (lowest priority):  visible from city view up too.
 // Higher tiers ALSO participate in collision at lower
 // tiers' zoom — a Named symbol at zoom 12 that would
-// collide with a Featured badge yields; a Dot at zoom 14
+// collide with a Featured badge yields; a Dot at zoom 8
 // that would collide with either yields; etc.
 const ZOOM_THRESHOLD_FEATURED = 8   // city
 const ZOOM_THRESHOLD_NAME     = 12  // neighborhood
-const ZOOM_THRESHOLD_DOT      = 14  // street
+const ZOOM_THRESHOLD_DOT      = 8   // city — dots now appear as soon as Featured pins do
 
 // ── Symbol sort keys (collision-tie priority) ───────────
 // MapLibre draws + places lower sort-key features first —
@@ -509,9 +509,9 @@ export default function ExploreMap({
 
       // ── Tier 3 · DOT emoji (low priority) ───────────────
       // Colored circle with the category emoji baked in.
-      // Visible from street level up. Placed AFTER Named
-      // and Featured, so any Dot that would collide with a
-      // higher-tier symbol is culled.
+      // Visible from city zoom up (same as Featured).
+      // Placed AFTER Named and Featured, so any Dot that
+      // would collide with a higher-tier symbol is culled.
       map.addLayer({
         id: LAYER_ICONS,
         type: 'symbol',
@@ -526,7 +526,7 @@ export default function ExploreMap({
           'icon-image': ['get', 'iconKey'],
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            14, 0.75,
+            8, 0.75,
             17, 1.10,
           ],
           // Strict collision — dots never stack.
@@ -558,7 +558,7 @@ export default function ExploreMap({
           ],
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            14, 3,
+            8, 3,
             17, 5,
           ],
           'circle-stroke-width': 1.5,
