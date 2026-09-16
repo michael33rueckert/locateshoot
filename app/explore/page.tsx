@@ -571,7 +571,7 @@ export default function ExplorePage() {
   // to "My Portfolio". Visible only to the owner — no one else's manual
   // portfolio entries leak into anyone else's Explore view.
   const [manualPortfolioLocs, setManualPortfolioLocs] = useState<any[]>([])
-  const [mobileMapVisible, setMobileMapVisible] = useState(false)
+  const [mobileMapVisible, setMobileMapVisible] = useState(true)
   // Desktop-only: hide the sidebar entirely so the map takes the
   // full width. Mobile already has its own toggle via
   // .explore-mobile-toggle; the collapse class only applies at
