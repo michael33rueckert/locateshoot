@@ -79,14 +79,19 @@ const HOME_CITY_ZOOM = 11
 // ── LOD zoom bands (Google-Maps-style tiers) ────────────
 // Featured (highest priority): visible from city view up.
 // Named   (medium priority):  visible from neighborhood up.
-// Dot     (lowest priority):  visible from city view up too.
+// Dot     (lowest priority):  visible from city view up too,
+//          but as a plain colored circle — it doesn't gain
+//          its category emoji until ZOOM_THRESHOLD_DOT_ICON.
 // Higher tiers ALSO participate in collision at lower
 // tiers' zoom — a Named symbol at zoom 12 that would
-// collide with a Featured badge yields; a Dot at zoom 8
-// that would collide with either yields; etc.
-const ZOOM_THRESHOLD_FEATURED = 8   // city
-const ZOOM_THRESHOLD_NAME     = 12  // neighborhood
-const ZOOM_THRESHOLD_DOT      = 8   // city — dots now appear as soon as Featured pins do
+// collide with a Featured badge yields; a Dot emoji at
+// zoom 14 that would collide with either yields; etc.
+// (The plain circle underlay is NOT collision-checked — see
+// its own comment below.)
+const ZOOM_THRESHOLD_FEATURED = 8   // city — Featured/Portfolio pill
+const ZOOM_THRESHOLD_NAME     = 12  // neighborhood — text-only label
+const ZOOM_THRESHOLD_DOT      = 8   // city — plain dot appears
+const ZOOM_THRESHOLD_DOT_ICON = 14  // street — dot gains its emoji
 
 // ── Symbol sort keys (collision-tie priority) ───────────
 // MapLibre draws + places lower sort-key features first —
@@ -373,6 +378,40 @@ export default function ExploreMap({
         promoteId: 'id',
       })
 
+      // ── Tier 3a · DOT circle (plain dot, lowest priority) ──
+      // Colored circle with no emoji — the very first thing a
+      // dot-mode pin shows as you zoom past city view. Added
+      // BEFORE every other pin layer so it always paints
+      // *underneath* Featured / Named / the emoji icon —
+      // circle-type layers don't participate in MapLibre's
+      // symbol collision index, so without this ordering a
+      // circle for some nearby dot-mode pin could paint right
+      // on top of a Featured badge instead of yielding to it.
+      map.addLayer({
+        id: LAYER_POINTS,
+        type: 'circle',
+        source: SRC_POINTS,
+        filter: ['==', ['get', 'mode'], 'dot'],
+        minzoom: ZOOM_THRESHOLD_DOT,
+        paint: {
+          'circle-color': [
+            'case',
+            ['boolean', ['feature-state', 'active'], false], '#c4922a',
+            ['get', 'color'],
+          ],
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            ZOOM_THRESHOLD_DOT, 3,
+            17, 5,
+          ],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#ffffff',
+          // Fade in as the layer becomes visible — matches
+          // the fadeDuration on the map for symbol layers.
+          'circle-opacity-transition': { duration: 300, delay: 0 },
+        },
+      })
+
       // ── Pill background images (icon-text-fit pattern) ──
       // Registered once at load-time. The label symbol layer
       // below references them by name and MapLibre stretches
@@ -420,7 +459,12 @@ export default function ExploreMap({
       // on top — but strict collision (allow-overlap:false
       // + ignore-placement:false on each layer) means the
       // pins never actually stack anyway, so the visual
-      // z-order is moot.
+      // z-order among THESE three is moot. The plain circle
+      // underlay is the one exception — it's a circle-type
+      // layer with no collision, so it was deliberately
+      // added earlier (see above) to guarantee it always
+      // paints underneath Featured/Named/the emoji instead
+      // of racing them for top-most.
       // ────────────────────────────────────────────────────
 
       // ── Tier 1 · FEATURED (highest priority) ────────────
@@ -508,10 +552,13 @@ export default function ExploreMap({
       })
 
       // ── Tier 3 · DOT emoji (low priority) ───────────────
-      // Colored circle with the category emoji baked in.
-      // Visible from city zoom up (same as Featured).
-      // Placed AFTER Named and Featured, so any Dot that
-      // would collide with a higher-tier symbol is culled.
+      // The plain circle (added way above, right after the
+      // source) gains its category emoji once you're zoomed
+      // in close enough — this layer draws the emoji on top
+      // of that same circle. Placed AFTER Named and Featured,
+      // so any emoji that would collide with a higher-tier
+      // symbol is culled (the circle underneath still shows —
+      // only the emoji is collision-checked).
       map.addLayer({
         id: LAYER_ICONS,
         type: 'symbol',
@@ -520,52 +567,18 @@ export default function ExploreMap({
         // pins render as text-only labels above; Featured
         // pins render via LAYER_LABEL_BADGES.
         filter: ['==', ['get', 'mode'], 'dot'],
-        minzoom: ZOOM_THRESHOLD_DOT,
+        minzoom: ZOOM_THRESHOLD_DOT_ICON,
         layout: {
           'symbol-sort-key': SORT_DOT,
           'icon-image': ['get', 'iconKey'],
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            8, 0.75,
+            ZOOM_THRESHOLD_DOT_ICON, 0.75,
             17, 1.10,
           ],
           // Strict collision — dots never stack.
           'icon-allow-overlap': false,
           'icon-ignore-placement': false,
-        },
-      })
-
-      // ── Tier 3b · DOT circle (renders below the emoji) ──
-      // Pure-visual circle underlay for dot-mode pins. The
-      // circle-type layer doesn't participate in symbol
-      // collision, so it only renders WHERE a dot-mode pin
-      // was already going to render — the LAYER_ICONS above
-      // gated at the same minzoom + same filter effectively
-      // controls visibility. Kept as a separate layer so
-      // active-state (setFeatureState) can recolor it via a
-      // simple paint expression.
-      map.addLayer({
-        id: LAYER_POINTS,
-        type: 'circle',
-        source: SRC_POINTS,
-        filter: ['==', ['get', 'mode'], 'dot'],
-        minzoom: ZOOM_THRESHOLD_DOT,
-        paint: {
-          'circle-color': [
-            'case',
-            ['boolean', ['feature-state', 'active'], false], '#c4922a',
-            ['get', 'color'],
-          ],
-          'circle-radius': [
-            'interpolate', ['linear'], ['zoom'],
-            8, 3,
-            17, 5,
-          ],
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': '#ffffff',
-          // Fade in as the layer becomes visible — matches
-          // the fadeDuration on the map for symbol layers.
-          'circle-opacity-transition': { duration: 300, delay: 0 },
         },
       })
 
